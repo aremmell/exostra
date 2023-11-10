@@ -1,5 +1,5 @@
 /*
- * platform.hh
+ * twm.hh
  *
  * Author:    Ryan M. Lederman <lederman@gmail.com>
  * Copyright: Copyright (c) 2023
@@ -23,36 +23,15 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef _TWM_PLATFORM_H_INCLUDED
-# define _TWM_PLATFORM_H_INCLUDED
+#ifndef _TWM_H_INCLUDED
+# define _TWM_H_INCLUDED
 
-# include <cstdlib>
-# include <cstdint>
-# include <cinttypes>
-
-// TODO: remove me
-#define TWM_COLOR_565
-
-// TODO: implement an abstract event logging interface and log
-// this type of thing rather than a traditional assert call.
-#define TWM_ASSERT(expr)
+#include <gfx_driver.hh>
 
 namespace twm
 {
-    /** Library-level error code. */
-    using ErrorCode = uint8_t;
-
-    /** Use the smallest type that can contain all possible colors. */
-# if defined(TWM_COLOR_MONOCHROME) || defined(TWM_COLOR_256)
-    using Color = uint8_t; /** Color (monochrome/8-bit). */
-# elif defined(TWM_COLOR_565)
-    using Color = uint16_t; /** Color (16-bit 565 RGB) */
-# elif defined(TWM_COLOR_RGB) || defined(TWM_COLOR_ARGB)
-    using Color = uint32_t; /** Color (24-bit RGB/32-bit ARGB). */
-# else
-#  error "color mode is invalid"
-# endif
 
 } // namespace twm
 
-#endif // !_TWM_PLATFORM_H_INCLUDED
+
+#endif // !_TWM_H_INCLUDED
