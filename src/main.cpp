@@ -110,4 +110,6 @@ void loop()
       screensaver_on = true;
     }
   }
+
+  delay(10);
 }

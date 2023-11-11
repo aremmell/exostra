@@ -32,6 +32,7 @@
 # include <type_traits>
 # include <memory>
 # include <mutex>
+# include <deque>
 
 # include <Adafruit_GFX.h>
 
@@ -78,6 +79,11 @@ namespace twm
     /** Two points in 2D space (left/top, right/bottom). */
     struct Rect
     {
+        Rect(Coord l, Coord t, Coord r, Coord b)
+            : left(l), top(t), right(r), bottom(b)
+        {
+        }
+
         Coord left {};    /** X-axis value of the left edge. */
         Coord top {};     /** Y-axis value of the top edge. */
         Coord right {};   /** X-axis value of the right edge. */
@@ -155,6 +161,7 @@ namespace twm
         template<typename... TArgs>
         static std::shared_ptr<GfxContext<TImpl>> init(TArgs&& ...args)
         {
+            static_assert(std::is_base_of<RawGfxInterface, TImpl>::value);
             static std::once_flag flag;
             std::call_once(flag, [&]()
             {
@@ -172,6 +179,88 @@ namespace twm
 
     template<class TImpl>
     std::shared_ptr<GfxContext<TImpl>> GfxContext<TImpl>::_instance;
+
+    enum // widget state flags.
+    {
+        WSF_NONE     = 0,
+        WSF_VISIBLE  = 1 << 0,
+        WSF_CHILD    = 1 << 1,
+        WSF_MODAL    = 1 << 2,
+        WSF_STAYFORE = 1 << 3
+    };
+
+    enum // widget type flags.
+    {
+        WTF_CANVAS = 1 << 0,
+        WTF_PROMPT = 1 << 1,
+    };
+
+    class Widget
+    {
+    public:
+        Widget() = default;
+
+        explicit Widget(Widget* parent) : _parent(parent), _state(WSF_NONE)
+        {
+        }
+
+        virtual ~Widget() = default;
+
+        Widget* getParent() const { return _parent; }
+        void setParent(Widget* parent) { _parent = parent; }
+        bool isTopLevel() const { return _parent == nullptr; }
+
+        int getState() const { return _state; }
+        void setState(int state) { _state = state; }
+
+        void pushChild(Widget& widget)
+        {
+            widget.setParent(this);
+            widget.onShow();
+            _children.push_front(widget);
+        }
+
+        void popChild()
+        {
+            auto widget = _children.front();
+            widget.onDestroy();
+            _children.pop_front();
+        }
+
+        virtual void onCreate() { }
+        virtual void onDestroy() { }
+        virtual void onShow() { }
+        virtual void onHide() { }
+        virtual void onInputEvent(Coord x, Coord y) { } // TODO: define input event
+        virtual void onUpdate(RawGfxInterface* gfx) { }
+
+    private:
+        Widget* _parent = nullptr;
+        std::deque<Widget> _children;
+        int _state = WSF_NONE;
+    };
+
+    class TestWindow : public Widget
+    {
+    public:
+        using Widget::Widget;
+        virtual ~TestWindow() = default;
+
+        void onUpdate(RawGfxInterface* gfx) final
+        {
+            Coord x = (gfx->width() / 2) - 30;
+            Coord y = (gfx->height() / 2) - 20;
+            static Rect rc(
+                x,
+                y,
+                x + 60,
+                y + 40
+            );
+
+            gfx->fillRect(rc.left, rc.top, rc.width(), rc.height(), 0x07ff);
+            gfx->drawRect(rc.left, rc.right, rc.width(), rc.height(), 0x0000);
+        }
+    };
 
 } // namespace twm
 
