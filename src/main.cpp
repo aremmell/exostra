@@ -23,7 +23,7 @@
 // If no touches are registered in this time, paint the screen
 // black as a pseudo-screensaver. In the future, save what was on
 // the screen and restore it after.
-#define TFT_TOUCH_TIMEOUT 10000
+#define TFT_TOUCH_TIMEOUT 60000
 
 // Display size
 #define TFT_WIDTH 240
@@ -45,15 +45,6 @@ UMS3 ums3;
 
 auto wm = TWM<GFXcanvas16>::init(TFT_HEIGHT, TFT_WIDTH);
 
-static inline
-void draw_initial_screen()
-{
-  wm->fillScreen(ILI9341_BLACK);
-  //wm->setTextSize(2);
-  //wm->println("Go ahead, touch that smoke wagon.");
-  display.drawRGBBitmap(0, 0, wm->getBuffer(), wm->width(), wm->height());
-}
-
 class DesktopWnd : public Window
 {
   public:
@@ -62,11 +53,11 @@ class DesktopWnd : public Window
     virtual ~DesktopWnd() = default;
 
 protected:
-    void onDraw(void* param1, void* param2) final
+    bool onDraw(void* param1, void* param2) final
     {
-      // The desktop is just a boring window that takes up the entire screen.
-      auto rect = getRectangle();
+      auto rect = getRect();
       wm->fillRect(rect.left, rect.top, rect.width(), rect.height(), 0xb59a);
+      return true;
     }
 };
 
@@ -83,28 +74,40 @@ protected:
   {
     lastTapped = millis();
     TWM_LOG(TWM_DEBUG, "window %hhu was tapped!", getID());
+
+    wm->destroyWindow(3);
   }
 
-  void onDraw(void* param1, void* param2) final
+  bool onDraw(void* param1, void* param2) final
   {
     bool tappedRecently = millis() - lastTapped < 500;
-    auto rect = getRectangle();
+    auto rect = getRect();
     wm->fillRoundRect(50, 50, 85, 75, 5, tappedRecently ? ILI9341_BLUE : ILI9341_DARKGREY);
     wm->setTextColor(0xFFFF);
     wm->setCursor(60, 87);
     wm->print("tap me!");
+    return true;
   }
 
-  void onInput(void* param1, void* param2) final
+  bool onInput(void* param1, void* param2) final
   {
     InputParams* ip = static_cast<InputParams*>(param1);
     if (ip != nullptr) {
       switch(ip->type) {
-        case INPUT_TAP: onTapped(); break;
+        case INPUT_TAP: onTapped(); return true;
         default: break;
       }
     }
+    return false;
   }
+};
+
+class DefaultWindow : public Window
+{
+public:
+  using Window::Window;
+  DefaultWindow() = default;
+  virtual ~DefaultWindow() = default;
 };
 
 void setup(void)
@@ -126,7 +129,6 @@ void setup(void)
 
   Serial.println("FT6206: OK");
 
-  //wm->begin();
   display.begin();
   display.setRotation(3);
   display.setCursor(0, 0);
@@ -134,32 +136,32 @@ void setup(void)
   wm->fillScreen(ILI9341_BLACK);
   wm->setFont(&FreeSans9pt7b);
 
-  auto desktop = wm->createWindow<DesktopWnd>(nullptr, WSF_VISIBLE, 0, 0, TFT_HEIGHT, TFT_WIDTH);
+  auto desktop = wm->createWindow<DesktopWnd>(nullptr, STY_VISIBLE, 0, 0, TFT_HEIGHT, TFT_WIDTH);
   if (!desktop) {
     on_fatal_error(ums3);
   }
 
-  auto window1 = wm->createWindow<Button>(desktop, WSF_CHILD | WSF_VISIBLE, 50, 50, 85, 75);
-  if (!window1) {
+  auto button1 = wm->createWindow<Button>(desktop, STY_CHILD | STY_VISIBLE, 50, 50, 85, 75);
+  if (!button1) {
+    on_fatal_error(ums3);
+  }
+
+  auto defaultWin = wm->createWindow<DefaultWindow>(desktop, STY_CHILD | STY_VISIBLE,
+    (TFT_HEIGHT / 2), 50, 85, 85);
+  if (!defaultWin) {
     on_fatal_error(ums3);
   }
 }
 
-u_long last_touch = 0UL;
-bool screensaver_on = false;
-
-static inline
-void on_screensaver_gone()
-{
-  draw_initial_screen();
-}
+u_long lastTouch = 0UL;
+bool screensaverOn = false;
 
 void loop()
 {
   if (ctp.touched()) {
-    last_touch = millis();
-    if (screensaver_on) {
-      screensaver_on = false;
+    lastTouch = millis();
+    if (screensaverOn) {
+      screensaverOn = false;
     }
 
     TS_Point pt = ctp.getPoint();
@@ -172,13 +174,13 @@ void loop()
 
     wm->hitTest(pt.x, pt.y);
   } else {
-    if (!screensaver_on && millis() - last_touch > TFT_TOUCH_TIMEOUT) {
-      wm->fillScreen(ILI9341_BLACK);
-      screensaver_on = true;
+    if (!screensaverOn && millis() - lastTouch > TFT_TOUCH_TIMEOUT) {
+      wm->fillScreen(0x0000);
+      screensaverOn = true;
     }
   }
 
-  if (!screensaver_on) {
+  if (!screensaverOn) {
     wm->update();
   }
 

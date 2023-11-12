@@ -32,8 +32,9 @@
 # include <type_traits>
 # include <functional>
 # include <memory>
+# include <vector>
+# include <queue>
 # include <mutex>
-# include <deque>
 # include <map>
 
 # include <Adafruit_GFX.h>
@@ -48,25 +49,27 @@
 # define TWM_ENABLE_LOGGING
 
 # if defined(TWM_ENABLE_LOGGING)
-typedef enum
-{
-    TWM_ERROR = 1,
-    TWM_DEBUG = 2,
-} _LoggingLevels;
+    typedef enum
+    {
+        TWM_ERROR = 1,
+        TWM_WARN  = 2,
+        TWM_DEBUG = 3
+    } _LoggingLevels;
+
+#  define _TWM_STRIFY(val) #val
+#  define TWM_STRIFY(val) _TWM_STRIFY(val)
 
 #  define TWM_LOG(lvl, fmt, ...) \
     do { \
+        char prefix = '\0'; \
         switch(lvl) { \
-            case TWM_ERROR: \
-                Serial.printf("[E]: " fmt "\n" __VA_OPT__(,) __VA_ARGS__); \
-                break; \
-            case TWM_DEBUG: \
-                Serial.printf("[D]: " fmt "\n" __VA_OPT__(,) __VA_ARGS__); \
-                break; \
-            default: \
-                Serial.printf(fmt __VA_OPT__(,) __VA_ARGS__); \
-                break; \
+            case TWM_ERROR: prefix = 'E'; break; \
+            case TWM_WARN: prefix  = 'W'; break; \
+            case TWM_DEBUG: prefix = 'D'; break; \
         } \
+        Serial.printf("[%c] (", prefix); \
+        Serial.printf(__FILE__ ":" TWM_STRIFY(__LINE__) "): " fmt "\n" \
+            __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
 # else
 #  define TWM_LOG(lvl, fmt, ...)
@@ -75,7 +78,7 @@ typedef enum
 # define TWM_ASSERT(expr) \
     do { \
         if (!(expr)) { \
-            TWM_LOG(TWM_ERROR, "assert! '" #expr "' at %s:%d\n", __FILE__, __LINE__); \
+            TWM_LOG(TWM_ERROR, "assert! '" #expr "' at %s:%d", __FILE__, __LINE__); \
         } \
     } while (false)
 
@@ -87,11 +90,11 @@ namespace twm
     /** Window identifier. */
     using WindowID = uint8_t;
 
-    /** The invalid Window identifier. */
-    static constexpr WindowID WID_INVALID = 0xff;
-
     /** Window style. */
     using Style = uint16_t;
+
+    /** Window state. */
+    using State = uint16_t;
 
     /** Use the smallest type that can contain all possible colors. */
 # if defined(TWM_COLOR_MONOCHROME) || defined(TWM_COLOR_256)
@@ -151,7 +154,7 @@ namespace twm
             return { right, bottom };
         }
 
-        inline void grow(Extent px) noexcept
+        inline void inflate(Extent px) noexcept
         {
             left   -= px;
             top    -= px;
@@ -159,7 +162,7 @@ namespace twm
             bottom += px;
         }
 
-        inline void shrink(Extent px) noexcept
+        inline void deflate(Extent px) noexcept
         {
             left   += px;
             top    += px;
@@ -223,6 +226,7 @@ namespace twm
 
     typedef enum
     {
+        MSG_NONE    = 0,
         MSG_CREATE  = 1,
         MSG_DESTROY = 2,
         MSG_DRAW    = 3,
@@ -231,71 +235,183 @@ namespace twm
 
     typedef enum
     {
-        WSF_VISIBLE   = 1 << 0,
-        WSF_CHILD     = 1 << 1,
-        WSF_MODAL     = 1 << 2,
-        WSF_STAYONTOP = 1 << 3
-    } _Style;
+        STY_VISIBLE   = 1 << 0,
+        STY_CHILD     = 1 << 1,
+        STY_MODAL     = 1 << 2,
+        STY_STAYONTOP = 1 << 3
+    } _WindowStyleFlags;
+
+    typedef enum
+    {
+        STA_ALIVE = 1 << 0
+    } _WindowStateFlags;
+
+    typedef enum {
+        INPUT_NONE = 0,
+        INPUT_TAP  = 1
+    } InputType;
+
+    struct InputParams
+    {
+        InputType type = INPUT_NONE;
+        Coord x = 0;
+        Coord y = 0;
+    };
+
+    class Theme
+    {
+    public:
+        virtual void drawWindowFrame(GfxInterface* gfx, const Rect& rect) = 0;
+        virtual void drawWindowBackground(GfxInterface* gfx, const Rect& rect) = 0;
+        virtual void drawButtonFrame(GfxInterface* gfx, const Rect& rect) = 0;
+        virtual void drawButtonBackground(GfxInterface* gfx, const Rect& rect) = 0;
+        virtual void drawButtonLabel(GfxInterface* gfx, const Rect& rect) = 0;
+    };
+
+    using ThemePtr = std::shared_ptr<Theme>;
+
+    class DefaultTheme : public Theme
+    {
+    public:
+        static constexpr Extent WindowFrameThickness = 1;
+        static constexpr uint16_t WindowFrameColor = 0x7bef;
+        static constexpr uint16_t WindowBgColor = 0xc618;
+
+        void drawWindowFrame(GfxInterface* gfx, const Rect& rect)
+        {
+            Rect tmp = rect;
+            tmp.deflate(WindowFrameThickness);
+            gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
+                WindowFrameColor);
+        }
+
+        void drawWindowBackground(GfxInterface* gfx, const Rect& rect)
+        {
+            gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
+                WindowBgColor);
+        }
+
+        void drawButtonFrame(GfxInterface* gfx, const Rect& rect)
+        {
+        }
+
+        void drawButtonBackground(GfxInterface* gfx, const Rect& rect)
+        {
+        }
+
+        void drawButtonLabel(GfxInterface* gfx, const Rect& rect)
+        {
+        }
+    };
+
+    struct PackagedMessage
+    {
+        Message msg  = MSG_NONE;
+        void* param1 = nullptr;
+        void* param2 = nullptr;
+    };
+
+    using PackagedMessageQueue = std::queue<PackagedMessage>;
 
     class Window
     {
     public:
         Window() = default;
 
-        Window(const std::shared_ptr<Window>& parent, WindowID id, Style style,
-            const Rect& rect)
-            : _parent(parent), _style(style), _rect(rect), _id(id) { }
+        Window(const ThemePtr& theme, const std::shared_ptr<Window>& parent,
+            WindowID id, Style style, const Rect& rect)
+            : _theme(theme), _parent(parent), _style(style), _rect(rect), _id(id) { }
 
         virtual ~Window() = default;
 
-        std::shared_ptr<Window> getParent() const { return _parent.lock(); }
+        std::shared_ptr<Window> getParent() const { return _parent; }
         void setParent(const std::shared_ptr<Window>& parent) { _parent = parent; }
 
         Style getStyle() const { return _style; }
         void setStyle(Style style) { _style = style; }
 
-        Rect getRectangle() const { return _rect; }
-        void setRectangle(const Rect& rect) { _rect = rect; }
+        State getState() const { return _state; }
+        void setState(State state) { _state = state; }
+
+        Rect getRect() const { return _rect; }
+        void setRect(const Rect& rect) { _rect = rect; }
 
         WindowID getID() const { return _id; }
 
-        virtual void onCreate(void* param1, void* param2) { }
-        virtual void onDestroy(void* param1, void* param2) { }
-        virtual void onDraw(void* param1, void* param2) { }
-        virtual void onInput(void* param1, void* param2) { }
+        virtual bool onCreate(void* param1, void* param2) { return true; }
+        virtual bool onDestroy(void* param1, void* param2) { return true; }
 
-        virtual void routeMessage(Message msg, void* param1 = nullptr,
+        /** MSG_DRAW: param1 = GfxInterface*, param2 = nullptr*/
+        virtual bool onDraw(void* param1, void* param2)
+        {
+            GfxInterface* gfx = static_cast<GfxInterface*>(param1);
+            TWM_ASSERT(gfx != nullptr && _theme);
+            if (gfx != nullptr && _theme) {
+                _theme->drawWindowBackground(gfx, getRect());
+                _theme->drawWindowFrame(gfx, getRect());
+                return true;
+            }
+            return false;
+        }
+
+        /** MSG_INPUT: param1 = InputParams*, param2 = nullptr. Return value
+         * indicates whether or not the input event was consumed by this window. */
+        virtual bool onInput(void* param1, void* param2) { return false; }
+
+        bool routeMessage(Message msg, void* param1 = nullptr,
             void* param2 = nullptr)
         {
             switch (msg) {
-                case MSG_CREATE:  onCreate(param1, param2);  break;
-                case MSG_DESTROY: onDestroy(param1, param2); break;
-                case MSG_DRAW:    onDraw(param1, param2);    break;
-                case MSG_INPUT:   onInput(param1, param2);   break;
+                case MSG_CREATE:  return onCreate(param1, param2);
+                case MSG_DESTROY: return onDestroy(param1, param2);
+                case MSG_DRAW:    return onDraw(param1, param2);
+                case MSG_INPUT:   return onInput(param1, param2);
+                default:
+                    TWM_ASSERT(!"unknown message");
+                return false;
             }
         }
 
+        void queueMessage(Message msg, void* param1 = nullptr,
+            void* param2 = nullptr)
+        {
+# if !defined(TWM_SINGLETHREAD)
+            MutexLock lock(_queueLock);
+# endif
+            PackagedMessage pm;
+            pm.msg = msg;
+            pm.param1 = param1;
+            pm.param2 = param2;
+            _queue.push(pm);
+        }
+
+        bool processQueue()
+        {
+# if !defined(TWM_SINGLETHREAD)
+            MutexLock lock(_queueLock);
+# endif
+            if (!_queue.empty()) {
+                auto pm = _queue.front();
+                _queue.pop();
+                return routeMessage(pm.msg, pm.param1, pm.param2);
+            }
+            return false;
+        }
+
     private:
-        std::weak_ptr<Window> _parent;
+        PackagedMessageQueue _queue;
+        Mutex _queueLock;
+        ThemePtr _theme;
+        std::shared_ptr<Window> _parent;
         Rect _rect;
-        Style _style;
+        Style _style = 0;
         WindowID _id = 0;
+        State _state = 0;
     };
 
     using WindowPtr = std::shared_ptr<Window>;
 
-    typedef enum {
-        INPUT_TAP = 1
-    } InputType;
-
-    struct InputParams
-    {
-        InputType type;
-        Coord x;
-        Coord y;
-    };
-
-    template<class TImpl>
+    template<class TImpl, class TTheme = DefaultTheme>
     class TWM : public TImpl
     {
     public:
@@ -306,29 +422,31 @@ namespace twm
 
         virtual ~TWM() = default;
 
-        static std::shared_ptr<TWM<TImpl>>& getInstance()
+        static std::shared_ptr<TWM<TImpl, TTheme>>& getInstance()
         {
             TWM_ASSERT(_instance != nullptr);
             return _instance;
         }
 
         template<typename... TArgs>
-        static std::shared_ptr<TWM<TImpl>> init(TArgs&& ...args)
+        static std::shared_ptr<TWM<TImpl, TTheme>> init(TArgs&& ...args)
         {
             static_assert(std::is_base_of<GfxInterface, TImpl>::value);
             static std::once_flag flag;
             std::call_once(flag, [&]()
             {
-                _instance.reset(new TWM<TImpl>(args...));
+                _instance.reset(new TWM<TImpl, TTheme>(args...));
+                TWM_ASSERT(_instance != nullptr);
+                _theme.reset(new TTheme());
+                TWM_ASSERT(_theme != nullptr);
             });
-            TWM_ASSERT(_instance != nullptr);
             return _instance;
         }
 
         virtual void tearDown()
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_reglock);
+            MutexLock lock(_regLock);
 # endif
             _registry.clear();
         }
@@ -336,18 +454,22 @@ namespace twm
         virtual void update()
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_reglock);
+            MutexLock lock(_regLock);
 # endif
+            if (_registry.empty()) {
+                TImpl::fillScreen(0x0000);
+                return;
+            }
+
             for (auto it : _registry) {
-                // TODO: is this window covered by another, off
-                // the screen, or hidden?
+                // TODO: is this window completely covered by another, or off
+                // the screen?
                 if (it.second) {
-                    auto style = it.second->getStyle();
-                    if (!bitsHigh(style, WSF_VISIBLE)) {
-                        continue;
+                    if (bitsHigh(it.second->getStyle(), STY_VISIBLE) &&
+                        bitsHigh(it.second->getState(), STA_ALIVE)) {
+                        it.second->queueMessage(MSG_DRAW, this);
                     }
-                    //TWM_LOG(TWM_DEBUG, "sending MSG_DRAW to window %hhu", it.first);
-                    it.second->routeMessage(MSG_DRAW, this);
+                    it.second->processQueue();
                 }
             }
         }
@@ -357,33 +479,43 @@ namespace twm
             Style style, Coord x, Coord y, Extent width, Extent height)
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_reglock);
+            MutexLock lock(_regLock);
 # endif
             TWM_ASSERT(_idCounter < std::numeric_limits<WindowID>::max() - 1);
             if (_idCounter >= std::numeric_limits<WindowID>::max() - 1) {
                 TWM_LOG(TWM_ERROR, "max window count exceeded");
                 return nullptr;
             }
-            if (bitsHigh(style, WSF_CHILD) && !parent) {
-                TWM_LOG(TWM_ERROR, "window with child style has null parent");
-                return nullptr;
-            }
-            WindowID id = ++_idCounter;
+
+            WindowID id = _idCounter + 1;
             Rect rect;
             rect.left = x;
             rect.top = y;
             rect.right = x + width;
             rect.bottom = y + height;
-            std::shared_ptr<TWindow> win(std::make_shared<TWindow>(parent, id,
-                style, rect));
+            std::shared_ptr<TWindow> win(std::make_shared<TWindow>(_theme, parent,
+                id, style, rect));
             if (!win) {
                 TWM_LOG(TWM_ERROR, "memory alloc failed");
                 return nullptr;
             }
-            win->routeMessage(MSG_CREATE, this);
-            if (bitsHigh(win->getStyle(), WSF_VISIBLE)) {
-                win->routeMessage(MSG_DRAW, this);
+            if (bitsHigh(style, STY_CHILD)) {
+                if (!parent) {
+                    TWM_LOG(TWM_ERROR, "STY_CHILD but null parent");
+                    return nullptr;
+                }
             }
+            if (!win->routeMessage(MSG_CREATE, this)) {
+                TWM_LOG(TWM_ERROR, "MSG_CREATE ret false");
+                return nullptr;
+            }
+            win->setState(STA_ALIVE);
+            if (bitsHigh(win->getStyle(), STY_VISIBLE)) {
+                if (!win->routeMessage(MSG_DRAW, this)) {
+                    TWM_LOG(TWM_WARN, "MSG_DRAW ret false");
+                }
+            }
+            ++_idCounter;
             _registry[id] = win;
             TWM_LOG(TWM_DEBUG, "added window %hhu to registry; count: %zu", id,
                 _registry.size());
@@ -393,7 +525,7 @@ namespace twm
         WindowPtr findWindow(WindowID id) const
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_reglock);
+            MutexLock lock(_regLock);
 # endif
             auto it = _registry.find(id);
             return it != _registry.end() ? it->second : nullptr;
@@ -402,60 +534,111 @@ namespace twm
         bool destroyWindow(WindowID id)
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_reglock);
+            MutexLock lock(_regLock);
 # endif
             auto it = _registry.find(id);
             if (it != _registry.end()) {
                 if (it->second) {
-                    it->second->routeMessage(MSG_DESTROY, this);
+                    std::vector<WindowRegistry::iterator> children;
+                    for (auto it2 = _registry.begin(); it2 != _registry.end(); it2++) {
+                        if (it2->second && it2->second->getParent() == it->second) {
+                            children.push_back(it2);
+                            it2->second->queueMessage(MSG_DESTROY, this);
+                            it2->second->setState(it2->second->getState() & ~STA_ALIVE);
+                        }
+                    }
+                    it->second->queueMessage(MSG_DESTROY, this);
+                    it->second->setState(it->second->getState() & ~STA_ALIVE);
+                    for (auto it2 : children) {
+                        WindowID idChild = it2->first;
+                        _registry.erase(it2);
+                        --_idCounter;
+                        TWM_LOG(TWM_DEBUG, "destroyed child window %hhu (%hhu)",
+                            idChild, id);
+                    }
+                    Rect dirtyRect = it->second->getRect();
                     _registry.erase(it);
                     --_idCounter;
-                    TWM_LOG(TWM_DEBUG, "destroyed window %hhu; count: %zu", id);
+                    TWM_LOG(TWM_DEBUG, "destroyed window %hhu; count: %zu", id,
+                        _registry.size());
+
+                    for (auto it : _registry) {
+                        if (it.second) {
+                            Rect curRect = it.second->getRect();
+                            if (curRect.overlaps(dirtyRect)) {
+                                TWM_LOG(TWM_DEBUG, "redrawing window %hhu; rect"
+                                    " (%hd, %hd, %hu, %hu) overlap with dirty rect"
+                                    " (%hd, %hd, %hu, %hu)", it.second->getID(),
+                                    curRect.left, curRect.top, curRect.right,
+                                    curRect.bottom, dirtyRect.left, dirtyRect.top,
+                                    dirtyRect.right, dirtyRect.bottom);
+                                it.second->queueMessage(MSG_DRAW, this);
+                            }
+                        }
+                    }
+
                     return true;
                 }
             }
             return false;
         }
 
-        bool hitTest(Coord x, Coord y)
+        void hitTest(Coord x, Coord y)
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_reglock);
+            if (!_regLock.try_lock()) {
+                TWM_LOG(TWM_DEBUG, "mutex lock fail; bailing");
+                return;
+            }
 # endif
-            TWM_LOG(TWM_DEBUG, "hit test @ %hd/%hd...", x, y);
+            //TWM_LOG(TWM_DEBUG, "hit test @ %hd/%hd...", x, y);
+            std::queue<WindowPtr> candidates;
             for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
                 if (it->second) {
-                    if (!bitsHigh(it->second->getStyle(), WSF_VISIBLE)) {
+                    if (!bitsHigh(it->second->getStyle(), STY_VISIBLE) ||
+                        !bitsHigh(it->second->getState(), STA_ALIVE)) {
                         continue;
                     }
-                    auto rect = it->second->getRectangle();
-                    TWM_LOG(TWM_DEBUG, "window %hhu rect: {%hd, %hd, %hd, %hd}",
-                        it->first, rect.left, rect.top, rect.right, rect.bottom);
+                    auto rect = it->second->getRect();
+                    //TWM_LOG(TWM_DEBUG, "window %hhu rect: {%hd, %hd, %hd, %hd}",
+                    //    it->first, rect.left, rect.top, rect.right, rect.bottom);
                     if (rect.isPointWithin(Point(x, y))) {
-                        TWM_LOG(TWM_DEBUG, "hit!");
-                        InputParams params;
-                        params.type = INPUT_TAP;
-                        params.x    = x;
-                        params.y    = y;
-                        it->second->routeMessage(MSG_INPUT, &params);
-                        return true;
+                        //TWM_LOG(TWM_DEBUG, "hit!");
+                        candidates.push(it->second);
                     }
                 }
             }
-            return false;
+            _regLock.unlock();
+            while (!candidates.empty()) {
+                InputParams params;
+                params.type = INPUT_TAP;
+                params.x    = x;
+                params.y    = y;
+                auto win = candidates.front();
+                candidates.pop();
+                if (win->routeMessage(MSG_INPUT, &params)) {
+                    //TWM_LOG(TWM_DEBUG, "window %hhu claimed hit test @ %hd/%hd",
+                    //    win->getID(), x, y);
+                    break;
+                }
+            }
         }
 
     protected:
         WindowID _idCounter = 0;
         WindowRegistry _registry;
 # if !defined(TWM_SINGLETHREAD)
-        Mutex _reglock;
+        Mutex _regLock;
 # endif
-        static std::shared_ptr<TWM<TImpl>> _instance;
+        static std::shared_ptr<TWM<TImpl, TTheme>> _instance;
+        static std::shared_ptr<TTheme> _theme;
     };
 
-    template<class TImpl>
-    std::shared_ptr<TWM<TImpl>> TWM<TImpl>::_instance;
+    template<class TImpl, class TTheme>
+    std::shared_ptr<TWM<TImpl, TTheme>> TWM<TImpl, TTheme>::_instance;
+
+    template<class TImpl, class TTheme>
+    std::shared_ptr<TTheme> TWM<TImpl, TTheme>::_theme;
 } // namespace twm
 
 #endif // !_TWM_H_INCLUDED
