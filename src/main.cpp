@@ -9,11 +9,12 @@
 
 #include <twm.hh>
 #include <SPI.h>
-#include <Adafruit_ILI9341.h>
 #include <Wire.h>
+#include <Adafruit_ILI9341.h>
 #include <Adafruit_FT6206.h>
-#include <UMS3.h>
+#include <Fonts/FreeSans12pt7b.h>
 #include <aremmell_um.h>
+#include <UMS3.h>
 
 // The display also uses hardware SPI, plus these pins:
 #define TFT_CS 12
@@ -39,17 +40,39 @@ using namespace twm;
 
 // The FT6206 uses hardware I2C (SCL/SDA)
 Adafruit_FT6206 ctp;
+Adafruit_ILI9341 display(TFT_CS, TFT_DC);
 UMS3 ums3;
 
-using TwmGfxCtx = GfxContext<Adafruit_ILI9341>;
-auto tft = TwmGfxCtx::init(TFT_CS, TFT_DC);
+auto wm = TWM<GFXcanvas16>::init(TFT_HEIGHT, TFT_WIDTH);
 
 static inline
 void draw_initial_screen()
 {
-  tft->fillScreen(ILI9341_BLACK);
-  tft->println("Go ahead, touch that smoke wagon.");
+  wm->fillScreen(ILI9341_BLACK);
+  //wm->setTextSize(2);
+  //wm->println("Go ahead, touch that smoke wagon.");
+  display.drawRGBBitmap(0, 0, wm->getBuffer(), wm->width(), wm->height());
 }
+
+class DesktopWnd : public Window
+{
+  public:
+    using Window::Window;
+    DesktopWnd() = default;
+    virtual ~DesktopWnd() = default;
+
+protected:
+    void onDraw(void* param1, void* param2) final
+    {
+      // The desktop is just a boring window that takes up the entire screen.
+      auto rect = getRectangle();
+      wm->fillRect(rect.left, rect.top, rect.width(), rect.height(), 0xb59a);
+      wm->setTextSize(3);
+      wm->setTextColor(0x0000);
+      wm->setCursor(0, 0);
+      wm->print("sups?");
+    }
+};
 
 void setup(void)
 {
@@ -59,10 +82,38 @@ void setup(void)
     delay(10);
   }
 
-  TWM_ASSERT(tft == TwmGfxCtx::getInstance());
+  delay(500);
+
+  auto desktop = wm->createWindow<DesktopWnd>(nullptr, Style::Visible, 0, 0, TFT_HEIGHT, TFT_WIDTH);
+  if (!desktop) {
+    on_fatal_error(ums3);
+  }
+
+  /*auto window1 = wm->createWindow(desktop, Style::Child | Style::Visible,
+    (desktop->getRectangle().width() / 2) - 100,
+    (desktop->getRectangle().height() / 2) - 50, 200, 100);
+  if (!window1) {
+    on_fatal_error(ums3);
+  }
+
+  window1->registerHandler(MSG_DRAW, [&](void* payload)
+  {
+    auto rect = window1->getRectangle();
+
+    wm->fillRect(rect.left, rect.top + 20, rect.width(), rect.height(), 0xb59a);
+    rect.shrink(1);
+    wm->fillRect(rect.left, rect.top, rect.width(), 20, 0x5a7b);
+    wm->drawRect(rect.left, rect.right, rect.width(), rect.height(), 0x5a7b);
+    wm->setTextSize(1);
+    wm->setCursor(rect.left + 5, rect.top);
+    wm->setTextColor(0x5a7b);
+    wm->print("my first ghetto window");
+
+    wm->setCursor(rect.left + 5, rect.top + 25);
+    wm->println("This is where a client area will one day exist");
+  });*/
 
   ums3.begin();
-  tft->begin();
 
   if (!ctp.begin(40, &Wire)) {
     Serial.println("FT6206: error!");
@@ -71,8 +122,10 @@ void setup(void)
 
   Serial.println("FT6206: OK");
 
-  tft->setRotation(3);
-  tft->setCursor(0, 0);
+  //wm->begin();
+  display.begin();
+  display.setRotation(3);
+  display.setCursor(0, 0);
 
   draw_initial_screen();
 }
@@ -88,7 +141,7 @@ void on_screensaver_gone()
 
 void loop()
 {
-  if (ctp.touched()) {
+  /*if (ctp.touched()) {
     last_touch = millis();
     if (screensaver_on) {
       screensaver_on = false;
@@ -101,15 +154,16 @@ void loop()
 
     long tmp = pt.y;
     pt.y = pt.x;
-    pt.x = tft->width() - tmp;
+    pt.x = wm->width() - tmp;
 
-    tft->drawCircle(pt.x, pt.y, 5, ILI9341_CYAN);
+    wm->drawCircle(pt.x, pt.y, 5, ILI9341_CYAN);
   } else {
     if (!screensaver_on && millis() - last_touch > TFT_TOUCH_TIMEOUT) {
-      tft->fillScreen(ILI9341_BLACK);
+      wm->fillScreen(ILI9341_BLACK);
       screensaver_on = true;
     }
-  }
-
-  delay(10);
+  }*/
+  wm->update();
+  display.drawRGBBitmap(0, 0, wm->getBuffer(), wm->width(), wm->height());
+  delay(250);
 }
