@@ -90,6 +90,9 @@ namespace twm
     /** The invalid Window identifier. */
     static constexpr WindowID WID_INVALID = 0xff;
 
+    /** Window style. */
+    using Style = uint16_t;
+
     /** Use the smallest type that can contain all possible colors. */
 # if defined(TWM_COLOR_MONOCHROME) || defined(TWM_COLOR_256)
     using Color = uint8_t; /** Color (monochrome/8-bit). */
@@ -198,6 +201,15 @@ namespace twm
 
             return false;
         }
+
+        inline bool isPointWithin(const Point& point) const noexcept
+        {
+            if (point.x >= left && point.x <= left + width() &&
+                point.y >= top  && point.y <= top + height()) {
+                return true;
+            }
+            return false;
+        }
     };
 
     template<typename T1, typename T2>
@@ -213,16 +225,17 @@ namespace twm
     {
         MSG_CREATE  = 1,
         MSG_DESTROY = 2,
-        MSG_DRAW    = 3
+        MSG_DRAW    = 3,
+        MSG_INPUT   = 4
     } Message;
 
-    enum class Style : uint16_t
+    typedef enum
     {
-        Visible   = 1 << 0,
-        Child     = 1 << 1,
-        Modal     = 1 << 2,
-        StayOnTop = 1 << 3
-    };
+        WSF_VISIBLE   = 1 << 0,
+        WSF_CHILD     = 1 << 1,
+        WSF_MODAL     = 1 << 2,
+        WSF_STAYONTOP = 1 << 3
+    } _Style;
 
     class Window
     {
@@ -249,14 +262,16 @@ namespace twm
         virtual void onCreate(void* param1, void* param2) { }
         virtual void onDestroy(void* param1, void* param2) { }
         virtual void onDraw(void* param1, void* param2) { }
+        virtual void onInput(void* param1, void* param2) { }
 
         virtual void routeMessage(Message msg, void* param1 = nullptr,
             void* param2 = nullptr)
         {
             switch (msg) {
-                case MSG_CREATE: onCreate(param1, param2); break;
+                case MSG_CREATE:  onCreate(param1, param2);  break;
                 case MSG_DESTROY: onDestroy(param1, param2); break;
-                case MSG_DRAW: onDraw(param1, param2); break;
+                case MSG_DRAW:    onDraw(param1, param2);    break;
+                case MSG_INPUT:   onInput(param1, param2);   break;
             }
         }
 
@@ -268,6 +283,17 @@ namespace twm
     };
 
     using WindowPtr = std::shared_ptr<Window>;
+
+    typedef enum {
+        INPUT_TAP = 1
+    } InputType;
+
+    struct InputParams
+    {
+        InputType type;
+        Coord x;
+        Coord y;
+    };
 
     template<class TImpl>
     class TWM : public TImpl
@@ -299,7 +325,13 @@ namespace twm
             return _instance;
         }
 
-        virtual void tearDown() { }
+        virtual void tearDown()
+        {
+# if !defined(TWM_SINGLETHREAD)
+            MutexLock lock(_reglock);
+# endif
+            _registry.clear();
+        }
 
         virtual void update()
         {
@@ -311,7 +343,7 @@ namespace twm
                 // the screen, or hidden?
                 if (it.second) {
                     auto style = it.second->getStyle();
-                    if (!areBitsHigh(style, Style::Visible)) {
+                    if (!areBitsHigh(style, WSF_VISIBLE)) {
                         continue;
                     }
                     //TWM_LOG(TWM_DEBUG, "sending MSG_DRAW to window %hhu", it.first);
@@ -332,17 +364,16 @@ namespace twm
                 TWM_LOG(TWM_ERROR, "max window count exceeded");
                 return nullptr;
             }
-            if (areBitsHigh(style, Style::Child) && !parent) {
+            if (areBitsHigh(style, WSF_CHILD) && !parent) {
                 TWM_LOG(TWM_ERROR, "window with child style has null parent");
                 return nullptr;
             }
             WindowID id = ++_idCounter;
-            Rect rect = {
-                .left = x,
-                .top = y,
-                .right = x + width,
-                .bottom = y + height
-            };
+            Rect rect;
+            rect.left = x;
+            rect.top = y;
+            rect.right = x + width;
+            rect.bottom = y + height;
             std::shared_ptr<TWindow> win(std::make_shared<TWindow>(parent, id,
                 style, rect));
             if (!win) {
@@ -350,7 +381,7 @@ namespace twm
                 return nullptr;
             }
             win->routeMessage(MSG_CREATE, this);
-            if (areBitsHigh(win->getStyle(), Style::Visible)) {
+            if (areBitsHigh(win->getStyle(), WSF_VISIBLE)) {
                 win->routeMessage(MSG_DRAW, this);
             }
             _registry[id] = win;
@@ -381,6 +412,34 @@ namespace twm
                     --_idCounter;
                     TWM_LOG(TWM_DEBUG, "destroyed window %hhu; count: %zu", id);
                     return true;
+                }
+            }
+            return false;
+        }
+
+        bool hitTest(Coord x, Coord y)
+        {
+# if !defined(TWM_SINGLETHREAD)
+            MutexLock lock(_reglock);
+# endif
+            TWM_LOG(TWM_DEBUG, "hit test @ %hd/%hd...", x, y);
+            for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
+                if (it->second) {
+                    if (!areBitsHigh(it->second->getStyle(), WSF_VISIBLE)) {
+                        continue;
+                    }
+                    auto rect = it->second->getRectangle();
+                    TWM_LOG(TWM_DEBUG, "window %hhu rect: {%hd, %hd, %hd, %hd}",
+                        it->first, rect.left, rect.top, rect.right, rect.bottom);
+                    if (rect.isPointWithin(Point(x, y))) {
+                        TWM_LOG(TWM_DEBUG, "hit!");
+                        InputParams params;
+                        params.type = INPUT_TAP;
+                        params.x    = x;
+                        params.y    = y;
+                        it->second->routeMessage(MSG_INPUT, &params);
+                        return true;
+                    }
                 }
             }
             return false;

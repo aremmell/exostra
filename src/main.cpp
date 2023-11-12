@@ -12,7 +12,7 @@
 #include <Wire.h>
 #include <Adafruit_ILI9341.h>
 #include <Adafruit_FT6206.h>
-#include <Fonts/FreeSans12pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
 #include <aremmell_um.h>
 #include <UMS3.h>
 
@@ -67,11 +67,44 @@ protected:
       // The desktop is just a boring window that takes up the entire screen.
       auto rect = getRectangle();
       wm->fillRect(rect.left, rect.top, rect.width(), rect.height(), 0xb59a);
-      wm->setTextSize(3);
-      wm->setTextColor(0x0000);
-      wm->setCursor(0, 0);
-      wm->print("sups?");
     }
+};
+
+class Button : public Window
+{
+public:
+  using Window::Window;
+  Button() = default;
+  virtual ~Button() = default;
+
+protected:
+  u_long lastTapped = 0UL;
+  void onTapped()
+  {
+    lastTapped = millis();
+    TWM_LOG(TWM_DEBUG, "window %hhu was tapped!", getID());
+  }
+
+  void onDraw(void* param1, void* param2) final
+  {
+    bool tappedRecently = millis() - lastTapped < 500;
+    auto rect = getRectangle();
+    wm->fillRoundRect(50, 50, 85, 75, 5, tappedRecently ? ILI9341_BLUE : ILI9341_DARKGREY);
+    wm->setTextColor(0xFFFF);
+    wm->setCursor(60, 87);
+    wm->print("tap me!");
+  }
+
+  void onInput(void* param1, void* param2) final
+  {
+    InputParams* ip = static_cast<InputParams*>(param1);
+    if (ip != nullptr) {
+      switch(ip->type) {
+        case INPUT_TAP: onTapped(); break;
+        default: break;
+      }
+    }
+  }
 };
 
 void setup(void)
@@ -83,35 +116,6 @@ void setup(void)
   }
 
   delay(500);
-
-  auto desktop = wm->createWindow<DesktopWnd>(nullptr, Style::Visible, 0, 0, TFT_HEIGHT, TFT_WIDTH);
-  if (!desktop) {
-    on_fatal_error(ums3);
-  }
-
-  /*auto window1 = wm->createWindow(desktop, Style::Child | Style::Visible,
-    (desktop->getRectangle().width() / 2) - 100,
-    (desktop->getRectangle().height() / 2) - 50, 200, 100);
-  if (!window1) {
-    on_fatal_error(ums3);
-  }
-
-  window1->registerHandler(MSG_DRAW, [&](void* payload)
-  {
-    auto rect = window1->getRectangle();
-
-    wm->fillRect(rect.left, rect.top + 20, rect.width(), rect.height(), 0xb59a);
-    rect.shrink(1);
-    wm->fillRect(rect.left, rect.top, rect.width(), 20, 0x5a7b);
-    wm->drawRect(rect.left, rect.right, rect.width(), rect.height(), 0x5a7b);
-    wm->setTextSize(1);
-    wm->setCursor(rect.left + 5, rect.top);
-    wm->setTextColor(0x5a7b);
-    wm->print("my first ghetto window");
-
-    wm->setCursor(rect.left + 5, rect.top + 25);
-    wm->println("This is where a client area will one day exist");
-  });*/
 
   ums3.begin();
 
@@ -127,7 +131,18 @@ void setup(void)
   display.setRotation(3);
   display.setCursor(0, 0);
 
-  draw_initial_screen();
+  wm->fillScreen(ILI9341_BLACK);
+  wm->setFont(&FreeSans9pt7b);
+
+  auto desktop = wm->createWindow<DesktopWnd>(nullptr, WSF_VISIBLE, 0, 0, TFT_HEIGHT, TFT_WIDTH);
+  if (!desktop) {
+    on_fatal_error(ums3);
+  }
+
+  auto window1 = wm->createWindow<Button>(desktop, WSF_CHILD | WSF_VISIBLE, 50, 50, 85, 75);
+  if (!window1) {
+    on_fatal_error(ums3);
+  }
 }
 
 u_long last_touch = 0UL;
@@ -141,14 +156,13 @@ void on_screensaver_gone()
 
 void loop()
 {
-  /*if (ctp.touched()) {
+  if (ctp.touched()) {
     last_touch = millis();
     if (screensaver_on) {
       screensaver_on = false;
-      draw_initial_screen();
     }
-    TS_Point pt = ctp.getPoint();
 
+    TS_Point pt = ctp.getPoint();
     pt.x = map(pt.x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
     pt.y = map(pt.y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
 
@@ -156,14 +170,18 @@ void loop()
     pt.y = pt.x;
     pt.x = wm->width() - tmp;
 
-    wm->drawCircle(pt.x, pt.y, 5, ILI9341_CYAN);
+    wm->hitTest(pt.x, pt.y);
   } else {
     if (!screensaver_on && millis() - last_touch > TFT_TOUCH_TIMEOUT) {
       wm->fillScreen(ILI9341_BLACK);
       screensaver_on = true;
     }
-  }*/
-  wm->update();
+  }
+
+  if (!screensaver_on) {
+    wm->update();
+  }
+
   display.drawRGBBitmap(0, 0, wm->getBuffer(), wm->width(), wm->height());
-  delay(250);
+  delay(100);
 }
