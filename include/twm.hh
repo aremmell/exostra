@@ -213,7 +213,7 @@ namespace twm
     };
 
     template<typename T1, typename T2>
-    inline bool areBitsHigh(const T1& bitmask, T2 bits)
+    inline bool bitsHigh(const T1& bitmask, T2 bits)
     {
         return (bitmask & bits) == bits;
     }
@@ -343,7 +343,7 @@ namespace twm
                 // the screen, or hidden?
                 if (it.second) {
                     auto style = it.second->getStyle();
-                    if (!areBitsHigh(style, WSF_VISIBLE)) {
+                    if (!bitsHigh(style, WSF_VISIBLE)) {
                         continue;
                     }
                     //TWM_LOG(TWM_DEBUG, "sending MSG_DRAW to window %hhu", it.first);
@@ -364,7 +364,7 @@ namespace twm
                 TWM_LOG(TWM_ERROR, "max window count exceeded");
                 return nullptr;
             }
-            if (areBitsHigh(style, WSF_CHILD) && !parent) {
+            if (bitsHigh(style, WSF_CHILD) && !parent) {
                 TWM_LOG(TWM_ERROR, "window with child style has null parent");
                 return nullptr;
             }
@@ -381,7 +381,7 @@ namespace twm
                 return nullptr;
             }
             win->routeMessage(MSG_CREATE, this);
-            if (areBitsHigh(win->getStyle(), WSF_VISIBLE)) {
+            if (bitsHigh(win->getStyle(), WSF_VISIBLE)) {
                 win->routeMessage(MSG_DRAW, this);
             }
             _registry[id] = win;
@@ -425,7 +425,7 @@ namespace twm
             TWM_LOG(TWM_DEBUG, "hit test @ %hd/%hd...", x, y);
             for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
                 if (it->second) {
-                    if (!areBitsHigh(it->second->getStyle(), WSF_VISIBLE)) {
+                    if (!bitsHigh(it->second->getStyle(), WSF_VISIBLE)) {
                         continue;
                     }
                     auto rect = it->second->getRectangle();
