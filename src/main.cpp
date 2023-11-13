@@ -61,45 +61,25 @@ protected:
     }
 };
 
-class Button : public Window
+class EveryDayNormalButton : public Button
 {
 public:
-  using Window::Window;
-  Button() = default;
-  virtual ~Button() = default;
+  using Button::Button;
+  EveryDayNormalButton() = default;
+  virtual ~EveryDayNormalButton() = default;
 
-protected:
-  u_long lastTapped = 0UL;
-  void onTapped()
+  void setLabel(const WindowPtr& label) { _label = label; }
+
+  void onTapped() override
   {
-    lastTapped = millis();
-    TWM_LOG(TWM_DEBUG, "window %hhu was tapped!", getID());
-
-    wm->destroyWindow(3);
-  }
-
-  bool onDraw(void* param1, void* param2) final
-  {
-    bool tappedRecently = millis() - lastTapped < 500;
-    auto rect = getRect();
-    wm->fillRoundRect(50, 50, 85, 75, 5, tappedRecently ? ILI9341_BLUE : ILI9341_DARKGREY);
-    wm->setTextColor(0xFFFF);
-    wm->setCursor(60, 87);
-    wm->print("tap me!");
-    return true;
-  }
-
-  bool onInput(void* param1, void* param2) final
-  {
-    InputParams* ip = static_cast<InputParams*>(param1);
-    if (ip != nullptr) {
-      switch(ip->type) {
-        case INPUT_TAP: onTapped(); return true;
-        default: break;
-      }
+    Button::onTapped();
+    if (_label) {
+      _label->setText("Tapped!");
     }
-    return false;
   }
+
+private:
+  WindowPtr _label;
 };
 
 class DefaultWindow : public Window
@@ -108,6 +88,14 @@ public:
   using Window::Window;
   DefaultWindow() = default;
   virtual ~DefaultWindow() = default;
+};
+
+class TestLabel : public Label
+{
+public:
+  using Label::Label;
+  TestLabel() = default;
+  virtual ~TestLabel() = default;
 };
 
 void setup(void)
@@ -141,16 +129,27 @@ void setup(void)
     on_fatal_error(ums3);
   }
 
-  auto button1 = wm->createWindow<Button>(desktop, STY_CHILD | STY_VISIBLE, 50, 50, 85, 75);
+  auto defaultWin = wm->createWindow<DefaultWindow>(desktop, STY_CHILD | STY_VISIBLE,
+    20, 20, TFT_HEIGHT - 40, TFT_WIDTH - 40);
+  if (!defaultWin) {
+    on_fatal_error(ums3);
+  }
+
+  auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin,
+    STY_CHILD | STY_VISIBLE, 40, 50, DefaultTheme::ButtonWidth, DefaultTheme::ButtonHeight,
+    "pres me");
   if (!button1) {
     on_fatal_error(ums3);
   }
 
-  auto defaultWin = wm->createWindow<DefaultWindow>(desktop, STY_CHILD | STY_VISIBLE,
-    (TFT_HEIGHT / 2), 50, 85, 85);
-  if (!defaultWin) {
+  auto labelX = defaultWin->getRect().width() - 130;
+  auto label1 = wm->createWindow<TestLabel>(defaultWin, STY_CHILD | STY_VISIBLE,
+    labelX, 50, 130, 30, "A static label");
+  if (!label1) {
     on_fatal_error(ums3);
   }
+
+  button1->setLabel(label1);
 }
 
 u_long lastTouch = 0UL;

@@ -31,6 +31,7 @@
 # include <cinttypes>
 # include <type_traits>
 # include <functional>
+# include <string>
 # include <memory>
 # include <vector>
 # include <queue>
@@ -187,14 +188,16 @@ namespace twm
 
         inline bool overlaps(const Rect& other) const noexcept
         {
-            if (left >= other.left || right <= other.right) {
+            if ((left >= other.left && left <= other.right) ||
+                (right <= other.right && right >= other.left)) {
                 if ((top < other.top && top + height() >= other.top) ||
                     (bottom > other.bottom && bottom - height() <= other.bottom) ||
                     (top >= other.top && bottom <= other.bottom)) {
                     return true;
                 }
             }
-            if (top >= other.top || bottom <= other.bottom) {
+            if ((top >= other.top && top <= other.bottom) ||
+                (bottom <= other.bottom && bottom >= other.top)) {
                 if ((left < other.left && left + width() >= other.left) ||
                     (right > other.right && right - width() <= other.right) ||
                     (left >= other.left && right <= other.right)) {
@@ -263,9 +266,14 @@ namespace twm
     public:
         virtual void drawWindowFrame(GfxInterface* gfx, const Rect& rect) = 0;
         virtual void drawWindowBackground(GfxInterface* gfx, const Rect& rect) = 0;
-        virtual void drawButtonFrame(GfxInterface* gfx, const Rect& rect) = 0;
-        virtual void drawButtonBackground(GfxInterface* gfx, const Rect& rect) = 0;
-        virtual void drawButtonLabel(GfxInterface* gfx, const Rect& rect) = 0;
+        virtual void drawWindowText(GfxInterface* gfx, const char* text,
+            const Rect& rect);
+        virtual void drawButtonFrame(GfxInterface* gfx, bool pressed,
+            const Rect& rect) = 0;
+        virtual void drawButtonBackground(GfxInterface* gfx, bool pressed,
+            const Rect& rect) = 0;
+        virtual void drawButtonLabel(GfxInterface* gfx, const char* lbl,
+            bool pressed, const Rect& rect) = 0;
     };
 
     using ThemePtr = std::shared_ptr<Theme>;
@@ -273,34 +281,85 @@ namespace twm
     class DefaultTheme : public Theme
     {
     public:
-        static constexpr Extent WindowFrameThickness = 1;
-        static constexpr uint16_t WindowFrameColor = 0x7bef;
-        static constexpr uint16_t WindowBgColor = 0xc618;
+        static constexpr Extent WindowFrameThickness      = 1;
+        static constexpr uint16_t WindowFrameColor        = 0x7bef;
+        static constexpr uint16_t WindowFrameShadowColor  = 0xad75;
+        static constexpr uint16_t WindowBgColor           = 0xc618;
+        static constexpr uint16_t WindowTextColor         = 0x0000;
+        static constexpr uint16_t ButtonWidth             = 90;
+        static constexpr uint16_t ButtonHeight            = 40;
+        static constexpr int16_t ButtonCornerRadius       = 5;
+        static constexpr uint16_t ButtonFrameColor        = 0x4208;
+        static constexpr uint16_t ButtonBgColor           = 0x7bef;
+        static constexpr uint16_t ButtonLabelColor        = 0xffff;
+        static constexpr uint16_t ButtonFrameColorPressed = 0x4208;
+        static constexpr uint16_t ButtonBgColorPressed    = 0x4208;
+        static constexpr uint16_t ButtonLabelColorPressed = 0xffff;
+        static constexpr uint8_t WindowTextSize           = 1;
+        static constexpr uint8_t ButtonTextSize           = 1;
+        static constexpr int16_t TextYOffset              = 4;
 
-        void drawWindowFrame(GfxInterface* gfx, const Rect& rect)
+        void drawWindowFrame(GfxInterface* gfx, const Rect& rect) final
         {
             Rect tmp = rect;
             tmp.deflate(WindowFrameThickness);
             gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
                 WindowFrameColor);
+            gfx->drawFastHLine(
+                rect.left + (WindowFrameThickness * 2),
+                rect.bottom - WindowFrameThickness,
+                rect.width() - (WindowFrameThickness * 2),
+                WindowFrameShadowColor
+            );
+            gfx->drawFastVLine(
+                rect.right - WindowFrameThickness,
+                rect.top + (WindowFrameThickness * 2),
+                rect.height() - (WindowFrameThickness * 2),
+                WindowFrameShadowColor
+            );
         }
 
-        void drawWindowBackground(GfxInterface* gfx, const Rect& rect)
+        void drawWindowBackground(GfxInterface* gfx, const Rect& rect) final
         {
             gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
                 WindowBgColor);
         }
 
-        void drawButtonFrame(GfxInterface* gfx, const Rect& rect)
+        void drawWindowText(GfxInterface* gfx, const char* text, const Rect& rect) final
         {
+            int16_t x, y;
+            uint16_t width, height;
+            gfx->setTextSize(WindowTextSize);
+            gfx->getTextBounds(text, rect.left, rect.top, &x, &y, &width, &height);
+            gfx->setCursor(x + (rect.width() / 2) - (width / 2),
+                rect.top + (rect.height() / 2) + TextYOffset);
+            gfx->setTextColor(WindowTextColor);
+            gfx->print(text);
         }
 
-        void drawButtonBackground(GfxInterface* gfx, const Rect& rect)
+        void drawButtonFrame(GfxInterface* gfx, bool pressed, const Rect& rect) final
         {
+            gfx->drawRoundRect(rect.left, rect.top, rect.width(), rect.height(),
+                ButtonCornerRadius, pressed ? ButtonFrameColorPressed : ButtonFrameColor);
         }
 
-        void drawButtonLabel(GfxInterface* gfx, const Rect& rect)
+        void drawButtonBackground(GfxInterface* gfx, bool pressed, const Rect& rect) final
         {
+            gfx->fillRoundRect(rect.left, rect.top, rect.width(), rect.height(),
+                ButtonCornerRadius, pressed ? ButtonBgColorPressed : ButtonBgColor);
+        }
+
+        void drawButtonLabel(GfxInterface* gfx, const char* lbl, bool pressed,
+            const Rect& rect) final
+        {
+            int16_t x, y;
+            uint16_t width, height;
+            gfx->setTextSize(ButtonTextSize);
+            gfx->getTextBounds(lbl, rect.left, rect.top, &x, &y, &width, &height);
+            gfx->setCursor(x + (rect.width() / 2) - (width / 2),
+                rect.top + (rect.height() / 2) + TextYOffset);
+            gfx->setTextColor(pressed ? ButtonLabelColorPressed : ButtonLabelColor);
+            gfx->print(lbl);
         }
     };
 
@@ -319,24 +378,28 @@ namespace twm
         Window() = default;
 
         Window(const ThemePtr& theme, const std::shared_ptr<Window>& parent,
-            WindowID id, Style style, const Rect& rect)
-            : _theme(theme), _parent(parent), _style(style), _rect(rect), _id(id) { }
+            WindowID id, Style style, const Rect& rect, const std::string& text)
+            : _theme(theme), _parent(parent), _style(style), _rect(rect), _id(id),
+              _text(text) { }
 
         virtual ~Window() = default;
 
         std::shared_ptr<Window> getParent() const { return _parent; }
         void setParent(const std::shared_ptr<Window>& parent) { _parent = parent; }
 
+        Rect getRect() const { return _rect; }
+        void setRect(const Rect& rect) { _rect = rect; }
+
         Style getStyle() const { return _style; }
         void setStyle(Style style) { _style = style; }
+
+        WindowID getID() const { return _id; }
 
         State getState() const { return _state; }
         void setState(State state) { _state = state; }
 
-        Rect getRect() const { return _rect; }
-        void setRect(const Rect& rect) { _rect = rect; }
-
-        WindowID getID() const { return _id; }
+        std::string getText() const { return _text; }
+        void setText(const std::string& text) { _text = text; }
 
         virtual bool onCreate(void* param1, void* param2) { return true; }
         virtual bool onDestroy(void* param1, void* param2) { return true; }
@@ -347,8 +410,9 @@ namespace twm
             GfxInterface* gfx = static_cast<GfxInterface*>(param1);
             TWM_ASSERT(gfx != nullptr && _theme);
             if (gfx != nullptr && _theme) {
-                _theme->drawWindowBackground(gfx, getRect());
-                _theme->drawWindowFrame(gfx, getRect());
+                Rect rect = getRect();
+                _theme->drawWindowBackground(gfx, rect);
+                _theme->drawWindowFrame(gfx, rect);
                 return true;
             }
             return false;
@@ -398,7 +462,7 @@ namespace twm
             return false;
         }
 
-    private:
+    protected:
         PackagedMessageQueue _queue;
         Mutex _queueLock;
         ThemePtr _theme;
@@ -407,9 +471,73 @@ namespace twm
         Style _style = 0;
         WindowID _id = 0;
         State _state = 0;
+        std::string _text;
     };
 
     using WindowPtr = std::shared_ptr<Window>;
+
+    class Button : public Window
+    {
+    public:
+        static constexpr u_long TappedDurationMsec = 100;
+
+        using Window::Window;
+        Button() = default;
+        virtual ~Button() = default;
+
+        virtual void onTapped() { lastTapped = millis(); }
+
+        bool onDraw(void* param1, void* param2) override
+        {
+            GfxInterface* gfx = static_cast<GfxInterface*>(param1);
+            TWM_ASSERT(gfx != nullptr && _theme);
+            if (gfx != nullptr && _theme) {
+                bool pressed = (millis() - lastTapped < TappedDurationMsec);
+                Rect rect = getRect();
+                _theme->drawButtonBackground(gfx, pressed, rect);
+                _theme->drawButtonFrame(gfx, pressed, rect);
+                _theme->drawButtonLabel(gfx, getText().c_str(), pressed, rect);
+                return true;
+            }
+            return false;
+        }
+
+        bool onInput(void* param1, void* param2) override
+        {
+            InputParams* ip = static_cast<InputParams*>(param1);
+            if (ip != nullptr) {
+                switch(ip->type) {
+                    case INPUT_TAP: onTapped(); return true;
+                    default: break;
+                }
+            }
+            return false;
+        }
+
+    private:
+        u_long lastTapped = 0;
+    };
+
+    class Label : public Window
+    {
+    public:
+        using Window::Window;
+        Label() = default;
+        virtual ~Label() = default;
+
+        bool onDraw(void* param1, void* param2) override
+        {
+            GfxInterface* gfx = static_cast<GfxInterface*>(param1);
+            TWM_ASSERT(gfx != nullptr && _theme);
+            if (gfx != nullptr && _theme) {
+                Rect rect = getRect();
+                _theme->drawWindowBackground(gfx, rect);
+                _theme->drawWindowText(gfx, getText().c_str(), rect);
+                return true;
+            }
+            return false;
+        }
+    };
 
     template<class TImpl, class TTheme = DefaultTheme>
     class TWM : public TImpl
@@ -476,7 +604,8 @@ namespace twm
 
         template<class TWindow>
         inline std::shared_ptr<TWindow> createWindow(const WindowPtr& parent,
-            Style style, Coord x, Coord y, Extent width, Extent height)
+            Style style, Coord x, Coord y, Extent width, Extent height,
+            const std::string& text = std::string())
         {
 # if !defined(TWM_SINGLETHREAD)
             MutexLock lock(_regLock);
@@ -494,7 +623,7 @@ namespace twm
             rect.right = x + width;
             rect.bottom = y + height;
             std::shared_ptr<TWindow> win(std::make_shared<TWindow>(_theme, parent,
-                id, style, rect));
+                id, style, rect, text));
             if (!win) {
                 TWM_LOG(TWM_ERROR, "memory alloc failed");
                 return nullptr;
@@ -561,22 +690,20 @@ namespace twm
                     --_idCounter;
                     TWM_LOG(TWM_DEBUG, "destroyed window %hhu; count: %zu", id,
                         _registry.size());
-
                     for (auto it : _registry) {
                         if (it.second) {
                             Rect curRect = it.second->getRect();
                             if (curRect.overlaps(dirtyRect)) {
-                                TWM_LOG(TWM_DEBUG, "redrawing window %hhu; rect"
+                                /*TWM_LOG(TWM_DEBUG, "redrawing window %hhu; rect"
                                     " (%hd, %hd, %hu, %hu) overlap with dirty rect"
                                     " (%hd, %hd, %hu, %hu)", it.second->getID(),
                                     curRect.left, curRect.top, curRect.right,
                                     curRect.bottom, dirtyRect.left, dirtyRect.top,
-                                    dirtyRect.right, dirtyRect.bottom);
+                                    dirtyRect.right, dirtyRect.bottom);*/
                                 it.second->queueMessage(MSG_DRAW, this);
                             }
                         }
                     }
-
                     return true;
                 }
             }
@@ -591,7 +718,7 @@ namespace twm
                 return;
             }
 # endif
-            //TWM_LOG(TWM_DEBUG, "hit test @ %hd/%hd...", x, y);
+            //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
             std::queue<WindowPtr> candidates;
             for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
                 if (it->second) {
@@ -600,10 +727,7 @@ namespace twm
                         continue;
                     }
                     auto rect = it->second->getRect();
-                    //TWM_LOG(TWM_DEBUG, "window %hhu rect: {%hd, %hd, %hd, %hd}",
-                    //    it->first, rect.left, rect.top, rect.right, rect.bottom);
                     if (rect.isPointWithin(Point(x, y))) {
-                        //TWM_LOG(TWM_DEBUG, "hit!");
                         candidates.push(it->second);
                     }
                 }
@@ -617,7 +741,7 @@ namespace twm
                 auto win = candidates.front();
                 candidates.pop();
                 if (win->routeMessage(MSG_INPUT, &params)) {
-                    //TWM_LOG(TWM_DEBUG, "window %hhu claimed hit test @ %hd/%hd",
+                    //TWM_LOG(TWM_DEBUG, "window %hhu claimed hit test @ %hd, %hd",
                     //    win->getID(), x, y);
                     break;
                 }
