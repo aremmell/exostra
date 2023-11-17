@@ -67,6 +67,8 @@ protected:
     }
 };
 
+std::shared_ptr<DesktopWnd> desktopWnd;
+
 class EveryDayNormalButton : public Button
 {
 public:
@@ -112,6 +114,8 @@ public:
   virtual ~TestPrompt() = default;
 };
 
+std::shared_ptr<TestPrompt> testPromptWnd;
+
 void setup(void)
 {
   Serial.begin(115200);
@@ -135,22 +139,22 @@ void setup(void)
   display.setRotation(3);
   display.setCursor(0, 0);
 
-  wm->getGfx()->fillScreen(ILI9341_BLACK);
-  wm->getGfx()->setFont(&FreeSans9pt7b);
+  wm->getTheme()->drawBlankScreen();
+  wm->getGfx()->setFont(DefaultTheme::WindowTextFont);
 
-  auto desktop = wm->createWindow<DesktopWnd>(nullptr, WID_DESKTOP, STY_VISIBLE,
+  desktopWnd = wm->createWindow<DesktopWnd>(nullptr, WID_DESKTOP, STY_VISIBLE,
     0, 0, TFT_HEIGHT, TFT_WIDTH);
-  if (!desktop) {
+  if (!desktopWnd) {
     on_fatal_error(ums3);
   }
 
-  /*auto defaultWin = wm->createWindow<DefaultWindow>(desktop, WID_RESERVEDMAX + 1,
+  /*auto defaultWin = wm->createWindow<DefaultWindow>(desktop, 2,
     STY_CHILD | STY_VISIBLE, 20, 20, TFT_HEIGHT - 40, TFT_WIDTH - 40);
   if (!defaultWin) {
     on_fatal_error(ums3);
   }
 
-  auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, WID_RESERVEDMAX + 2,
+  auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
     STY_CHILD | STY_VISIBLE | STY_AUTOSIZE, 40, 50, 0, 0,
     "pres me");
   if (!button1) {
@@ -158,20 +162,23 @@ void setup(void)
   }
 
   auto labelX = defaultWin->getRect().width() - 130;
-  auto label1 = wm->createWindow<TestLabel>(defaultWin, WID_RESERVEDMAX + 3, STY_CHILD | STY_VISIBLE,
+  auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE,
     labelX, 50, 130, 30, "A static label");
   if (!label1) {
     on_fatal_error(ums3);
   }
 
   button1->setLabel(label1);*/
-
-  auto promptWidth = TFT_HEIGHT - (DefaultTheme::WindowXPadding * 2);
-  auto promptHeight = TFT_WIDTH - (DefaultTheme::WindowYPadding * 2);
-  auto prompt1 = wm->createWindow<TestPrompt>(desktop, WID_PROMPT, STY_CHILD | STY_VISIBLE,
-    DefaultTheme::WindowXPadding, DefaultTheme::WindowYPadding, promptWidth, promptHeight,
-    "This is a test prompt. This is only a test. If this were a real prompt, shmoo would be less gay.");
-  if (!prompt1) {
+  testPromptWnd = wm->createPrompt<TestPrompt>(
+    desktopWnd,
+    "This is a test prompt. Please choose an option.",
+    std::initializer_list<std::pair<WindowID, std::string>>({{100, "Yes"}, {101, "No"}}),
+    [](WindowID id)
+    {
+      TWM_LOG(TWM_DEBUG, "prompt button chosen: %hhu", id);
+    }
+  );
+  if (!testPromptWnd) {
     on_fatal_error(ums3);
   }
 }
@@ -209,5 +216,5 @@ TODO_refactor:
   }
 
   display.drawRGBBitmap(0, 0, wm->getGfx()->getBuffer(), wm->getGfx()->width(), wm->getGfx()->height());
-  delay(100);
+  //delay(100);
 }

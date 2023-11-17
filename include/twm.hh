@@ -30,6 +30,7 @@
 # include <cstdint>
 # include <cinttypes>
 # include <type_traits>
+# include <initializer_list>
 # include <stdexcept>
 # include <functional>
 # include <string>
@@ -86,15 +87,19 @@ inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* gfxFont, uint8_t c)
 
 static void AdafruitExt_getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
     uint8_t* xAdv, uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
-    uint8_t textSizeY = 1, GFXfont* gfxFont = nullptr)
+    uint8_t textSizeY = 1, const GFXfont* gfxFont = nullptr)
 {
     if (gfxFont) { // Next line: x = start; y += textSizeY * yAdv;
         uint8_t first = pgm_read_byte(&gfxFont->first),
                 last  = pgm_read_byte(&gfxFont->last);
         bool inRange = (ch >= first && ch <= last);
         GFXglyph* glyph = inRange ? pgm_read_glyph_ptr(gfxFont, ch - first) : nullptr;
-        *cx = inRange ? pgm_read_byte(&glyph->width) : 0;
-        *cy = inRange ? pgm_read_byte(&glyph->height) : 0;
+        if (cx) {
+            *cx = inRange ? pgm_read_byte(&glyph->width) : 0;
+        }
+        if (cy) {
+            *cy = inRange ? pgm_read_byte(&glyph->height) : 0;
+        }
         *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) : 0;
         *yAdv = inRange ? pgm_read_byte(&gfxFont->yAdvance) : 0;
         *xOff = inRange ? pgm_read_byte(&glyph->xOffset) : 0;
@@ -108,66 +113,6 @@ static void AdafruitExt_getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
         *yOff = 0;
     }
 }
-/*static void AdafruitExt_charBounds(uint8_t c, int16_t *x, int16_t *y, int16_t *minx,
-    int16_t *miny, int16_t *maxx, int16_t *maxy, uint8_t textSizeX, uint8_t textSizeY,
-    uint16_t drawAreaWidth, bool wrap, GFXfont* gfxFont = nullptr)
-{
-  if (gfxFont) {
-    if (c == '\n') {
-      *x = 0;
-      *y += textSizeY * pgm_read_byte(&gfxFont->yAdvance);
-    } else if (c != '\r') {
-      uint8_t first = pgm_read_byte(&gfxFont->first),
-              last = pgm_read_byte(&gfxFont->last);
-      if ((c >= first) && (c <= last)) {
-        GFXglyph *glyph = pgm_read_glyph_ptr(gfxFont, c - first);
-        uint8_t gw = pgm_read_byte(&glyph->width),
-                gh = pgm_read_byte(&glyph->height),
-                xa = pgm_read_byte(&glyph->xAdvance);
-        int8_t xo = pgm_read_byte(&glyph->xOffset),
-               yo = pgm_read_byte(&glyph->yOffset);
-        if (wrap && ((*x + (((int16_t)xo + gw) * textSizeX)) > drawAreaWidth)) {
-          *x = 0;
-          *y += textSizeY * pgm_read_byte(&gfxFont->yAdvance);
-        }
-        int16_t tsx = static_cast<int16_t>(textSizeX),
-                tsy = static_cast<int16_t>(textSizeY),
-                x1 = *x + xo * tsx, y1 = *y + yo * tsy, x2 = x1 + gw * tsx - 1,
-                y2 = y1 + gh * tsy - 1;
-        if (x1 < *minx)
-          *minx = x1;
-        if (y1 < *miny)
-          *miny = y1;
-        if (x2 > *maxx)
-          *maxx = x2;
-        if (y2 > *maxy)
-          *maxy = y2;
-        *x += xa * tsx;
-      }
-    }
-  } else {
-    if (c == '\n') {
-      *x = 0;
-      *y += textSizeY * 8;
-    } else if (c != '\r') {
-      if (wrap && ((*x + textSizeX * 6) > drawAreaWidth)) {
-        *x = 0;
-        *y += textSizeY * 8;
-      }
-      int x2 = *x + textSizeX * 6 - 1,
-          y2 = *y + textSizeY * 8 - 1;
-      if (x2 > *maxx)
-        *maxx = x2;
-      if (y2 > *maxy)
-        *maxy = y2;
-      if (*x < *minx)
-        *minx = *x;
-      if (*y < *miny)
-        *miny = *y;
-      *x += textSizeX * 6;
-    }
-  }
-}*/
 
 // TODO: remove me
 # define TWM_COLOR_565
@@ -225,10 +170,10 @@ namespace twm
     using WindowID = uint8_t;
 
     /** Predefined (reserved) window identifiers. */
-    TWM_CONST(WindowID, WID_DESKTOP,     1);
-    TWM_CONST(WindowID, WID_PROMPT,      2);
-    TWM_CONST(WindowID, WID_PROMPTLBL,   3);
-    TWM_CONST(WindowID, WID_RESERVEDMAX, 3);
+    TWM_CONST(WindowID, WID_INVALID,    -1);
+    TWM_CONST(WindowID, WID_DESKTOP,   1);
+    TWM_CONST(WindowID, WID_PROMPT,    2);
+    TWM_CONST(WindowID, WID_PROMPTLBL, 3);
 
     /** Window style. */
     using Style = uint16_t;
@@ -367,7 +312,7 @@ namespace twm
     }
 
     using Mutex     = std::recursive_mutex;
-    using MutexLock = std::lock_guard<Mutex>;
+    using ScopeLock = std::lock_guard<Mutex>;
 
     typedef enum
     {
@@ -396,10 +341,8 @@ namespace twm
 
     typedef enum
     {
-        DTF_CENTER  = 0x03, /**< Horizontal align center. */
-        DTF_VCENTER = 0x04, /**< Vertical align center. */
-        DTF_WRAP    = 0x30, /**< Wrap overflow to the next line. */
-        DTF_CLIP    = 0x40  /**< Clip overflow with an ellipsis. */
+        DTF_CENTER = 0x01, /**< Horizontal align center. */
+        DTF_SINGLE = 0x02 /**< Single line of text. */
     } _DrawTextFlags;
 
     typedef enum {
@@ -443,27 +386,28 @@ namespace twm
     class DefaultTheme : public ITheme
     {
     public:
-        TWM_CONST(Color,   BlankScreenColor,        0x0000);
-        TWM_CONST(Extent,  WindowXPadding,          20);
-        TWM_CONST(Extent,  WindowYPadding,          20);
-        TWM_CONST(Extent,  WindowFrameThickness,    1);
-        TWM_CONST(Color,   WindowFrameColor,        0x7bef);
-        TWM_CONST(Color,   WindowFrameShadowColor,  0xad75);
-        TWM_CONST(Color,   WindowBgColor,           0xc618);
-        TWM_CONST(Color,   WindowTextColor,         0x0000);
-        TWM_CONST(Extent,  ButtonWidth,             90);
-        TWM_CONST(Extent,  ButtonHeight,            40);
-        TWM_CONST(Coord,   ButtonCornerRadius,      4);
-        TWM_CONST(Color,   ButtonFrameColor,        0x4208);
-        TWM_CONST(Color,   ButtonBgColor,           0x7bef);
-        TWM_CONST(Color,   ButtonLabelColor,        0xffff);
-        TWM_CONST(Extent,  ButtonLabelPadding,      10);
-        TWM_CONST(Color,   ButtonFrameColorPressed, 0x4208);
-        TWM_CONST(Color,   ButtonBgColorPressed,    0x4208);
-        TWM_CONST(Color,   ButtonLabelColorPressed, 0xffff);
-        TWM_CONST(uint8_t, WindowTextSize,          1);
-        TWM_CONST(uint8_t, ButtonTextSize,          1);
-        TWM_CONST(Coord,   WindowTextYOffset,       4);
+        TWM_CONST(Color, BlankScreenColor, 0x0000);
+        TWM_CONST(Extent, WindowXPadding, 20);
+        TWM_CONST(Extent, WindowYPadding, 20);
+        TWM_CONST(Extent, WindowFrameThickness, 1);
+        TWM_CONST(Color, WindowFrameColor, 0x7bef);
+        TWM_CONST(Color, WindowFrameShadowColor, 0xad75);
+        TWM_CONST(Color, WindowBgColor, 0xc618);
+        TWM_CONST(Color, WindowTextColor, 0x0000);
+        TWM_CONST(Extent, ButtonWidth, 90);
+        TWM_CONST(Extent, ButtonHeight, 40);
+        TWM_CONST(Coord, ButtonCornerRadius, 4);
+        TWM_CONST(Color, ButtonFrameColor, 0x4208);
+        TWM_CONST(Color, ButtonBgColor, 0x7bef);
+        TWM_CONST(Color, ButtonLabelColor, 0xffff);
+        TWM_CONST(Extent, ButtonLabelPadding, 10);
+        TWM_CONST(Color, ButtonFrameColorPressed, 0x4208);
+        TWM_CONST(Color, ButtonBgColorPressed, 0x4208);
+        TWM_CONST(Color, ButtonLabelColorPressed, 0xffff);
+        TWM_CONST(uint8_t, WindowTextSize, 1);
+        TWM_CONST(uint8_t, ButtonTextSize, 1);
+        TWM_CONST(Coord, WindowTextYOffset, 4);
+        TWM_CONST(const GFXfont*, WindowTextFont, &FreeSans9pt7b);
 
         void setGfxDriver(const GfxDriverPtr& gfx)
         {
@@ -515,61 +459,67 @@ namespace twm
             _gfx->setTextColor(WindowTextColor);
 
             bool xCenter = bitsHigh(flags, DTF_CENTER);
-            bool yCenter = bitsHigh(flags, DTF_VCENTER);
-            bool wrap    = bitsHigh(flags, DTF_WRAP);
+            bool singleLine = bitsHigh(flags, DTF_SINGLE);
 
-            // regardless of where x and y start:
-            // iterate chars, taking note of their extents, adding them up.
-            // once the right edge is within sight, write those characters out,
-            // then repeat–the length of each chunk must be pre-calculataed in
-            // order to do x-justifying. similarly for y-justifying, the height
-            // of the entire output string must be pre-calculated before it is
-            // drawn.
-
-            uint8_t cx = 0, cy = 0, xAdv = 0, yAdv = 0, yAdvMax = 0;
-            int8_t xOff = 0, xOffMax = 0, yOff = 0, yOffMin = 0;
-            uint16_t xAccum = 0, yAccum = rect.top, xExtent = 0;
-
-            auto resetXValues = [&]()
-            {
-                xAccum = rect.left;
-                xExtent = rect.right;
-            };
-
-            resetXValues();
-
-            _gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(), 0x00f1);
-
+            uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
+            int8_t xOff = 0, yOff = 0, yOffMin = 0;
+            uint16_t xAccum = 0, yAccum = rect.top + WindowYPadding;
+            const uint16_t xExtent = rect.right - WindowXPadding;
             const char* cursor = text;
+
             while (*cursor != '\0') {
+                xAccum = rect.left + WindowXPadding;
                 const char* old_cursor = cursor;
+                std::vector<uint8_t> charXAdvs;
                 while (xAccum < xExtent && *cursor != '\0') {
-                    AdafruitExt_getCharBounds(*cursor, &cx, &cy, &xAdv, &yAdv,
-                        &xOff, &yOff, WindowTextSize, WindowTextSize,
-                        const_cast<GFXfont*>(&FreeSans9pt7b));
+                    AdafruitExt_getCharBounds(
+                        *cursor,
+                        nullptr,
+                        nullptr,
+                        &xAdv,
+                        &yAdv,
+                        &xOff,
+                        &yOff,
+                        WindowTextSize,
+                        WindowTextSize,
+                        WindowTextFont
+                    );
+                    charXAdvs.push_back(xAdv);
                     xAccum += xAdv;
-                    //TWM_LOG(TWM_DEBUG, "ch = %c (%d), cx = %hhu, cy = %hhu, xAdv = %hhu,"
-                     //   " yAdv = %hhu, xOff = %hhd, yOff = %hhd, xAccum = %hu, yAccum = %hu",
-                     //   *cursor, *cursor, cy, cy, xAdv, yAdv, xOff, yOff, xAccum, yAccum);
                     cursor++;
                     if (yAdv > yAdvMax) { yAdvMax = yAdv; }
                     if (yOff > yOffMin) { yOffMin = yOff; }
                 }
-                //TWM_LOG(TWM_DEBUG, "write out: xAccum = %hu, idx range = %hu-%hu, yAccum = %hu",
-                //    xAccum, (uint16_t)(old_cursor - text), (uint16_t)(cursor - old_cursor), yAccum);
+                size_t rewound = 0;
+                if (!singleLine) {
+                    for (size_t rewind = 0; rewind < (cursor - old_cursor); rewind++) {
+                        if (*(cursor - rewind) == ' ') {
+                            rewound = rewind;
+                            cursor -= rewind;
+                            while (rewind > 0) {
+                                xAccum -= charXAdvs.at(charXAdvs.size() - 1 - rewind);
+                                rewind--;
+                            }
+                            break;
+                        }
+                    }
+                }
                 xAccum = xCenter
                     ? (rect.left + WindowXPadding + (rect.width()) / 2) - (xAccum / 2)
                     : rect.left + WindowXPadding;
                 while (old_cursor < cursor) {
-                    AdafruitExt_getCharBounds(*old_cursor, &cx, &cy, &xAdv, &yAdv, &xOff, &yOff,
-                        WindowTextSize, WindowTextSize, const_cast<GFXfont*>(&FreeSans9pt7b));
                     _gfx->drawChar(xAccum, yAccum, *old_cursor++, WindowTextColor,
                         WindowTextColor, WindowTextSize);
-                    xAccum += xAdv;
+                    xAccum += charXAdvs[
+                        charXAdvs.size() - 2 - ((cursor + rewound) - old_cursor - 1)
+                    ];
                 }
-                //TWM_LOG(TWM_DEBUG, "-----------------------");
-                yAccum += yAdvMax + yOffMin;
-                resetXValues();
+                if (!singleLine) {
+                    if (rewound > 0) { cursor++; }
+                    yAccum += yAdvMax + yOffMin;
+                } else {
+                    break;
+                }
             }
         }
 
@@ -671,7 +621,7 @@ namespace twm
         virtual void tearDown()
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_regLock);
+            ScopeLock lock(_regMtx);
 # endif
             _registry.clear();
         }
@@ -679,7 +629,7 @@ namespace twm
         virtual void update()
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_regLock);
+            ScopeLock lock(_regMtx);
 # endif
             if (_registry.empty() && _theme) {
                 _theme->drawBlankScreen();
@@ -689,13 +639,11 @@ namespace twm
             for (auto it : _registry) {
                 // TODO: is this window completely covered by another, or off
                 // the screen?
-                if (it.second) {
-                    if (bitsHigh(it.second->getStyle(), STY_VISIBLE) &&
-                        bitsHigh(it.second->getState(), STA_ALIVE)) {
-                        it.second->queueMessage(MSG_DRAW);
-                    }
-                    it.second->processQueue();
+                if (bitsHigh(it.second->getStyle(), STY_VISIBLE) &&
+                    bitsHigh(it.second->getState(), STA_ALIVE)) {
+                    it.second->routeMessage(MSG_DRAW);
                 }
+                it.second->processQueue();
             }
         }
 
@@ -708,11 +656,12 @@ namespace twm
             Coord y,
             Extent width,
             Extent height,
-            const std::string& text = std::string()
+            const std::string& text = std::string(),
+            const std::function<bool(const std::shared_ptr<TWindow>&)>& preCreateHook = nullptr
         )
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_regLock);
+            ScopeLock lock(_regMtx);
 # endif
             size_t numWindows = _registry.size();
             TWM_ASSERT(numWindows < std::numeric_limits<WindowID>::max() - 1);
@@ -750,6 +699,10 @@ namespace twm
                     return nullptr;
                 }
             }
+            if (preCreateHook && !preCreateHook(win)) {
+                TWM_LOG(TWM_ERROR, "pre-create hook false");
+                return nullptr;
+            }
             if (!win->routeMessage(MSG_CREATE)) {
                 TWM_LOG(TWM_ERROR, "MSG_CREATE false");
                 return nullptr;
@@ -766,10 +719,41 @@ namespace twm
             return win;
         }
 
+        template<class TPrompt>
+        inline std::shared_ptr<TPrompt> createPrompt(
+            const WindowPtr& parent,
+            const std::string& text,
+            const std::vector<std::pair<WindowID, std::string>>& buttons,
+            const typename TPrompt::ResultCallback& callback
+        )
+        {
+            auto prompt = createWindow<TPrompt>(
+                parent,
+                WID_PROMPT,
+                STY_CHILD | STY_VISIBLE,
+                _theme->getWindowXPadding(),
+                _theme->getWindowYPadding(),
+                _gfx->width() - (_theme->getWindowXPadding() * 2),
+                _gfx->height() - (_theme->getWindowYPadding() * 2),
+                text,
+                [&](const std::shared_ptr<TPrompt>& win)
+                {
+                    for (const auto& btn : buttons) {
+                        if (!win->addButton(btn.first, btn.second)) {
+                            return false;
+                        }
+                    }
+                    win->setResultCallback(callback);
+                    return true;
+                }
+            );
+            return prompt;
+        }
+
         WindowPtr findWindow(WindowID id)
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_regLock);
+            ScopeLock lock(_regMtx);
 # endif
             auto it = _registry.find(id);
             return it != _registry.end() ? it->second : nullptr;
@@ -778,7 +762,7 @@ namespace twm
         bool destroyWindow(WindowID id)
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_regLock);
+            ScopeLock lock(_regMtx);
 # endif
             auto it = _registry.find(id);
             if (it != _registry.end()) {
@@ -818,7 +802,7 @@ namespace twm
         void hitTest(Coord x, Coord y)
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_regLock);
+            ScopeLock lock(_regMtx);
 # endif
             //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
             for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
@@ -833,7 +817,8 @@ namespace twm
                         params.type = INPUT_TAP;
                         params.x    = x;
                         params.y    = y;
-                        if (it->second->routeMessage(MSG_INPUT, reinterpret_cast<MsgParam>(&params))) {
+                        if (it->second->routeMessage(MSG_INPUT,
+                            reinterpret_cast<MsgParam>(&params))) {
                             //TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
                             //    win->getID(), x, y);
                             break;
@@ -846,7 +831,7 @@ namespace twm
     protected:
         WindowRegistry _registry;
 # if !defined(TWM_SINGLETHREAD)
-        Mutex _regLock;
+        Mutex _regMtx;
 # endif
         GfxDriverPtr _gfx;
         ThemePtr _theme;
@@ -938,7 +923,7 @@ namespace twm
         void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_queueLock);
+            ScopeLock lock(_queueMtx);
 # endif
             PackagedMessage pm;
             pm.msg = msg;
@@ -950,7 +935,7 @@ namespace twm
         bool processQueue() override
         {
 # if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_queueLock);
+            ScopeLock lock(_queueMtx);
 # endif
             if (!_queue.empty()) {
                 auto pm = _queue.front();
@@ -992,7 +977,7 @@ namespace twm
     protected:
         PackagedMessageQueue _queue;
 # if !defined(TWM_SINGLETHREAD)
-        Mutex _queueLock;
+        Mutex _queueMtx;
 # endif
         TWMPtr _wm;
         std::shared_ptr<IWindow> _parent;
@@ -1020,7 +1005,7 @@ namespace twm
                 _parent->queueMessage(
                     MSG_EVENT,
                     EVT_CHILD_TAPPED,
-                    static_cast<uintptr_t>(getID())
+                    getID()
                 );
             }
         }
@@ -1063,6 +1048,7 @@ namespace twm
                 rect.right = rect.left + max(width, theme->getButtonWidth())  + (theme->getButtonLabelPadding() * 2);
                 rect.bottom = rect.top + theme->getButtonHeight();
                 setRect(rect);
+                TWM_LOG(TWM_DEBUG, "save rc: %hd, %hd, %hu, %hu", rect.left, rect.top, rect.right, rect.bottom);
 TODO_if_not_autosize_clip_label:
                 return true;
             }
@@ -1076,7 +1062,7 @@ TODO_if_not_autosize_clip_label:
     class Label : public Window
     {
     public:
-        TWM_CONST(uint8_t, DrawTextFlags, DTF_CENTER | DTF_WRAP);
+        TWM_CONST(uint8_t, DrawTextFlags, DTF_SINGLE);
 
         using Window::Window;
         Label() = default;
@@ -1095,39 +1081,52 @@ TODO_if_not_autosize_clip_label:
         }
     };
 
+    class MultilineLabel : public Window
+    {
+    public:
+        TWM_CONST(uint8_t, DrawTextFlags, DTF_CENTER);
+
+        using Window::Window;
+        MultilineLabel() = default;
+        virtual ~MultilineLabel() = default;
+
+        bool onDraw(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                Rect rect = getRect();
+                theme->drawWindowBackground(rect);
+                theme->drawWindowText(getText().c_str(), DrawTextFlags, rect);
+                return true;
+            }
+            return false;
+        }
+    };
+
     class Prompt : public Window
     {
     public:
+        using ResultCallback = std::function<void(WindowID)>;
+
         using Window::Window;
         Prompt() = default;
         virtual ~Prompt() = default;
 
-        WindowID doPrompt() const
+        void setResultCallback(const ResultCallback& callback)
         {
-            do {
-                if (_resultID != 0) {
-                    TWM_LOG(TWM_DEBUG, "prompt result: %hhu", _resultID);
-                    break;
-                }
-                if (!bitsHigh(getState(), STA_ALIVE)) {
-                    break;
-                }
-                yield();
-            } while (true);
-            return _resultID;
+            _callback = callback;
         }
 
         bool addButton(WindowID id, const std::string& label)
         {
             if (_buttons.size() >= 2) {
-                TWM_LOG(TWM_DEBUG, "max 2 prompt buttons");
+                TWM_LOG(TWM_ERROR, "max 2 prompt buttons");
                 return false;
             }
             auto wm = _getWM();
             if (wm) {
                 auto theme = _getTheme();
                 if (theme) {
-                    Rect rect = getRect();
                     auto btn = wm->createWindow<Button>(
                         shared_from_this(),
                         id,
@@ -1138,7 +1137,10 @@ TODO_if_not_autosize_clip_label:
                         0,
                         label
                     );
-                    return true;
+                    if (btn) {
+                        _buttons.push_back(btn);
+                        return true;
+                    }
                 }
             }
             return false;
@@ -1151,7 +1153,7 @@ TODO_if_not_autosize_clip_label:
                 auto theme = _getTheme();
                 if (theme) {
                     Rect rect = getRect();
-                    _label = wm->createWindow<Label>(
+                    _label = wm->createWindow<MultilineLabel>(
                         shared_from_this(),
                         WID_PROMPTLBL,
                         STY_CHILD | STY_VISIBLE,
@@ -1167,7 +1169,10 @@ TODO_if_not_autosize_clip_label:
                     Rect rectLbl = _label->getRect();
                     uint8_t idx = 0;
                     for (auto& btn : _buttons) {
+                        btn->processQueue();
                         Rect rectBtn = btn->getRect();
+                        rectBtn.top = rectLbl.bottom + theme->getWindowYPadding();
+                        rectBtn.bottom = rectBtn.top + theme->getButtonHeight();
                         auto width = rectBtn.width();
                         if (idx == 0) {
                             rectBtn.left = rect.left + theme->getWindowXPadding();
@@ -1177,7 +1182,8 @@ TODO_if_not_autosize_clip_label:
                             rectBtn.left = rectBtn.right - width;
                         }
                         btn->setRect(rectBtn);
-                        ++idx;
+                        TWM_LOG(TWM_DEBUG, "rc: %hd, %hd, %hu, %hu", rectBtn.left, rectBtn.top, rectBtn.right, rectBtn.bottom);
+                        idx++;
                     }
                     return true;
                 }
@@ -1188,8 +1194,15 @@ TODO_if_not_autosize_clip_label:
         bool onEvent(MsgParam param1, MsgParam param2) override
         {
             switch (static_cast<EventType>(param1)) {
-                case EVT_CHILD_TAPPED:
-                    _resultID = static_cast<WindowID>(param2);
+                case EVT_CHILD_TAPPED: {
+                    if (_callback) {
+                        _callback(static_cast<WindowID>(param2));
+                    }
+                    auto wm = _getWM();
+                    if (wm) {
+                        wm->destroyWindow(getID());
+                    }
+                }
                 break;
                 default:
                     TWM_ASSERT(!"unknown event type");
@@ -1201,7 +1214,7 @@ TODO_if_not_autosize_clip_label:
     protected:
         WindowPtr _label;
         std::vector<WindowPtr> _buttons;
-        WindowID _resultID = 0;
+        ResultCallback _callback;
     };
 } // namespace twm
 
