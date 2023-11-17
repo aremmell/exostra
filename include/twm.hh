@@ -709,10 +709,10 @@ namespace twm
             }
             win->setState(STA_ALIVE);
             if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
-                win->queueMessage(MSG_RESIZE);
+                win->routeMessage(MSG_RESIZE);
             }
             if (bitsHigh(win->getStyle(), STY_VISIBLE)) {
-                win->queueMessage(MSG_DRAW);
+                win->routeMessage(MSG_DRAW);
             }
             _registry[id] = win;
             TWM_LOG(TWM_DEBUG, "registered %hhu; count: %zu", id, _registry.size());
@@ -1048,7 +1048,6 @@ namespace twm
                 rect.right = rect.left + max(width, theme->getButtonWidth())  + (theme->getButtonLabelPadding() * 2);
                 rect.bottom = rect.top + theme->getButtonHeight();
                 setRect(rect);
-                TWM_LOG(TWM_DEBUG, "save rc: %hd, %hd, %hu, %hu", rect.left, rect.top, rect.right, rect.bottom);
 TODO_if_not_autosize_clip_label:
                 return true;
             }
@@ -1169,7 +1168,6 @@ TODO_if_not_autosize_clip_label:
                     Rect rectLbl = _label->getRect();
                     uint8_t idx = 0;
                     for (auto& btn : _buttons) {
-                        btn->processQueue();
                         Rect rectBtn = btn->getRect();
                         rectBtn.top = rectLbl.bottom + theme->getWindowYPadding();
                         rectBtn.bottom = rectBtn.top + theme->getButtonHeight();
@@ -1182,7 +1180,6 @@ TODO_if_not_autosize_clip_label:
                             rectBtn.left = rectBtn.right - width;
                         }
                         btn->setRect(rectBtn);
-                        TWM_LOG(TWM_DEBUG, "rc: %hd, %hd, %hu, %hu", rectBtn.left, rectBtn.top, rectBtn.right, rectBtn.bottom);
                         idx++;
                     }
                     return true;
