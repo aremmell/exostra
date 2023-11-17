@@ -60,7 +60,8 @@
 			"streambuf": "cpp",
 			"thread": "cpp",
 			"typeinfo": "cpp",
-			"future": "cpp"
+			"future": "cpp",
+			"glcdfont.c": "cpp"
 		}
 	}
 }

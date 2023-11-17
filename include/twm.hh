@@ -30,6 +30,7 @@
 # include <cstdint>
 # include <cinttypes>
 # include <type_traits>
+# include <stdexcept>
 # include <functional>
 # include <string>
 # include <memory>
@@ -39,6 +40,134 @@
 # include <map>
 
 # include <Adafruit_GFX.h>
+# include <Fonts/FreeSans9pt7b.h>
+// The following is necessary because the Adafruit GFX library:
+// 1. Protects a method needed to correctly draw their special fonts (charBounds);
+// 2. Defines the following macros and function(s) in the translation unit instead
+//    of the header;
+// 3. Does not stay on top of PRs on GitHub, so it is fruitless (pun intended)
+//    to attempt to correct the aforementioned.
+// As a result, this code is copy/pasted from the Adafruit GFX library (with some
+// sanitizing; it's verboten to use C-style casts in C++ code. I believe it's
+// illegal in 56 countries).
+# include <glcdfont.c>
+# if defined(__AVR__)
+#  include <avr/pgmspace.h>
+# elif defined(ESP8266) || defined(ESP32)
+#  include <pgmspace.h>
+# endif
+
+# if !defined(pgm_read_byte)
+#  define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
+# endif
+# if !defined(pgm_read_word)
+#  define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
+# endif
+# if !defined(pgm_read_dword)
+#  define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
+# endif
+
+# if !defined(pgm_read_pointer)
+#  if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
+#   define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
+#  else
+#   define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
+#  endif
+# endif
+
+inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* gfxFont, uint8_t c)
+{
+# ifdef __AVR__
+    return &((static_cast<GFXglyph*>(pgm_read_pointer(&gfxFont->glyph)))[c]);
+# else
+    return gfxFont->glyph + c;
+# endif
+}
+
+static void AdafruitExt_getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
+    uint8_t* xAdv, uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
+    uint8_t textSizeY = 1, GFXfont* gfxFont = nullptr)
+{
+    if (gfxFont) { // Next line: x = start; y += textSizeY * yAdv;
+        uint8_t first = pgm_read_byte(&gfxFont->first),
+                last  = pgm_read_byte(&gfxFont->last);
+        bool inRange = (ch >= first && ch <= last);
+        GFXglyph* glyph = inRange ? pgm_read_glyph_ptr(gfxFont, ch - first) : nullptr;
+        *cx = inRange ? pgm_read_byte(&glyph->width) : 0;
+        *cy = inRange ? pgm_read_byte(&glyph->height) : 0;
+        *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) : 0;
+        *yAdv = inRange ? pgm_read_byte(&gfxFont->yAdvance) : 0;
+        *xOff = inRange ? pgm_read_byte(&glyph->xOffset) : 0;
+        *yOff = inRange ? pgm_read_byte(&glyph->yOffset) : 0;
+    } else { // Next line: x = start; y += textSizeY * 8;
+        *cx = textSizeX * 6;
+        *cy = textSizeY * 8;
+        *xAdv = *cx;
+        *yAdv = *cy;
+        *xOff = 0;
+        *yOff = 0;
+    }
+}
+/*static void AdafruitExt_charBounds(uint8_t c, int16_t *x, int16_t *y, int16_t *minx,
+    int16_t *miny, int16_t *maxx, int16_t *maxy, uint8_t textSizeX, uint8_t textSizeY,
+    uint16_t drawAreaWidth, bool wrap, GFXfont* gfxFont = nullptr)
+{
+  if (gfxFont) {
+    if (c == '\n') {
+      *x = 0;
+      *y += textSizeY * pgm_read_byte(&gfxFont->yAdvance);
+    } else if (c != '\r') {
+      uint8_t first = pgm_read_byte(&gfxFont->first),
+              last = pgm_read_byte(&gfxFont->last);
+      if ((c >= first) && (c <= last)) {
+        GFXglyph *glyph = pgm_read_glyph_ptr(gfxFont, c - first);
+        uint8_t gw = pgm_read_byte(&glyph->width),
+                gh = pgm_read_byte(&glyph->height),
+                xa = pgm_read_byte(&glyph->xAdvance);
+        int8_t xo = pgm_read_byte(&glyph->xOffset),
+               yo = pgm_read_byte(&glyph->yOffset);
+        if (wrap && ((*x + (((int16_t)xo + gw) * textSizeX)) > drawAreaWidth)) {
+          *x = 0;
+          *y += textSizeY * pgm_read_byte(&gfxFont->yAdvance);
+        }
+        int16_t tsx = static_cast<int16_t>(textSizeX),
+                tsy = static_cast<int16_t>(textSizeY),
+                x1 = *x + xo * tsx, y1 = *y + yo * tsy, x2 = x1 + gw * tsx - 1,
+                y2 = y1 + gh * tsy - 1;
+        if (x1 < *minx)
+          *minx = x1;
+        if (y1 < *miny)
+          *miny = y1;
+        if (x2 > *maxx)
+          *maxx = x2;
+        if (y2 > *maxy)
+          *maxy = y2;
+        *x += xa * tsx;
+      }
+    }
+  } else {
+    if (c == '\n') {
+      *x = 0;
+      *y += textSizeY * 8;
+    } else if (c != '\r') {
+      if (wrap && ((*x + textSizeX * 6) > drawAreaWidth)) {
+        *x = 0;
+        *y += textSizeY * 8;
+      }
+      int x2 = *x + textSizeX * 6 - 1,
+          y2 = *y + textSizeY * 8 - 1;
+      if (x2 > *maxx)
+        *maxx = x2;
+      if (y2 > *maxy)
+        *maxy = y2;
+      if (*x < *minx)
+        *minx = *x;
+      if (*y < *miny)
+        *miny = *y;
+      *x += textSizeX * 6;
+    }
+  }
+}*/
 
 // TODO: remove me
 # define TWM_COLOR_565
@@ -83,19 +212,32 @@
         } \
     } while (false)
 
+# define TWM_CONST(type, name, value) \
+    static constexpr PROGMEM type name = value;
+
 namespace twm
 {
     /** For now, the only low-level graphics interface supported is Adafruit's. */
-    using GfxInterface = Adafruit_GFX;
+    using IGfxDriver = GFXcanvas16;
+    using GfxDriverPtr = std::shared_ptr<IGfxDriver>;
 
     /** Window identifier. */
     using WindowID = uint8_t;
+
+    /** Predefined (reserved) window identifiers. */
+    TWM_CONST(WindowID, WID_DESKTOP,     1);
+    TWM_CONST(WindowID, WID_PROMPT,      2);
+    TWM_CONST(WindowID, WID_PROMPTLBL,   3);
+    TWM_CONST(WindowID, WID_RESERVEDMAX, 3);
 
     /** Window style. */
     using Style = uint16_t;
 
     /** Window state. */
     using State = uint16_t;
+
+    /** Window message parameter type. */
+    using MsgParam = uintptr_t;
 
     /** Use the smallest type that can contain all possible colors. */
 # if defined(TWM_COLOR_MONOCHROME) || defined(TWM_COLOR_256)
@@ -224,7 +366,7 @@ namespace twm
         return (bitmask & bits) == bits;
     }
 
-    using Mutex     = std::mutex;
+    using Mutex     = std::recursive_mutex;
     using MutexLock = std::lock_guard<Mutex>;
 
     typedef enum
@@ -233,21 +375,36 @@ namespace twm
         MSG_CREATE  = 1,
         MSG_DESTROY = 2,
         MSG_DRAW    = 3,
-        MSG_INPUT   = 4
+        MSG_INPUT   = 4,
+        MSG_EVENT   = 5,
+        MSG_RESIZE  = 6
     } Message;
 
     typedef enum
     {
         STY_VISIBLE   = 1 << 0,
         STY_CHILD     = 1 << 1,
-        STY_MODAL     = 1 << 2,
-        STY_STAYONTOP = 1 << 3
+        STY_AUTOSIZE  = 1 << 2,
+        STY_TA_LEFT   = 1 << 3,
+        STY_TA_CNTR   = 1 << 4
     } _WindowStyleFlags;
 
     typedef enum
     {
         STA_ALIVE = 1 << 0
     } _WindowStateFlags;
+
+    typedef enum
+    {
+        DTF_CENTER  = 0x03, /**< Horizontal align center. */
+        DTF_VCENTER = 0x04, /**< Vertical align center. */
+        DTF_WRAP    = 0x30, /**< Wrap overflow to the next line. */
+        DTF_CLIP    = 0x40  /**< Clip overflow with an ellipsis. */
+    } _DrawTextFlags;
+
+    typedef enum {
+        EVT_CHILD_TAPPED = 1
+    } EventType;
 
     typedef enum {
         INPUT_NONE = 0,
@@ -261,57 +418,84 @@ namespace twm
         Coord y = 0;
     };
 
-    class Theme
+    class ITheme
     {
     public:
-        virtual void drawWindowFrame(GfxInterface* gfx, const Rect& rect) = 0;
-        virtual void drawWindowBackground(GfxInterface* gfx, const Rect& rect) = 0;
-        virtual void drawWindowText(GfxInterface* gfx, const char* text,
-            const Rect& rect);
-        virtual void drawButtonFrame(GfxInterface* gfx, bool pressed,
-            const Rect& rect) = 0;
-        virtual void drawButtonBackground(GfxInterface* gfx, bool pressed,
-            const Rect& rect) = 0;
-        virtual void drawButtonLabel(GfxInterface* gfx, const char* lbl,
-            bool pressed, const Rect& rect) = 0;
+        virtual void setGfxDriver(const GfxDriverPtr& gfx) = 0;
+        virtual void drawBlankScreen() const = 0;
+        virtual Extent getWindowXPadding() const = 0;
+        virtual Extent getWindowYPadding() const = 0;
+        virtual uint8_t getButtonTextSize() const = 0;
+        virtual Extent getButtonWidth() const = 0;
+        virtual Extent getButtonHeight() const = 0;
+        virtual Extent getButtonLabelPadding() const = 0;
+        virtual void drawWindowFrame(const Rect& rect) const = 0;
+        virtual void drawWindowBackground(const Rect& rect) const = 0;
+        virtual void drawWindowText(const char* text, uint8_t flags,
+            const Rect& rect) const = 0;
+        virtual void drawButtonFrame(bool pressed, const Rect& rect) const = 0;
+        virtual void drawButtonBackground(bool pressed, const Rect& rect) const = 0;
+        virtual void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const = 0;
     };
 
-    using ThemePtr = std::shared_ptr<Theme>;
+    using ThemePtr = std::shared_ptr<ITheme>;
 
-    class DefaultTheme : public Theme
+    class DefaultTheme : public ITheme
     {
     public:
-        static constexpr Extent WindowFrameThickness      = 1;
-        static constexpr uint16_t WindowFrameColor        = 0x7bef;
-        static constexpr uint16_t WindowFrameShadowColor  = 0xad75;
-        static constexpr uint16_t WindowBgColor           = 0xc618;
-        static constexpr uint16_t WindowTextColor         = 0x0000;
-        static constexpr uint16_t ButtonWidth             = 90;
-        static constexpr uint16_t ButtonHeight            = 40;
-        static constexpr int16_t ButtonCornerRadius       = 5;
-        static constexpr uint16_t ButtonFrameColor        = 0x4208;
-        static constexpr uint16_t ButtonBgColor           = 0x7bef;
-        static constexpr uint16_t ButtonLabelColor        = 0xffff;
-        static constexpr uint16_t ButtonFrameColorPressed = 0x4208;
-        static constexpr uint16_t ButtonBgColorPressed    = 0x4208;
-        static constexpr uint16_t ButtonLabelColorPressed = 0xffff;
-        static constexpr uint8_t WindowTextSize           = 1;
-        static constexpr uint8_t ButtonTextSize           = 1;
-        static constexpr int16_t TextYOffset              = 4;
+        TWM_CONST(Color,   BlankScreenColor,        0x0000);
+        TWM_CONST(Extent,  WindowXPadding,          20);
+        TWM_CONST(Extent,  WindowYPadding,          20);
+        TWM_CONST(Extent,  WindowFrameThickness,    1);
+        TWM_CONST(Color,   WindowFrameColor,        0x7bef);
+        TWM_CONST(Color,   WindowFrameShadowColor,  0xad75);
+        TWM_CONST(Color,   WindowBgColor,           0xc618);
+        TWM_CONST(Color,   WindowTextColor,         0x0000);
+        TWM_CONST(Extent,  ButtonWidth,             90);
+        TWM_CONST(Extent,  ButtonHeight,            40);
+        TWM_CONST(Coord,   ButtonCornerRadius,      4);
+        TWM_CONST(Color,   ButtonFrameColor,        0x4208);
+        TWM_CONST(Color,   ButtonBgColor,           0x7bef);
+        TWM_CONST(Color,   ButtonLabelColor,        0xffff);
+        TWM_CONST(Extent,  ButtonLabelPadding,      10);
+        TWM_CONST(Color,   ButtonFrameColorPressed, 0x4208);
+        TWM_CONST(Color,   ButtonBgColorPressed,    0x4208);
+        TWM_CONST(Color,   ButtonLabelColorPressed, 0xffff);
+        TWM_CONST(uint8_t, WindowTextSize,          1);
+        TWM_CONST(uint8_t, ButtonTextSize,          1);
+        TWM_CONST(Coord,   WindowTextYOffset,       4);
 
-        void drawWindowFrame(GfxInterface* gfx, const Rect& rect) final
+        void setGfxDriver(const GfxDriverPtr& gfx)
+        {
+            TWM_ASSERT(gfx);
+            _gfx = gfx;
+        }
+
+        void drawBlankScreen() const final
+        {
+            _gfx->fillScreen(BlankScreenColor);
+        }
+
+        Extent getWindowXPadding() const final { return WindowXPadding; }
+        Extent getWindowYPadding() const final { return WindowYPadding; }
+        uint8_t getButtonTextSize() const final { return ButtonTextSize; }
+        Extent getButtonWidth() const final { return ButtonWidth; }
+        Extent getButtonHeight() const final { return ButtonHeight; }
+        Extent getButtonLabelPadding() const final { return ButtonLabelPadding; }
+
+        void drawWindowFrame(const Rect& rect) const final
         {
             Rect tmp = rect;
             tmp.deflate(WindowFrameThickness);
-            gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
+            _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
                 WindowFrameColor);
-            gfx->drawFastHLine(
+            _gfx->drawFastHLine(
                 rect.left + (WindowFrameThickness * 2),
                 rect.bottom - WindowFrameThickness,
                 rect.width() - (WindowFrameThickness * 2),
                 WindowFrameShadowColor
             );
-            gfx->drawFastVLine(
+            _gfx->drawFastVLine(
                 rect.right - WindowFrameThickness,
                 rect.top + (WindowFrameThickness * 2),
                 rect.height() - (WindowFrameThickness * 2),
@@ -319,257 +503,170 @@ namespace twm
             );
         }
 
-        void drawWindowBackground(GfxInterface* gfx, const Rect& rect) final
+        void drawWindowBackground(const Rect& rect) const final
         {
-            gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
+            _gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
                 WindowBgColor);
         }
 
-        void drawWindowText(GfxInterface* gfx, const char* text, const Rect& rect) final
+        void drawWindowText(const char* text, uint8_t flags, const Rect& rect) const final
         {
-            int16_t x, y;
-            uint16_t width, height;
-            gfx->setTextSize(WindowTextSize);
-            gfx->getTextBounds(text, rect.left, rect.top, &x, &y, &width, &height);
-            gfx->setCursor(x + (rect.width() / 2) - (width / 2),
-                rect.top + (rect.height() / 2) + TextYOffset);
-            gfx->setTextColor(WindowTextColor);
-            gfx->print(text);
+            _gfx->setTextSize(WindowTextSize);
+            _gfx->setTextColor(WindowTextColor);
+
+            bool xCenter = bitsHigh(flags, DTF_CENTER);
+            bool yCenter = bitsHigh(flags, DTF_VCENTER);
+            bool wrap    = bitsHigh(flags, DTF_WRAP);
+
+            // regardless of where x and y start:
+            // iterate chars, taking note of their extents, adding them up.
+            // once the right edge is within sight, write those characters out,
+            // then repeat–the length of each chunk must be pre-calculataed in
+            // order to do x-justifying. similarly for y-justifying, the height
+            // of the entire output string must be pre-calculated before it is
+            // drawn.
+
+            uint8_t cx = 0, cy = 0, xAdv = 0, yAdv = 0, yAdvMax = 0;
+            int8_t xOff = 0, xOffMax = 0, yOff = 0, yOffMin = 0;
+            uint16_t xAccum = 0, yAccum = rect.top, xExtent = 0;
+
+            auto resetXValues = [&]()
+            {
+                xAccum = rect.left;
+                xExtent = rect.right;
+            };
+
+            resetXValues();
+
+            _gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(), 0x00f1);
+
+            const char* cursor = text;
+            while (*cursor != '\0') {
+                const char* old_cursor = cursor;
+                while (xAccum < xExtent && *cursor != '\0') {
+                    AdafruitExt_getCharBounds(*cursor, &cx, &cy, &xAdv, &yAdv,
+                        &xOff, &yOff, WindowTextSize, WindowTextSize,
+                        const_cast<GFXfont*>(&FreeSans9pt7b));
+                    xAccum += xAdv;
+                    //TWM_LOG(TWM_DEBUG, "ch = %c (%d), cx = %hhu, cy = %hhu, xAdv = %hhu,"
+                     //   " yAdv = %hhu, xOff = %hhd, yOff = %hhd, xAccum = %hu, yAccum = %hu",
+                     //   *cursor, *cursor, cy, cy, xAdv, yAdv, xOff, yOff, xAccum, yAccum);
+                    cursor++;
+                    if (yAdv > yAdvMax) { yAdvMax = yAdv; }
+                    if (yOff > yOffMin) { yOffMin = yOff; }
+                }
+                //TWM_LOG(TWM_DEBUG, "write out: xAccum = %hu, idx range = %hu-%hu, yAccum = %hu",
+                //    xAccum, (uint16_t)(old_cursor - text), (uint16_t)(cursor - old_cursor), yAccum);
+                xAccum = xCenter
+                    ? (rect.left + WindowXPadding + (rect.width()) / 2) - (xAccum / 2)
+                    : rect.left + WindowXPadding;
+                while (old_cursor < cursor) {
+                    AdafruitExt_getCharBounds(*old_cursor, &cx, &cy, &xAdv, &yAdv, &xOff, &yOff,
+                        WindowTextSize, WindowTextSize, const_cast<GFXfont*>(&FreeSans9pt7b));
+                    _gfx->drawChar(xAccum, yAccum, *old_cursor++, WindowTextColor,
+                        WindowTextColor, WindowTextSize);
+                    xAccum += xAdv;
+                }
+                //TWM_LOG(TWM_DEBUG, "-----------------------");
+                yAccum += yAdvMax + yOffMin;
+                resetXValues();
+            }
         }
 
-        void drawButtonFrame(GfxInterface* gfx, bool pressed, const Rect& rect) final
+        void drawButtonFrame(bool pressed, const Rect& rect) const final
         {
-            gfx->drawRoundRect(rect.left, rect.top, rect.width(), rect.height(),
+            _gfx->drawRoundRect(rect.left, rect.top, rect.width(), rect.height(),
                 ButtonCornerRadius, pressed ? ButtonFrameColorPressed : ButtonFrameColor);
         }
 
-        void drawButtonBackground(GfxInterface* gfx, bool pressed, const Rect& rect) final
+        void drawButtonBackground(bool pressed, const Rect& rect) const final
         {
-            gfx->fillRoundRect(rect.left, rect.top, rect.width(), rect.height(),
+            _gfx->fillRoundRect(rect.left, rect.top, rect.width(), rect.height(),
                 ButtonCornerRadius, pressed ? ButtonBgColorPressed : ButtonBgColor);
         }
 
-        void drawButtonLabel(GfxInterface* gfx, const char* lbl, bool pressed,
-            const Rect& rect) final
+        void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const final
         {
             int16_t x, y;
             uint16_t width, height;
-            gfx->setTextSize(ButtonTextSize);
-            gfx->getTextBounds(lbl, rect.left, rect.top, &x, &y, &width, &height);
-            gfx->setCursor(x + (rect.width() / 2) - (width / 2),
-                rect.top + (rect.height() / 2) + TextYOffset);
-            gfx->setTextColor(pressed ? ButtonLabelColorPressed : ButtonLabelColor);
-            gfx->print(lbl);
+            _gfx->setTextSize(ButtonTextSize);
+            _gfx->getTextBounds(lbl, rect.left, rect.top, &x, &y, &width, &height);
+            _gfx->setCursor(
+                x + (rect.width() / 2) - (width / 2),
+                rect.top + (rect.height() / 2) + WindowTextYOffset
+            );
+            _gfx->setTextColor(pressed ? ButtonLabelColorPressed : ButtonLabelColor);
+            _gfx->print(lbl);
         }
+
+    private:
+        GfxDriverPtr _gfx;
     };
 
     struct PackagedMessage
     {
-        Message msg  = MSG_NONE;
-        void* param1 = nullptr;
-        void* param2 = nullptr;
+        Message msg = MSG_NONE;
+        MsgParam p1 = 0;
+        MsgParam p2 = 0;
     };
 
     using PackagedMessageQueue = std::queue<PackagedMessage>;
 
-    class Window
+    class IWindow
     {
     public:
-        Window() = default;
+        virtual std::shared_ptr<IWindow> getParent() const = 0;
+        virtual void setParent(const std::shared_ptr<IWindow>& parent) = 0;
 
-        Window(const ThemePtr& theme, const std::shared_ptr<Window>& parent,
-            WindowID id, Style style, const Rect& rect, const std::string& text)
-            : _theme(theme), _parent(parent), _style(style), _rect(rect), _id(id),
-              _text(text) { }
+        virtual Rect getRect() const = 0;
+        virtual void setRect(const Rect& rect) = 0;
 
-        virtual ~Window() = default;
+        virtual Style getStyle() const = 0;
+        virtual void setStyle(Style style) = 0;
 
-        std::shared_ptr<Window> getParent() const { return _parent; }
-        void setParent(const std::shared_ptr<Window>& parent) { _parent = parent; }
+        virtual WindowID getID() const = 0;
 
-        Rect getRect() const { return _rect; }
-        void setRect(const Rect& rect) { _rect = rect; }
+        virtual State getState() const = 0;
+        virtual void setState(State state) = 0;
 
-        Style getStyle() const { return _style; }
-        void setStyle(Style style) { _style = style; }
+        virtual std::string getText() const = 0;
+        virtual void setText(const std::string& text) = 0;
 
-        WindowID getID() const { return _id; }
+        virtual bool onCreate(MsgParam p1, MsgParam p2) = 0;
+        virtual bool onDestroy(MsgParam p1, MsgParam p2) = 0;
+        virtual bool onDraw(MsgParam p1, MsgParam p2) = 0;
+        virtual bool onInput(MsgParam p1, MsgParam p2) = 0;
+        virtual bool onEvent(MsgParam p1, MsgParam p2) = 0;
+        virtual bool onResize(MsgParam p1, MsgParam p2) = 0;
 
-        State getState() const { return _state; }
-        void setState(State state) { _state = state; }
-
-        std::string getText() const { return _text; }
-        void setText(const std::string& text) { _text = text; }
-
-        virtual bool onCreate(void* param1, void* param2) { return true; }
-        virtual bool onDestroy(void* param1, void* param2) { return true; }
-
-        /** MSG_DRAW: param1 = GfxInterface*, param2 = nullptr*/
-        virtual bool onDraw(void* param1, void* param2)
-        {
-            GfxInterface* gfx = static_cast<GfxInterface*>(param1);
-            TWM_ASSERT(gfx != nullptr && _theme);
-            if (gfx != nullptr && _theme) {
-                Rect rect = getRect();
-                _theme->drawWindowBackground(gfx, rect);
-                _theme->drawWindowFrame(gfx, rect);
-                return true;
-            }
-            return false;
-        }
-
-        /** MSG_INPUT: param1 = InputParams*, param2 = nullptr. Return value
-         * indicates whether or not the input event was consumed by this window. */
-        virtual bool onInput(void* param1, void* param2) { return false; }
-
-        bool routeMessage(Message msg, void* param1 = nullptr,
-            void* param2 = nullptr)
-        {
-            switch (msg) {
-                case MSG_CREATE:  return onCreate(param1, param2);
-                case MSG_DESTROY: return onDestroy(param1, param2);
-                case MSG_DRAW:    return onDraw(param1, param2);
-                case MSG_INPUT:   return onInput(param1, param2);
-                default:
-                    TWM_ASSERT(!"unknown message");
-                return false;
-            }
-        }
-
-        void queueMessage(Message msg, void* param1 = nullptr,
-            void* param2 = nullptr)
-        {
-# if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_queueLock);
-# endif
-            PackagedMessage pm;
-            pm.msg = msg;
-            pm.param1 = param1;
-            pm.param2 = param2;
-            _queue.push(pm);
-        }
-
-        bool processQueue()
-        {
-# if !defined(TWM_SINGLETHREAD)
-            MutexLock lock(_queueLock);
-# endif
-            if (!_queue.empty()) {
-                auto pm = _queue.front();
-                _queue.pop();
-                return routeMessage(pm.msg, pm.param1, pm.param2);
-            }
-            return false;
-        }
-
-    protected:
-        PackagedMessageQueue _queue;
-        Mutex _queueLock;
-        ThemePtr _theme;
-        std::shared_ptr<Window> _parent;
-        Rect _rect;
-        Style _style = 0;
-        WindowID _id = 0;
-        State _state = 0;
-        std::string _text;
+        virtual bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
+        virtual void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
+        virtual bool processQueue() = 0;
     };
 
-    using WindowPtr = std::shared_ptr<Window>;
+    using WindowPtr = std::shared_ptr<IWindow>;
 
-    class Button : public Window
-    {
-    public:
-        static constexpr u_long TappedDurationMsec = 100;
-
-        using Window::Window;
-        Button() = default;
-        virtual ~Button() = default;
-
-        virtual void onTapped() { lastTapped = millis(); }
-
-        bool onDraw(void* param1, void* param2) override
-        {
-            GfxInterface* gfx = static_cast<GfxInterface*>(param1);
-            TWM_ASSERT(gfx != nullptr && _theme);
-            if (gfx != nullptr && _theme) {
-                bool pressed = (millis() - lastTapped < TappedDurationMsec);
-                Rect rect = getRect();
-                _theme->drawButtonBackground(gfx, pressed, rect);
-                _theme->drawButtonFrame(gfx, pressed, rect);
-                _theme->drawButtonLabel(gfx, getText().c_str(), pressed, rect);
-                return true;
-            }
-            return false;
-        }
-
-        bool onInput(void* param1, void* param2) override
-        {
-            InputParams* ip = static_cast<InputParams*>(param1);
-            if (ip != nullptr) {
-                switch(ip->type) {
-                    case INPUT_TAP: onTapped(); return true;
-                    default: break;
-                }
-            }
-            return false;
-        }
-
-    private:
-        u_long lastTapped = 0;
-    };
-
-    class Label : public Window
-    {
-    public:
-        using Window::Window;
-        Label() = default;
-        virtual ~Label() = default;
-
-        bool onDraw(void* param1, void* param2) override
-        {
-            GfxInterface* gfx = static_cast<GfxInterface*>(param1);
-            TWM_ASSERT(gfx != nullptr && _theme);
-            if (gfx != nullptr && _theme) {
-                Rect rect = getRect();
-                _theme->drawWindowBackground(gfx, rect);
-                _theme->drawWindowText(gfx, getText().c_str(), rect);
-                return true;
-            }
-            return false;
-        }
-    };
-
-    template<class TImpl, class TTheme = DefaultTheme>
-    class TWM : public TImpl
+    class TWM : public std::enable_shared_from_this<TWM>
     {
     public:
         using WindowRegistry = std::map<WindowID, WindowPtr>;
 
-        template<typename... TArgs>
-        TWM(TArgs&& ...args) : TImpl(args...) { }
+        TWM() = delete;
+
+        explicit TWM(const GfxDriverPtr& gfx, const ThemePtr& theme)
+            : _gfx(gfx), _theme(theme)
+        {
+            TWM_ASSERT(_gfx);
+            TWM_ASSERT(_theme);
+            if (_theme) {
+                _theme->setGfxDriver(_gfx);
+            }
+        }
 
         virtual ~TWM() = default;
 
-        static std::shared_ptr<TWM<TImpl, TTheme>>& getInstance()
-        {
-            TWM_ASSERT(_instance != nullptr);
-            return _instance;
-        }
-
-        template<typename... TArgs>
-        static std::shared_ptr<TWM<TImpl, TTheme>> init(TArgs&& ...args)
-        {
-            static_assert(std::is_base_of<GfxInterface, TImpl>::value);
-            static std::once_flag flag;
-            std::call_once(flag, [&]()
-            {
-                _instance.reset(new TWM<TImpl, TTheme>(args...));
-                TWM_ASSERT(_instance != nullptr);
-                _theme.reset(new TTheme());
-                TWM_ASSERT(_theme != nullptr);
-            });
-            return _instance;
-        }
+        GfxDriverPtr getGfx() const { return _gfx; }
+        ThemePtr getTheme() const { return _theme; }
 
         virtual void tearDown()
         {
@@ -584,8 +681,8 @@ namespace twm
 # if !defined(TWM_SINGLETHREAD)
             MutexLock lock(_regLock);
 # endif
-            if (_registry.empty()) {
-                TImpl::fillScreen(0x0000);
+            if (_registry.empty() && _theme) {
+                _theme->drawBlankScreen();
                 return;
             }
 
@@ -595,7 +692,7 @@ namespace twm
                 if (it.second) {
                     if (bitsHigh(it.second->getStyle(), STY_VISIBLE) &&
                         bitsHigh(it.second->getState(), STA_ALIVE)) {
-                        it.second->queueMessage(MSG_DRAW, this);
+                        it.second->queueMessage(MSG_DRAW);
                     }
                     it.second->processQueue();
                 }
@@ -603,55 +700,73 @@ namespace twm
         }
 
         template<class TWindow>
-        inline std::shared_ptr<TWindow> createWindow(const WindowPtr& parent,
-            Style style, Coord x, Coord y, Extent width, Extent height,
-            const std::string& text = std::string())
+        inline std::shared_ptr<TWindow> createWindow(
+            const WindowPtr& parent,
+            WindowID id,
+            Style style,
+            Coord x,
+            Coord y,
+            Extent width,
+            Extent height,
+            const std::string& text = std::string()
+        )
         {
 # if !defined(TWM_SINGLETHREAD)
             MutexLock lock(_regLock);
 # endif
-            TWM_ASSERT(_idCounter < std::numeric_limits<WindowID>::max() - 1);
-            if (_idCounter >= std::numeric_limits<WindowID>::max() - 1) {
+            size_t numWindows = _registry.size();
+            TWM_ASSERT(numWindows < std::numeric_limits<WindowID>::max() - 1);
+            if (numWindows >= std::numeric_limits<WindowID>::max() - 1) {
                 TWM_LOG(TWM_ERROR, "max window count exceeded");
                 return nullptr;
             }
-
-            WindowID id = _idCounter + 1;
+            auto it = _registry.find(id);
+            if (it != _registry.end()) {
+                TWM_LOG(TWM_ERROR, "duplicate %hhu", id);
+                return nullptr;
+            }
             Rect rect;
             rect.left = x;
             rect.top = y;
             rect.right = x + width;
             rect.bottom = y + height;
-            std::shared_ptr<TWindow> win(std::make_shared<TWindow>(_theme, parent,
-                id, style, rect, text));
+            std::shared_ptr<TWindow> win(
+                std::make_shared<TWindow>(
+                    shared_from_this(),
+                    parent,
+                    id,
+                    style,
+                    rect,
+                    text
+                )
+            );
             if (!win) {
-                TWM_LOG(TWM_ERROR, "memory alloc failed");
+                TWM_LOG(TWM_ERROR, "alloc failed");
                 return nullptr;
             }
             if (bitsHigh(style, STY_CHILD)) {
                 if (!parent) {
-                    TWM_LOG(TWM_ERROR, "STY_CHILD but null parent");
+                    TWM_LOG(TWM_ERROR, "STY_CHILD w/ null parent");
                     return nullptr;
                 }
             }
-            if (!win->routeMessage(MSG_CREATE, this)) {
-                TWM_LOG(TWM_ERROR, "MSG_CREATE ret false");
+            if (!win->routeMessage(MSG_CREATE)) {
+                TWM_LOG(TWM_ERROR, "MSG_CREATE false");
                 return nullptr;
             }
             win->setState(STA_ALIVE);
-            if (bitsHigh(win->getStyle(), STY_VISIBLE)) {
-                if (!win->routeMessage(MSG_DRAW, this)) {
-                    TWM_LOG(TWM_WARN, "MSG_DRAW ret false");
-                }
+            if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
+                win->queueMessage(MSG_RESIZE);
             }
-            ++_idCounter;
+            if (bitsHigh(win->getStyle(), STY_VISIBLE)) {
+                win->queueMessage(MSG_DRAW);
+            }
             _registry[id] = win;
-            TWM_LOG(TWM_DEBUG, "added window %hhu to registry; count: %zu", id,
-                _registry.size());
+            TWM_LOG(TWM_DEBUG, "registered %hhu; count: %zu", id, _registry.size());
             return win;
         }
 
-        WindowPtr findWindow(WindowID id) const
+        WindowPtr findWindow(WindowID id)
         {
 # if !defined(TWM_SINGLETHREAD)
             MutexLock lock(_regLock);
@@ -672,35 +787,25 @@ namespace twm
                     for (auto it2 = _registry.begin(); it2 != _registry.end(); it2++) {
                         if (it2->second && it2->second->getParent() == it->second) {
                             children.push_back(it2);
-                            it2->second->queueMessage(MSG_DESTROY, this);
+                            it2->second->queueMessage(MSG_DESTROY);
                             it2->second->setState(it2->second->getState() & ~STA_ALIVE);
                         }
                     }
-                    it->second->queueMessage(MSG_DESTROY, this);
+                    it->second->queueMessage(MSG_DESTROY);
                     it->second->setState(it->second->getState() & ~STA_ALIVE);
                     for (auto it2 : children) {
                         WindowID idChild = it2->first;
                         _registry.erase(it2);
-                        --_idCounter;
-                        TWM_LOG(TWM_DEBUG, "destroyed child window %hhu (%hhu)",
-                            idChild, id);
+                        TWM_LOG(TWM_DEBUG, "destroyed child %hhu (%hhu)", idChild, id);
                     }
                     Rect dirtyRect = it->second->getRect();
                     _registry.erase(it);
-                    --_idCounter;
-                    TWM_LOG(TWM_DEBUG, "destroyed window %hhu; count: %zu", id,
-                        _registry.size());
+                    TWM_LOG(TWM_DEBUG, "destroyed %hhu; count: %zu", id, _registry.size());
                     for (auto it : _registry) {
                         if (it.second) {
                             Rect curRect = it.second->getRect();
                             if (curRect.overlaps(dirtyRect)) {
-                                /*TWM_LOG(TWM_DEBUG, "redrawing window %hhu; rect"
-                                    " (%hd, %hd, %hu, %hu) overlap with dirty rect"
-                                    " (%hd, %hd, %hu, %hu)", it.second->getID(),
-                                    curRect.left, curRect.top, curRect.right,
-                                    curRect.bottom, dirtyRect.left, dirtyRect.top,
-                                    dirtyRect.right, dirtyRect.bottom);*/
-                                it.second->queueMessage(MSG_DRAW, this);
+                                it.second->queueMessage(MSG_DRAW);
                             }
                         }
                     }
@@ -713,13 +818,9 @@ namespace twm
         void hitTest(Coord x, Coord y)
         {
 # if !defined(TWM_SINGLETHREAD)
-            if (!_regLock.try_lock()) {
-                TWM_LOG(TWM_DEBUG, "mutex lock fail; bailing");
-                return;
-            }
+            MutexLock lock(_regLock);
 # endif
             //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
-            std::queue<WindowPtr> candidates;
             for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
                 if (it->second) {
                     if (!bitsHigh(it->second->getStyle(), STY_VISIBLE) ||
@@ -728,41 +829,380 @@ namespace twm
                     }
                     auto rect = it->second->getRect();
                     if (rect.isPointWithin(Point(x, y))) {
-                        candidates.push(it->second);
+                        InputParams params;
+                        params.type = INPUT_TAP;
+                        params.x    = x;
+                        params.y    = y;
+                        if (it->second->routeMessage(MSG_INPUT, reinterpret_cast<MsgParam>(&params))) {
+                            //TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
+                            //    win->getID(), x, y);
+                            break;
+                        }
                     }
-                }
-            }
-            _regLock.unlock();
-            while (!candidates.empty()) {
-                InputParams params;
-                params.type = INPUT_TAP;
-                params.x    = x;
-                params.y    = y;
-                auto win = candidates.front();
-                candidates.pop();
-                if (win->routeMessage(MSG_INPUT, &params)) {
-                    //TWM_LOG(TWM_DEBUG, "window %hhu claimed hit test @ %hd, %hd",
-                    //    win->getID(), x, y);
-                    break;
                 }
             }
         }
 
     protected:
-        WindowID _idCounter = 0;
         WindowRegistry _registry;
 # if !defined(TWM_SINGLETHREAD)
         Mutex _regLock;
 # endif
-        static std::shared_ptr<TWM<TImpl, TTheme>> _instance;
-        static std::shared_ptr<TTheme> _theme;
+        GfxDriverPtr _gfx;
+        ThemePtr _theme;
     };
 
-    template<class TImpl, class TTheme>
-    std::shared_ptr<TWM<TImpl, TTheme>> TWM<TImpl, TTheme>::_instance;
+    using TWMPtr = std::shared_ptr<TWM>;
 
-    template<class TImpl, class TTheme>
-    std::shared_ptr<TTheme> TWM<TImpl, TTheme>::_theme;
+    class Window : public IWindow, public std::enable_shared_from_this<IWindow>
+    {
+    public:
+        Window() = default;
+
+        Window(
+            const TWMPtr& wm,
+            const std::shared_ptr<IWindow>& parent,
+            WindowID id,
+            Style style,
+            const Rect& rect,
+            const std::string& text
+        ) : _wm(wm), _parent(parent), _style(style), _rect(rect), _id(id), _text(text)
+        {
+        }
+
+        virtual ~Window() = default;
+
+        std::shared_ptr<IWindow> getParent() const override { return _parent; }
+        void setParent(const std::shared_ptr<IWindow>& parent) override { _parent = parent; }
+
+        Rect getRect() const override { return _rect; }
+        void setRect(const Rect& rect) override { _rect = rect; }
+
+        Style getStyle() const override { return _style; }
+        void setStyle(Style style) override { _style = style; }
+
+        WindowID getID() const override { return _id; }
+
+        State getState() const override { return _state; }
+        void setState(State state) override { _state = state; }
+
+        std::string getText() const override { return _text; }
+        void setText(const std::string& text) override { _text = text; }
+
+        /** MSG_CREATE: param1 = nullptr, param2 = nullptr. */
+        bool onCreate(MsgParam p1, MsgParam p2) override { return true; }
+        bool onDestroy(MsgParam p1, MsgParam p2) override { return true; }
+
+        /** MSG_DRAW: param1 = nullptr, param2 = nullptr. */
+        bool onDraw(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                Rect rect = getRect();
+                TWM_ASSERT(rect.width() > 0 && rect.height() > 0);
+                theme->drawWindowBackground(rect);
+                theme->drawWindowFrame(rect);
+                return true;
+            }
+            return false;
+        }
+
+        /** MSG_INPUT: param1 = InputParams*, param2 = nullptr. Return value
+         * indicates whether or not the input event was consumed by this window. */
+        bool onInput(MsgParam p1, MsgParam p2) override { return false; }
+
+        /** MSG_EVENT: param1 = EventType, param2 = child WindowID. */
+        bool onEvent(MsgParam p1, MsgParam p2) override { return true; }
+
+        bool onResize(MsgParam p1, MsgParam p2) override
+        {
+            TWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
+            return false;
+        }
+
+        bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
+        {
+            switch (msg) {
+                case MSG_CREATE:  return onCreate(p1, p2);
+                case MSG_DESTROY: return onDestroy(p1, p2);
+                case MSG_DRAW:    return onDraw(p1, p2);
+                case MSG_INPUT:   return onInput(p1, p2);
+                case MSG_EVENT:   return onEvent(p1, p2);
+                case MSG_RESIZE:  return onResize(p1, p2);
+                default:
+                    TWM_ASSERT(!"unknown message");
+                return false;
+            }
+        }
+
+        void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            MutexLock lock(_queueLock);
+# endif
+            PackagedMessage pm;
+            pm.msg = msg;
+            pm.p1 = p1;
+            pm.p2 = p2;
+            _queue.push(pm);
+        }
+
+        bool processQueue() override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            MutexLock lock(_queueLock);
+# endif
+            if (!_queue.empty()) {
+                auto pm = _queue.front();
+                _queue.pop();
+                return routeMessage(pm.msg, pm.p1, pm.p2);
+            }
+            return false;
+        }
+
+    protected:
+        TWMPtr _getWM() const
+        {
+            TWM_ASSERT(_wm);
+            return _wm;
+        }
+
+        GfxDriverPtr _getGfx() const
+        {
+            auto wm = _getWM();
+            if (wm) {
+                auto gfx = wm->getGfx();
+                TWM_ASSERT(gfx);
+                return gfx;
+            }
+            return nullptr;
+        }
+
+        ThemePtr _getTheme() const
+        {
+            auto wm = _getWM();
+            if (wm) {
+                auto theme = wm->getTheme();
+                TWM_ASSERT(theme);
+                return theme;
+            }
+            return nullptr;
+        }
+
+    protected:
+        PackagedMessageQueue _queue;
+# if !defined(TWM_SINGLETHREAD)
+        Mutex _queueLock;
+# endif
+        TWMPtr _wm;
+        std::shared_ptr<IWindow> _parent;
+        Rect _rect;
+        Style _style = 0;
+        WindowID _id = 0;
+        State _state = 0;
+        std::string _text;
+    };
+
+    class Button : public Window
+    {
+    public:
+        static constexpr u_long TappedDurationMsec = 100;
+
+        using Window::Window;
+        Button() = default;
+        virtual ~Button() = default;
+
+        virtual void onTapped()
+        {
+            _lastTapped = millis();
+            TWM_ASSERT(_parent);
+            if (_parent) {
+                _parent->queueMessage(
+                    MSG_EVENT,
+                    EVT_CHILD_TAPPED,
+                    static_cast<uintptr_t>(getID())
+                );
+            }
+        }
+
+        bool onDraw(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                bool pressed = (millis() - _lastTapped < TappedDurationMsec);
+                Rect rect = getRect();
+                theme->drawButtonBackground(pressed, rect);
+                theme->drawButtonFrame(pressed, rect);
+                theme->drawButtonLabel(getText().c_str(), pressed, rect);
+                return true;
+            }
+            return false;
+        }
+
+        bool onInput(MsgParam p1, MsgParam p2) override
+        {
+            InputParams* ip = reinterpret_cast<InputParams*>(p1);
+            TWM_ASSERT(ip != nullptr);
+            if (ip != nullptr && ip->type == INPUT_TAP) {
+                onTapped();
+                return true;
+            }
+            return false;
+        }
+
+        bool onResize(MsgParam p1, MsgParam p2) override
+        {
+            auto gfx = _getGfx();
+            auto theme = _getTheme();
+            if (gfx && theme) {
+                gfx->setTextSize(theme->getButtonTextSize());
+                Coord x, y;
+                Extent width, height;
+                gfx->getTextBounds(getText().c_str(), 0, 0, &x, &y, &width, &height);
+                Rect rect = getRect();
+                rect.right = rect.left + max(width, theme->getButtonWidth())  + (theme->getButtonLabelPadding() * 2);
+                rect.bottom = rect.top + theme->getButtonHeight();
+                setRect(rect);
+TODO_if_not_autosize_clip_label:
+                return true;
+            }
+            return false;
+        }
+
+    protected:
+        u_long _lastTapped = 0UL;
+    };
+
+    class Label : public Window
+    {
+    public:
+        TWM_CONST(uint8_t, DrawTextFlags, DTF_CENTER | DTF_WRAP);
+
+        using Window::Window;
+        Label() = default;
+        virtual ~Label() = default;
+
+        bool onDraw(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                Rect rect = getRect();
+                theme->drawWindowBackground(rect);
+                theme->drawWindowText(getText().c_str(), DrawTextFlags, rect);
+                return true;
+            }
+            return false;
+        }
+    };
+
+    class Prompt : public Window
+    {
+    public:
+        using Window::Window;
+        Prompt() = default;
+        virtual ~Prompt() = default;
+
+        WindowID doPrompt() const
+        {
+            do {
+                if (_resultID != 0) {
+                    TWM_LOG(TWM_DEBUG, "prompt result: %hhu", _resultID);
+                    break;
+                }
+                if (!bitsHigh(getState(), STA_ALIVE)) {
+                    break;
+                }
+                yield();
+            } while (true);
+            return _resultID;
+        }
+
+        bool addButton(WindowID id, const std::string& label)
+        {
+            if (_buttons.size() >= 2) {
+                TWM_LOG(TWM_DEBUG, "max 2 prompt buttons");
+                return false;
+            }
+            auto wm = _getWM();
+            if (wm) {
+                auto theme = _getTheme();
+                if (theme) {
+                    Rect rect = getRect();
+                    auto btn = wm->createWindow<Button>(
+                        shared_from_this(),
+                        id,
+                        STY_CHILD | STY_VISIBLE | STY_AUTOSIZE,
+                        0,
+                        0,
+                        0,
+                        0,
+                        label
+                    );
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool onCreate(MsgParam param1, MsgParam param2) override
+        {
+            auto wm = _getWM();
+            if (wm) {
+                auto theme = _getTheme();
+                if (theme) {
+                    Rect rect = getRect();
+                    _label = wm->createWindow<Label>(
+                        shared_from_this(),
+                        WID_PROMPTLBL,
+                        STY_CHILD | STY_VISIBLE,
+                        rect.top + theme->getWindowXPadding(),
+                        rect.left + theme->getWindowYPadding(),
+                        rect.width() - theme->getWindowXPadding() * 2,
+                        rect.height() - ((theme->getWindowYPadding() * 3) + theme->getButtonHeight()),
+                        getText()
+                    );
+                    if (!_label) {
+                        return false;
+                    }
+                    Rect rectLbl = _label->getRect();
+                    uint8_t idx = 0;
+                    for (auto& btn : _buttons) {
+                        Rect rectBtn = btn->getRect();
+                        auto width = rectBtn.width();
+                        if (idx == 0) {
+                            rectBtn.left = rect.left + theme->getWindowXPadding();
+                            rectBtn.right = rectBtn.left + width;
+                        } else {
+                            rectBtn.right = rect.right - theme->getWindowXPadding();
+                            rectBtn.left = rectBtn.right - width;
+                        }
+                        btn->setRect(rectBtn);
+                        ++idx;
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool onEvent(MsgParam param1, MsgParam param2) override
+        {
+            switch (static_cast<EventType>(param1)) {
+                case EVT_CHILD_TAPPED:
+                    _resultID = static_cast<WindowID>(param2);
+                break;
+                default:
+                    TWM_ASSERT(!"unknown event type");
+                break;
+            }
+            return true;
+        }
+
+    protected:
+        WindowPtr _label;
+        std::vector<WindowPtr> _buttons;
+        WindowID _resultID = 0;
+    };
 } // namespace twm
 
 #endif // !_TWM_H_INCLUDED
