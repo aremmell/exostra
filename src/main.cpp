@@ -84,6 +84,14 @@ public:
   virtual ~TestLabel() = default;
 };
 
+class TestProgressBar : public ProgressBar
+{
+public:
+  using ProgressBar::ProgressBar;
+  TestProgressBar() = default;
+  virtual ~TestProgressBar() = default;
+};
+
 class TestPrompt : public Prompt
 {
 public:
@@ -93,6 +101,7 @@ public:
 };
 
 std::shared_ptr<TestPrompt> testPromptWnd;
+std::shared_ptr<TestProgressBar> testProgressBar;
 
 void setup(void)
 {
@@ -101,6 +110,8 @@ void setup(void)
     /// TODO: If you want to run without a serial cable, exit this loop
     delay(10);
   }
+
+  delay(500);
 
   ums3.begin();
 
@@ -130,20 +141,28 @@ void setup(void)
   }
 
   auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
-    STY_CHILD | STY_VISIBLE | STY_AUTOSIZE, 40, 50, 0, 0,
+    STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, 40, 50, 0, 0,
     "pres me");
   if (!button1) {
     on_fatal_error(ums3);
   }
 
   auto labelX = defaultWin->getRect().width() - (130 - xPadding);
-  auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE,
+  auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
     labelX, 50, 130 - xPadding, 30, "A static label");
   if (!label1) {
     on_fatal_error(ums3);
   }
-
   button1->setLabel(label1);
+
+  auto yPadding = wm->getTheme()->getWindowYPadding();
+  testProgressBar = wm->createProgressBar<TestProgressBar>(defaultWin, 5,
+    STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, 90 + yPadding,
+    defaultWin->getRect().width() - (xPadding * 2), 30, PBR_INDETERMINATE);
+  if (!testProgressBar) {
+    on_fatal_error(ums3);
+  }
+
   /*testPromptWnd = wm->createPrompt<TestPrompt>(
     nullptr,
     "This is a test prompt. Please choose an option.",
@@ -158,6 +177,8 @@ void setup(void)
     on_fatal_error(ums3);
   }*/
 }
+
+float curProgress = 0.0f;
 
 u_long lastTouch = 0UL;
 bool screensaverOn = false;
@@ -188,6 +209,12 @@ TODO_refactor:
   }
 
   if (!screensaverOn) {
+    if (curProgress < 100.0f) {
+      curProgress += 1.0f;
+    } else {
+      curProgress = 0.0f;
+    }
+    testProgressBar->setProgressValue(curProgress);
     wm->update();
   }
 

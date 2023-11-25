@@ -146,7 +146,7 @@ static void AdafruitExt_getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
 # define TWM_ASSERT(expr) \
     do { \
         if (!(expr)) { \
-            TWM_LOG(TWM_ERROR, "assert! '" #expr "' at %s:%d", __FILE__, __LINE__); \
+            TWM_LOG(TWM_ERROR, "assert: '" #expr "'"); \
         } \
     } while (false)
 
@@ -334,7 +334,16 @@ namespace twm
         STY_CHILD     = 1 << 1,
         STY_AUTOSIZE  = 1 << 2,
         STY_BUTTON    = 1 << 3,
+        STY_LABEL     = 1 << 4,
+        STY_PROMPT    = 1 << 5,
+        STY_PROGBAR   = 1 << 6
     } _WindowStyleFlags;
+
+    typedef enum
+    {
+        PBR_NORMAL        = 1 << 0,
+        PBR_INDETERMINATE = 1 << 1
+    } _ProgressBarStyleFlags;
 
     typedef enum
     {
@@ -386,6 +395,10 @@ namespace twm
         virtual void drawButtonFrame(bool pressed, const Rect& rect) const = 0;
         virtual void drawButtonBackground(bool pressed, const Rect& rect) const = 0;
         virtual void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const = 0;
+        virtual void drawProgressBarBackground(const Rect& rect) const = 0;
+        virtual void drawProgressBarFrame(const Rect& rect) const = 0;
+        virtual void drawProgressBarProgress(const Rect& rect, float percent) const = 0;
+        virtual void drawProgressBarIndeterminate(const Rect& rect, float counter) const = 0;
     };
 
     using ThemePtr = std::shared_ptr<ITheme>;
@@ -413,6 +426,10 @@ namespace twm
         TWM_CONST(Color, ButtonBgColorPressed, 0x4208);
         TWM_CONST(Color, ButtonLabelColorPressed, 0xffff);
         TWM_CONST(u_long, ButtonTappedDuration, 100);
+        TWM_CONST(Color, ProgressBarBackgroundColor, 0xc618);
+        TWM_CONST(Color, ProgressBarFrameColor, 0x7bef);
+        TWM_CONST(Color, ProgressBarProgressColor, 0x0ce0);
+        TWM_CONST(float, ProgressBarIndeterminateBandWidth, 0.33f);
         TWM_CONST(uint8_t, WindowTextSize, 1);
         TWM_CONST(uint8_t, ButtonTextSize, 1);
         TWM_CONST(Coord, WindowTextYOffset, 4);
@@ -569,6 +586,65 @@ namespace twm
             );
             _gfx->setTextColor(pressed ? ButtonLabelColorPressed : ButtonLabelColor);
             _gfx->print(lbl);
+        }
+
+        void drawProgressBarBackground(const Rect& rect) const final
+        {
+            _gfx->fillRect(rect.left, rect.right, rect.width(), rect.height(),
+                ProgressBarBackgroundColor);
+        }
+
+        void drawProgressBarFrame(const Rect& rect) const final
+        {
+            Rect tmp = rect;
+            tmp.deflate(WindowFrameThickness);
+            _gfx->drawRect(rect.left, rect.top, rect.width(), rect.height(),
+                ProgressBarFrameColor);
+        }
+
+        void drawProgressBarProgress(const Rect& rect, float percent) const final
+        {
+            TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
+            Rect progressRect = rect;
+            progressRect.deflate(WindowFrameThickness * 2);
+            float progressWidth = (progressRect.width() * (percent / 100.0f));
+            progressRect.right = progressRect.left + abs(progressWidth);
+            _gfx->fillRect(progressRect.left, progressRect.top, progressRect.width(),
+                progressRect.height(), ProgressBarProgressColor);
+        }
+
+        void drawProgressBarIndeterminate(const Rect& rect, float counter) const final
+        {
+            TWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
+            Rect progressRect = rect;
+            progressRect.deflate(WindowFrameThickness * 2);
+            Extent bandWidth = (progressRect.width() * ProgressBarIndeterminateBandWidth);
+            Coord offset = progressRect.width() * (counter / 100.0f);
+            static Coord reverseOffset = bandWidth;
+
+            Coord x = 0;
+            Extent width = 0;
+            if (offset < bandWidth) {
+                x = progressRect.left;
+                if (counter <= __FLT_EPSILON__) {
+                    reverseOffset = bandWidth;
+                }
+                width = offset;
+            } else {
+                Coord realOffset = reverseOffset > 0
+                    ? offset - reverseOffset--
+                    : offset;
+                x = min(
+                    static_cast<Coord>(progressRect.left + realOffset),
+                    progressRect.right
+                );
+                width = min(
+                    bandWidth,
+                    static_cast<Extent>(progressRect.right - x)
+                );
+            }
+            _gfx->fillRect(x, progressRect.top, width, progressRect.height(),
+                ProgressBarProgressColor);
         }
 
     private:
@@ -864,7 +940,7 @@ namespace twm
             auto prompt = createWindow<TPrompt>(
                 parent,
                 WID_PROMPT,
-                (parent ? STY_CHILD : 0) | STY_VISIBLE,
+                (parent ? STY_CHILD : 0) | STY_VISIBLE | STY_PROMPT,
                 _theme->getWindowXPadding(),
                 _theme->getWindowYPadding(),
                 _gfx->width() - (_theme->getWindowXPadding() * 2),
@@ -882,6 +958,25 @@ namespace twm
                 }
             );
             return prompt;
+        }
+
+        template<class TBar>
+        inline std::shared_ptr<TBar> createProgressBar(
+            const WindowPtr& parent,
+            WindowID id,
+            Style style,
+            Coord x,
+            Coord y,
+            Extent width,
+            Extent height,
+            Style pbarStyle
+        )
+        {
+            auto pbar = createWindow<TBar>(parent, id, style, x, y, width, height);
+            if (pbar) {
+                pbar->setProgressBarStyle(pbarStyle);
+            }
+            return pbar;
         }
 
         void hitTest(Coord x, Coord y)
@@ -1438,6 +1533,43 @@ namespace twm
     protected:
         WindowPtr _label;
         ResultCallback _callback;
+    };
+
+    class ProgressBar : public Window
+    {
+    public:
+        using Window::Window;
+        ProgressBar() = default;
+        virtual ~ProgressBar() = default;
+
+        Style getProgressBarStyle() const noexcept { return _pbarStyle; }
+        void setProgressBarStyle(Style pbarStyle) noexcept { _pbarStyle = pbarStyle; }
+
+        float getProgressValue() const noexcept { return _value; }
+        void setProgressValue(float value) noexcept { _value = value; }
+
+    protected:
+        bool onDraw(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                Rect rect = getRect();
+                theme->drawProgressBarBackground(rect);
+                theme->drawProgressBarFrame(rect);
+                if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
+                    theme->drawProgressBarProgress(rect, getProgressValue());
+                    return true;
+                }
+                if (bitsHigh(getProgressBarStyle(), PBR_INDETERMINATE)) {
+                    theme->drawProgressBarIndeterminate(rect, getProgressValue());
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        Style _pbarStyle = 0;
+        float _value = 0;
     };
 } // namespace twm
 
