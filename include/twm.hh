@@ -42,15 +42,7 @@
 
 # include <Adafruit_GFX.h>
 # include <Fonts/FreeSans9pt7b.h>
-// The following is necessary because the Adafruit GFX library:
-// 1. Protects a method needed to correctly draw their special fonts (charBounds);
-// 2. Defines the following macros and function(s) in the translation unit instead
-//    of the header;
-// 3. Does not stay on top of PRs on GitHub, so it is fruitless (pun intended)
-//    to attempt to correct the aforementioned.
-// As a result, this code is copy/pasted from the Adafruit GFX library (with some
-// sanitizing; it's verboten to use C-style casts in C++ code. I believe it's
-// illegal in 56 countries).
+
 # include <glcdfont.c>
 # if defined(__AVR__)
 #  include <avr/pgmspace.h>
@@ -170,7 +162,7 @@ namespace twm
     using WindowID = uint8_t;
 
     /** Predefined (reserved) window identifiers. */
-    TWM_CONST(WindowID, WID_INVALID,    -1);
+    TWM_CONST(WindowID, WID_INVALID,  -1);
     TWM_CONST(WindowID, WID_DESKTOP,   1);
     TWM_CONST(WindowID, WID_PROMPT,    2);
     TWM_CONST(WindowID, WID_PROMPTLBL, 3);
@@ -306,7 +298,7 @@ namespace twm
     };
 
     template<typename T1, typename T2>
-    inline bool bitsHigh(const T1& bitmask, T2 bits)
+    inline bool bitsHigh(const T1& bitmask, const T2& bits)
     {
         return (bitmask & bits) == bits;
     }
@@ -463,8 +455,8 @@ namespace twm
 
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
-            uint16_t xAccum = 0, yAccum = rect.top + WindowYPadding;
-            const uint16_t xExtent = rect.right - WindowXPadding;
+            Extent xAccum = 0, yAccum = rect.top + WindowYPadding;
+            const Extent xExtent = rect.right - (WindowXPadding * 2);
             const char* cursor = text;
 
             while (*cursor != '\0') {
@@ -497,15 +489,16 @@ namespace twm
                             rewound = rewind;
                             cursor -= rewind;
                             while (rewind > 0) {
-                                xAccum -= charXAdvs.at(charXAdvs.size() - 1 - rewind);
+                                xAccum -= charXAdvs.at(charXAdvs.size() - rewind);
                                 rewind--;
                             }
                             break;
                         }
                     }
                 }
+                const Extent drawnWidth = xAccum - rect.left + WindowXPadding;
                 xAccum = xCenter
-                    ? (rect.left + WindowXPadding + (rect.width()) / 2) - (xAccum / 2)
+                    ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + WindowXPadding;
                 while (old_cursor < cursor) {
                     _gfx->drawChar(xAccum, yAccum, *old_cursor++, WindowTextColor,
