@@ -42,6 +42,7 @@
 
 # include <Adafruit_GFX.h>
 # include <Fonts/FreeSans9pt7b.h>
+# include <Fonts/FreeMono9pt7b.h>
 
 # include <glcdfont.c>
 # if defined(__AVR__)
@@ -207,6 +208,11 @@ namespace twm
     {
         Rect() = default;
 
+        Rect(Coord l, Coord t, Extent r, Extent b)
+            : left(l), top(t), right(r), bottom(b)
+        {
+        }
+
         Coord left   = 0; /** X-axis value of the left edge. */
         Coord top    = 0; /** Y-axis value of the top edge. */
         Coord right  = 0; /** X-axis value of the right edge. */
@@ -362,7 +368,10 @@ namespace twm
     {
     public:
         virtual void setGfxDriver(const GfxDriverPtr& gfx) = 0;
-        virtual void drawBlankScreen() const = 0;
+        virtual void drawScreensaver() const = 0;
+        virtual void drawDesktopBackground() const = 0;
+        virtual const GFXfont* getDefaultFont() const = 0;
+        virtual const GFXfont* getDefaultMonoFont() const = 0;
         virtual Extent getWindowXPadding() const = 0;
         virtual Extent getWindowYPadding() const = 0;
         virtual uint8_t getButtonTextSize() const = 0;
@@ -384,7 +393,8 @@ namespace twm
     class DefaultTheme : public ITheme
     {
     public:
-        TWM_CONST(Color, BlankScreenColor, 0x0000);
+        TWM_CONST(Color, ScreensaverColor, 0x0000);
+        TWM_CONST(Color, DesktopWindowColor, 0xb59a);
         TWM_CONST(Extent, WindowXPadding, 20);
         TWM_CONST(Extent, WindowYPadding, 20);
         TWM_CONST(Extent, WindowFrameThickness, 1);
@@ -406,7 +416,8 @@ namespace twm
         TWM_CONST(uint8_t, WindowTextSize, 1);
         TWM_CONST(uint8_t, ButtonTextSize, 1);
         TWM_CONST(Coord, WindowTextYOffset, 4);
-        TWM_CONST(const GFXfont*, WindowTextFont, &FreeSans9pt7b);
+        TWM_CONST(const GFXfont*, DefaultFont, &FreeSans9pt7b);
+        TWM_CONST(const GFXfont*, DefaultMonoFont, &FreeMono9pt7b);
 
         void setGfxDriver(const GfxDriverPtr& gfx)
         {
@@ -414,10 +425,18 @@ namespace twm
             _gfx = gfx;
         }
 
-        void drawBlankScreen() const final
+        void drawScreensaver() const final
         {
-            _gfx->fillScreen(BlankScreenColor);
+            _gfx->fillScreen(ScreensaverColor);
         }
+
+        void drawDesktopBackground() const final
+        {
+            _gfx->fillRect(0, 0, _gfx->width(), _gfx->height(), DesktopWindowColor);
+        }
+
+        const GFXfont* getDefaultFont() const final { return DefaultFont; }
+        const GFXfont* getDefaultMonoFont() const final { return DefaultMonoFont; }
 
         Extent getWindowXPadding() const final { return WindowXPadding; }
         Extent getWindowYPadding() const final { return WindowYPadding; }
@@ -464,11 +483,13 @@ namespace twm
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
             Extent xAccum = 0, yAccum = rect.top + WindowYPadding;
-            const Extent xExtent = rect.right - (WindowXPadding * 2);
-            const char* cursor = text;
+            const Extent xPadding =
+                ((singleLine && !xCenter) ? 0 : WindowXPadding);
+            const Extent xExtent = rect.right - (xPadding * 2);
 
+            const char* cursor = text;
             while (*cursor != '\0') {
-                xAccum = rect.left + WindowXPadding;
+                xAccum = rect.left + xPadding;
                 const char* old_cursor = cursor;
                 std::vector<uint8_t> charXAdvs;
                 while (xAccum < xExtent && *cursor != '\0') {
@@ -482,7 +503,7 @@ namespace twm
                         &yOff,
                         WindowTextSize,
                         WindowTextSize,
-                        WindowTextFont
+                        DefaultFont
                     );
                     charXAdvs.push_back(xAdv);
                     xAccum += xAdv;
@@ -504,10 +525,10 @@ namespace twm
                         }
                     }
                 }
-                const Extent drawnWidth = xAccum - (rect.left + WindowXPadding);
+                const Extent drawnWidth = xAccum - (rect.left + xPadding);
                 xAccum = xCenter
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
-                    : rect.left + WindowXPadding;
+                    : rect.left + xPadding;
                 while (old_cursor < cursor) {
                     _gfx->drawChar(xAccum, yAccum, *old_cursor++, WindowTextColor,
                         WindowTextColor, WindowTextSize);
@@ -583,16 +604,16 @@ namespace twm
         virtual std::shared_ptr<IWindow> getParent() const = 0;
         virtual void setParent(const std::shared_ptr<IWindow>& parent) = 0;
 
-        virtual Rect getRect() const = 0;
-        virtual void setRect(const Rect& rect) = 0;
+        virtual Rect getRect() const noexcept = 0;
+        virtual void setRect(const Rect& rect) noexcept = 0;
 
-        virtual Style getStyle() const = 0;
-        virtual void setStyle(Style style) = 0;
+        virtual Style getStyle() const noexcept = 0;
+        virtual void setStyle(Style style) noexcept = 0;
 
-        virtual WindowID getID() const = 0;
+        virtual WindowID getID() const noexcept = 0;
 
-        virtual State getState() const = 0;
-        virtual void setState(State state) = 0;
+        virtual State getState() const noexcept = 0;
+        virtual void setState(State state) noexcept = 0;
 
         virtual std::string getText() const = 0;
         virtual void setText(const std::string& text) = 0;
@@ -604,8 +625,10 @@ namespace twm
         virtual bool redraw() = 0;
         virtual bool hide() = 0;
         virtual bool show() = 0;
+        virtual bool isVisible() const noexcept = 0;
         virtual bool processInput(InputParams* params) = 0;
         virtual bool destroy() = 0;
+        virtual bool isAlive() const noexcept = 0;
 
     protected:
         virtual bool onCreate(MsgParam p1, MsgParam p2) = 0;
@@ -692,28 +715,30 @@ namespace twm
 
         void forEachChild(const std::function<bool(const WindowPtr&)>& cb) override
         {
+            if (!cb) {
+                return;
+            }
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_childMtx);
 # endif
-            if (cb) {
-                for (auto it = _children.begin(); it != _children.end(); it++) {
-                    if (!cb((*it))) {
-                        break;
-                    }
+            for (auto it = _children.begin(); it != _children.end(); it++) {
+                if (!cb((*it))) {
+                    break;
                 }
             }
         }
 
         void forEachChildReverse(const std::function<bool(const WindowPtr&)>& cb) override
         {
+            if (!cb) {
+                return;
+            }
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_childMtx);
 # endif
-            if (cb) {
-                for (auto it = _children.rbegin(); it != _children.rend(); it++) {
-                    if (!cb((*it))) {
-                        break;
-                    }
+            for (auto it = _children.rbegin(); it != _children.rend(); it++) {
+                if (!cb((*it))) {
+                    break;
                 }
             }
         }
@@ -737,12 +762,16 @@ namespace twm
             TWM_ASSERT(_theme);
             if (_theme && _gfx) {
                 _theme->setGfxDriver(_gfx);
+                _gfx->setFont(_theme->getDefaultFont());
             }
             _registry = std::make_shared<WindowContainer>();
             TWM_ASSERT(_registry);
         }
 
-        virtual ~TWM() = default;
+        virtual ~TWM()
+        {
+            tearDown();
+        }
 
         GfxDriverPtr getGfx() const { return _gfx; }
         ThemePtr getTheme() const { return _theme; }
@@ -754,23 +783,19 @@ namespace twm
                 child->destroy();
                 return true;
             });
+            _registry->removeAllChildren();
         }
 
         virtual void update()
         {
-            if (!_registry->hasChildren() && _theme) {
-                _theme->drawBlankScreen();
-                return;
-            }
+            _theme->drawDesktopBackground();
 
             _registry->forEachChild([](const WindowPtr& win)
             {
                 win->processQueue();
-
                 // TODO: is this window completely covered by another, or off
                 // the screen?
                 win->redraw();
-
                 return true;
             });
         }
@@ -788,20 +813,9 @@ namespace twm
             const std::function<bool(const std::shared_ptr<TWindow>&)>& preCreateHook = nullptr
         )
         {
-            Rect rect;
-            rect.left = x;
-            rect.top = y;
-            rect.right = x + width;
-            rect.bottom = y + height;
+            Rect rect(x, y, x + width, y + height);
             std::shared_ptr<TWindow> win(
-                std::make_shared<TWindow>(
-                    shared_from_this(),
-                    parent,
-                    id,
-                    style,
-                    rect,
-                    text
-                )
+                std::make_shared<TWindow>(shared_from_this(), parent, id, style, rect, text)
             );
             if (!win) {
                 TWM_LOG(TWM_ERROR, "oom");
@@ -826,14 +840,14 @@ namespace twm
                 dupe = !_registry->addChild(win);
             }
             if (dupe) {
-                TWM_LOG(TWM_ERROR, "dupe ID %hhu", id);
+                TWM_LOG(TWM_ERROR, "dupe %hhu", id);
                 return nullptr;
             }
-            win->setState(STA_ALIVE);
+            win->setState(win->getState() | STA_ALIVE);
             if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
                 win->routeMessage(MSG_RESIZE);
             }
-            if (bitsHigh(win->getStyle(), STY_VISIBLE)) {
+            if (win->isVisible()) {
                 win->redraw();
             }
             return win;
@@ -850,7 +864,7 @@ namespace twm
             auto prompt = createWindow<TPrompt>(
                 parent,
                 WID_PROMPT,
-                STY_CHILD | STY_VISIBLE,
+                (parent ? STY_CHILD : 0) | STY_VISIBLE,
                 _theme->getWindowXPadding(),
                 _theme->getWindowYPadding(),
                 _gfx->width() - (_theme->getWindowXPadding() * 2),
@@ -868,16 +882,6 @@ namespace twm
                 }
             );
             return prompt;
-        }
-
-        Extent getScreenWidth() const
-        {
-            return _gfx != nullptr ? _gfx->width() : 0;
-        }
-
-        Extent getScreenHeight() const
-        {
-            return _gfx != nullptr ? _gfx->height() : 0;
         }
 
         void hitTest(Coord x, Coord y)
@@ -906,12 +910,9 @@ namespace twm
 
     using TWMPtr = std::shared_ptr<TWM>;
 
-    class Window : public IWindow, public WindowContainer,
-        public std::enable_shared_from_this<IWindow>
+    class Window : public IWindow, public std::enable_shared_from_this<IWindow>
     {
     public:
-        using ContainerImpl = WindowContainer;
-
         Window() = default;
 
         Window(
@@ -927,59 +928,58 @@ namespace twm
 
         virtual ~Window() = default;
 
-        bool hasChildren() override
-        {
-            return ContainerImpl::hasChildren();
+        bool hasChildren() override {
+            return _children.hasChildren();
         }
 
         size_t childCount() override
         {
-            return ContainerImpl::childCount();
+            return _children.childCount();
         }
 
         WindowPtr getChildByID(WindowID id) override
         {
-            return ContainerImpl::getChildByID(id);
+            return _children.getChildByID(id);
         }
 
         bool addChild(const WindowPtr& child) override
         {
-            return ContainerImpl::addChild(child);
+            return _children.addChild(child);
         }
 
         bool removeChildByID(WindowID id) override
         {
-            return ContainerImpl::removeChildByID(id);
+            return _children.removeChildByID(id);
         }
 
         void removeAllChildren() override
         {
-            return ContainerImpl::removeAllChildren();
+            return _children.removeAllChildren();
         }
 
         void forEachChild(const std::function<bool(const WindowPtr&)>& cb) override
         {
-            return ContainerImpl::forEachChild(cb);
+            return _children.forEachChild(cb);
         }
 
         void forEachChildReverse(const std::function<bool(const WindowPtr&)>& cb) override
         {
-            return ContainerImpl::forEachChildReverse(cb);
+            return _children.forEachChildReverse(cb);
         }
 
         WindowPtr getParent() const override { return _parent; }
         void setParent(const WindowPtr& parent) override { _parent = parent; }
 
-        Rect getRect() const override { return _rect; }
-        void setRect(const Rect& rect) override { _rect = rect; }
+        Rect getRect() const noexcept override { return _rect; }
+        void setRect(const Rect& rect) noexcept override { _rect = rect; }
 
-        Style getStyle() const override { return _style; }
-        void setStyle(Style style) override { _style = style; }
+        Style getStyle() const noexcept override { return _style; }
+        void setStyle(Style style) noexcept override { _style = style; }
 
-        WindowID getID() const override { return _id; }
+        WindowID getID() const noexcept override { return _id; }
 
-        State getState() const override { return _state; }
-        void setState(State state) override { _state = state; }
+        State getState() const noexcept override { return _state; }
+        void setState(State state) noexcept override { _state = state; }
 
         std::string getText() const override { return _text; }
         void setText(const std::string& text) override { _text = text; }
@@ -1032,8 +1032,7 @@ namespace twm
 
         bool redraw() override
         {
-            if (!bitsHigh(getStyle(), STY_VISIBLE) ||
-                !bitsHigh(getState(), STA_ALIVE)) {
+            if (!isVisible() || !isAlive()) {
                 return false;
             }
             bool redrawn = routeMessage(MSG_DRAW);
@@ -1063,10 +1062,14 @@ namespace twm
             return redraw();
         }
 
+        bool isVisible() const noexcept override
+        {
+            return bitsHigh(getStyle(), STY_VISIBLE);
+        }
+
         bool processInput(InputParams* params) override
         {
-            if (!bitsHigh(getStyle(), STY_VISIBLE) ||
-                !bitsHigh(getState(), STA_ALIVE)) {
+            if (!isVisible() || !isAlive()) {
                 return false;
             }
             Rect rect = getRect();
@@ -1106,6 +1109,11 @@ namespace twm
             return destroyed;
         }
 
+        bool isAlive() const noexcept override
+        {
+            return bitsHigh(getState(), STA_ALIVE);
+        }
+
     protected:
         /** MSG_CREATE: param1 = nullptr, param2 = nullptr. */
         bool onCreate(MsgParam p1, MsgParam p2) override { return true; }
@@ -1120,8 +1128,7 @@ namespace twm
         /** MSG_DRAW: param1 = nullptr, param2 = nullptr. */
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
-            if (!bitsHigh(getStyle(), STY_VISIBLE) ||
-                !bitsHigh(getState(), STA_ALIVE)) {
+            if (!isVisible() || !isAlive()) {
                 return false;
             }
             auto theme = _getTheme();
@@ -1135,8 +1142,8 @@ namespace twm
             return false;
         }
 
-        /** MSG_INPUT: param1 = InputParams*, param2 = nullptr. Return value
-         * indicates whether or not the input event was consumed by this window. */
+        /** MSG_INPUT: param1 = InputParams*, param2 = nullptr. Returns true if
+         * the input event was consumed by this window, false otherwise. */
         bool onInput(MsgParam p1, MsgParam p2) override { return false; }
 
         /** MSG_EVENT: param1 = EventType, param2 = child WindowID. */
@@ -1177,6 +1184,7 @@ namespace twm
         }
 
     protected:
+        WindowContainer _children;
         PackagedMessageQueue _queue;
 # if !defined(TWM_SINGLETHREAD)
         Mutex _queueMtx;
@@ -1362,6 +1370,14 @@ namespace twm
                     }
                     Rect rectLbl = _label->getRect();
                     bool first = true;
+                    uint8_t numButtons = 0;
+                    forEachChild([&](const WindowPtr& child)
+                    {
+                        if (bitsHigh(child->getStyle(), STY_BUTTON)) {
+                            numButtons++;
+                        }
+                        return true;
+                    });
                     forEachChild([&](const WindowPtr& child)
                     {
                         if (!bitsHigh(child->getStyle(), STY_BUTTON)) {
@@ -1373,7 +1389,20 @@ namespace twm
                         auto width = rectBtn.width();
                         if (first) {
                             first = false;
-                            rectBtn.left = rect.left + theme->getWindowXPadding();
+                            switch (numButtons) {
+                                case 1: {
+                                    rectBtn.left
+                                        = rect.left + (rect.width() / 2) - (width / 2);
+                                }
+                                break;
+                                case 2: {
+                                    rectBtn.left = rect.left + theme->getWindowXPadding();
+                                }
+                                break;
+                                default:
+                                    TWM_ASSERT(false);
+                                return false;
+                            }
                             rectBtn.right = rectBtn.left + width;
                         } else {
                             rectBtn.right = rect.right - theme->getWindowXPadding();

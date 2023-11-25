@@ -47,28 +47,6 @@ auto wm = std::make_shared<TWM>(
   std::make_shared<DefaultTheme>()
 );
 
-class DesktopWnd : public Window
-{
-  public:
-    using Window::Window;
-    DesktopWnd() = default;
-    virtual ~DesktopWnd() = default;
-
-protected:
-    bool onDraw(MsgParam p1, MsgParam p2) final
-    {
-        auto gfx = _getGfx();
-        if (gfx) {
-          auto rect = getRect();
-          gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(), 0xb59a);
-          return true;
-      }
-      return false;
-    }
-};
-
-std::shared_ptr<DesktopWnd> desktopWnd;
-
 class EveryDayNormalButton : public Button
 {
 public:
@@ -124,8 +102,6 @@ void setup(void)
     delay(10);
   }
 
-  delay(500);
-
   ums3.begin();
 
   if (!ctp.begin(40, &Wire)) {
@@ -139,17 +115,16 @@ void setup(void)
   display.setRotation(3);
   display.setCursor(0, 0);
 
-  wm->getTheme()->drawBlankScreen();
-  wm->getGfx()->setFont(DefaultTheme::WindowTextFont);
-
-  desktopWnd = wm->createWindow<DesktopWnd>(nullptr, WID_DESKTOP, STY_VISIBLE,
-    0, 0, TFT_HEIGHT, TFT_WIDTH);
-  if (!desktopWnd) {
-    on_fatal_error(ums3);
-  }
-
- /*  auto defaultWin = wm->createWindow<DefaultWindow>(desktopWnd, 2,
-    STY_CHILD | STY_VISIBLE, 20, 20, TFT_HEIGHT - 40, TFT_WIDTH - 40);
+  auto xPadding = wm->getTheme()->getWindowXPadding();
+  auto defaultWin = wm->createWindow<DefaultWindow>(
+    nullptr,
+    2,
+    STY_VISIBLE,
+    xPadding,
+    xPadding,
+    wm->getGfx()->width() - (xPadding * 2),
+    wm->getGfx()->height() - (xPadding * 2)
+  );
   if (!defaultWin) {
     on_fatal_error(ums3);
   }
@@ -161,18 +136,19 @@ void setup(void)
     on_fatal_error(ums3);
   }
 
-  auto labelX = defaultWin->getRect().width() - 130;
+  auto labelX = defaultWin->getRect().width() - (130 - xPadding);
   auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE,
-    labelX, 50, 130, 30, "A static label");
+    labelX, 50, 130 - xPadding, 30, "A static label");
   if (!label1) {
     on_fatal_error(ums3);
   }
 
-  button1->setLabel(label1); */
-  testPromptWnd = wm->createPrompt<TestPrompt>(
-    desktopWnd,
+  button1->setLabel(label1);
+  /*testPromptWnd = wm->createPrompt<TestPrompt>(
+    nullptr,
     "This is a test prompt. Please choose an option.",
-    std::initializer_list<Prompt::ButtonInfo>({{100, "Yes"}, {101, "No"}}),
+    /* {{100, "Yes"}, {101, "No"}} * /
+    {{100, "OK"}},
     [](WindowID id)
     {
       TWM_LOG(TWM_DEBUG, "prompt button chosen: %hhu", id);
@@ -180,7 +156,7 @@ void setup(void)
   );
   if (!testPromptWnd) {
     on_fatal_error(ums3);
-  }
+  }*/
 }
 
 u_long lastTouch = 0UL;
@@ -206,7 +182,7 @@ void loop()
   } else {
     if (!screensaverOn && millis() - lastTouch > TFT_TOUCH_TIMEOUT) {
 TODO_refactor:
-      wm->getTheme()->drawBlankScreen();
+      wm->getTheme()->drawScreensaver();
       screensaverOn = true;
     }
   }
