@@ -159,9 +159,9 @@ namespace twm
     using GfxDriverPtr = std::shared_ptr<IGfxDriver>;
 
     /** Window identifier. */
-    using WindowID = uint8_t;
+    using WindowID = uint16_t;
 
-    /** Predefined (reserved) window identifiers. */
+    /** Reserved window identifiers. */
     TWM_CONST(WindowID, WID_INVALID,  -1);
     TWM_CONST(WindowID, WID_DESKTOP,   1);
     TWM_CONST(WindowID, WID_PROMPT,    2);
@@ -366,7 +366,7 @@ namespace twm
         virtual Extent getButtonLabelPadding() const = 0;
         virtual void drawWindowFrame(const Rect& rect) const = 0;
         virtual void drawWindowBackground(const Rect& rect) const = 0;
-        virtual void drawWindowText(const char* text, uint8_t flags,
+        virtual void drawText(const char* text, uint8_t flags,
             const Rect& rect) const = 0;
         virtual void drawButtonFrame(bool pressed, const Rect& rect) const = 0;
         virtual void drawButtonBackground(bool pressed, const Rect& rect) const = 0;
@@ -445,7 +445,7 @@ namespace twm
                 WindowBgColor);
         }
 
-        void drawWindowText(const char* text, uint8_t flags, const Rect& rect) const final
+        void drawText(const char* text, uint8_t flags, const Rect& rect) const final
         {
             _gfx->setTextSize(WindowTextSize);
             _gfx->setTextColor(WindowTextColor);
@@ -558,6 +558,10 @@ namespace twm
     class IWindow
     {
     public:
+        virtual std::shared_ptr<IWindow> getChildByID(WindowID id) const = 0;
+        virtual bool removeChildByID(WindowID id) = 0;
+        virtual bool addChild(const std::shared_ptr<IWindow>& child) = 0;
+
         virtual std::shared_ptr<IWindow> getParent() const = 0;
         virtual void setParent(const std::shared_ptr<IWindow>& parent) = 0;
 
@@ -601,7 +605,7 @@ namespace twm
         {
             TWM_ASSERT(_gfx);
             TWM_ASSERT(_theme);
-            if (_theme) {
+            if (_theme && _gfx) {
                 _theme->setGfxDriver(_gfx);
             }
         }
@@ -839,7 +843,7 @@ namespace twm
 
         Window(
             const TWMPtr& wm,
-            const std::shared_ptr<IWindow>& parent,
+            const WindowPtr& parent,
             WindowID id,
             Style style,
             const Rect& rect,
@@ -849,6 +853,50 @@ namespace twm
         }
 
         virtual ~Window() = default;
+
+        WindowPtr getChildByID(WindowID id) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            auto it = _children.find(id);
+            if (it != _children.end()) {
+                return it->second;
+            }
+            return nullptr;
+        }
+
+        bool removeChildByID(WindowID id) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            auto it = _children.find(id);
+            if (it != _children.end()) {
+                _children.erase(it);
+                TWM_LOG(TWM_DEBUG, "rem child %hhu from %hhu (count: %zu)", id,
+                    getID(), _children.size());
+                return true;
+            }
+            return false;
+        }
+
+        bool addChild(const WindowPtr& child) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            WindowID id = child->getID();
+            auto it = _children.find(id);
+            if (it != _children.end()) {
+                TWM_LOG(TWM_ERROR, "child %hhu duplicate in %hhu", id, getID());
+                return false;
+            }
+            _children[id] = child;
+            TWM_LOG(TWM_DEBUG, "add child %hhu to %hhu (count: %zu)", id, getID(),
+                _children.size());
+            return true;
+        }
 
         std::shared_ptr<IWindow> getParent() const override { return _parent; }
         void setParent(const std::shared_ptr<IWindow>& parent) override { _parent = parent; }
@@ -968,12 +1016,14 @@ namespace twm
         }
 
     protected:
+        WindowRegistry _children;
         PackagedMessageQueue _queue;
 # if !defined(TWM_SINGLETHREAD)
         Mutex _queueMtx;
+        Mutex _childMtx;
 # endif
         TWMPtr _wm;
-        std::shared_ptr<IWindow> _parent;
+        WindowPtr _parent;
         Rect _rect;
         Style _style = 0;
         WindowID _id = 0;
@@ -1041,7 +1091,7 @@ namespace twm
                 rect.right = rect.left + max(width, theme->getButtonWidth())  + (theme->getButtonLabelPadding() * 2);
                 rect.bottom = rect.top + theme->getButtonHeight();
                 setRect(rect);
-TODO_if_not_autosize_clip_label:
+                // TODO: if not autosize, clip label, perhaps with ellipsis.
                 return true;
             }
             return false;
@@ -1066,7 +1116,7 @@ TODO_if_not_autosize_clip_label:
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawWindowText(getText().c_str(), DrawTextFlags, rect);
+                theme->drawText(getText().c_str(), DrawTextFlags, rect);
                 return true;
             }
             return false;
@@ -1088,7 +1138,7 @@ TODO_if_not_autosize_clip_label:
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawWindowText(getText().c_str(), DrawTextFlags, rect);
+                theme->drawText(getText().c_str(), DrawTextFlags, rect);
                 return true;
             }
             return false;
