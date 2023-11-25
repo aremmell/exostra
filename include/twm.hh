@@ -664,8 +664,6 @@ namespace twm
             if (getChildByID(child->getID()) != nullptr) {
                 return false;
             }
-            TWM_LOG(TWM_DEBUG, "add %hhu, count %zu", child->getID(),
-                _children.size() + 1);
             _children.push_back(child);
             return true;
         }
@@ -675,16 +673,12 @@ namespace twm
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_childMtx);
 # endif
-            TWM_LOG(TWM_DEBUG, "att rem %hhu, count %zu", id, _children.size());
             for (auto it = _children.begin(); it != _children.end(); it++) {
                 if (id == (*it)->getID()) {
-                    TWM_LOG(TWM_DEBUG, "rem %hhu, count %zu", (*it)->getID(),
-                        _children.size() - 1);
                     _children.erase(it);
                     return true;
                 }
             }
-            TWM_LOG(TWM_DEBUG, "fail rem %hhu, count %zu", id, _children.size());
             return false;
         }
 
@@ -693,7 +687,6 @@ namespace twm
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_childMtx);
 # endif
-            TWM_LOG(TWM_DEBUG, "clearing, count %zu", _children.size());
             _children.clear();
         }
 
@@ -889,7 +882,7 @@ namespace twm
 
         void hitTest(Coord x, Coord y)
         {
-            TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
+            //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
             _registry->forEachChildReverse([&](const WindowPtr& child)
             {
                 InputParams params;
@@ -897,8 +890,8 @@ namespace twm
                 params.x    = x;
                 params.y    = y;
                 if (child->processInput(&params)) {
-                    TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
-                        params.handledBy, x, y);
+                    //TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
+                    //    params.handledBy, x, y);
                     return false;
                 }
                 return true;
@@ -932,13 +925,7 @@ namespace twm
         {
         }
 
-        virtual ~Window()
-        {
-            if (hasChildren()) {
-                TWM_LOG(TWM_DEBUG, "clearing %zu orphans", childCount());
-                _children.clear();
-            }
-        }
+        virtual ~Window() = default;
 
         bool hasChildren() override
         {
