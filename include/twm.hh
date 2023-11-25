@@ -159,13 +159,13 @@ namespace twm
     using GfxDriverPtr = std::shared_ptr<IGfxDriver>;
 
     /** Window identifier. */
-    using WindowID = uint16_t;
+    using WindowID = uint8_t;
 
     /** Reserved window identifiers. */
     TWM_CONST(WindowID, WID_INVALID,  -1);
-    TWM_CONST(WindowID, WID_DESKTOP,   1);
-    TWM_CONST(WindowID, WID_PROMPT,    2);
-    TWM_CONST(WindowID, WID_PROMPTLBL, 3);
+    TWM_CONST(WindowID, WID_DESKTOP,   0);
+    TWM_CONST(WindowID, WID_PROMPT,    1);
+    TWM_CONST(WindowID, WID_PROMPTLBL, 2);
 
     /** Window style. */
     using Style = uint16_t;
@@ -287,13 +287,18 @@ namespace twm
             return false;
         }
 
-        inline bool isPointWithin(const Point& point) const noexcept
+        inline bool isPointWithin(Coord x, Coord y) const noexcept
         {
-            if (point.x >= left && point.x <= left + width() &&
-                point.y >= top  && point.y <= top + height()) {
+            if (x >= left && x <= left + width() &&
+                y >= top  && y <= top + height()) {
                 return true;
             }
             return false;
+        }
+
+        inline bool isPointWithin(const Point& point) const noexcept
+        {
+            return isPointWithin(point.x, point.y);
         }
     };
 
@@ -322,8 +327,7 @@ namespace twm
         STY_VISIBLE   = 1 << 0,
         STY_CHILD     = 1 << 1,
         STY_AUTOSIZE  = 1 << 2,
-        STY_TA_LEFT   = 1 << 3,
-        STY_TA_CNTR   = 1 << 4
+        STY_BUTTON    = 1 << 3,
     } _WindowStyleFlags;
 
     typedef enum
@@ -348,6 +352,7 @@ namespace twm
 
     struct InputParams
     {
+        WindowID handledBy = WID_INVALID;
         InputType type = INPUT_NONE;
         Coord x = 0;
         Coord y = 0;
@@ -364,6 +369,7 @@ namespace twm
         virtual Extent getButtonWidth() const = 0;
         virtual Extent getButtonHeight() const = 0;
         virtual Extent getButtonLabelPadding() const = 0;
+        virtual u_long getButtonTappedDuration() const = 0;
         virtual void drawWindowFrame(const Rect& rect) const = 0;
         virtual void drawWindowBackground(const Rect& rect) const = 0;
         virtual void drawText(const char* text, uint8_t flags,
@@ -396,6 +402,7 @@ namespace twm
         TWM_CONST(Color, ButtonFrameColorPressed, 0x4208);
         TWM_CONST(Color, ButtonBgColorPressed, 0x4208);
         TWM_CONST(Color, ButtonLabelColorPressed, 0xffff);
+        TWM_CONST(u_long, ButtonTappedDuration, 100);
         TWM_CONST(uint8_t, WindowTextSize, 1);
         TWM_CONST(uint8_t, ButtonTextSize, 1);
         TWM_CONST(Coord, WindowTextYOffset, 4);
@@ -418,6 +425,7 @@ namespace twm
         Extent getButtonWidth() const final { return ButtonWidth; }
         Extent getButtonHeight() const final { return ButtonHeight; }
         Extent getButtonLabelPadding() const final { return ButtonLabelPadding; }
+        u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
 
         void drawWindowFrame(const Rect& rect) const final
         {
@@ -496,7 +504,7 @@ namespace twm
                         }
                     }
                 }
-                const Extent drawnWidth = xAccum - rect.left + WindowXPadding;
+                const Extent drawnWidth = xAccum - (rect.left + WindowXPadding);
                 xAccum = xCenter
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + WindowXPadding;
@@ -555,13 +563,23 @@ namespace twm
 
     using PackagedMessageQueue = std::queue<PackagedMessage>;
 
-    class IWindow
+    class IWindow;
+    class IWindowContainer
     {
     public:
-        virtual std::shared_ptr<IWindow> getChildByID(WindowID id) const = 0;
-        virtual bool removeChildByID(WindowID id) = 0;
+        virtual bool hasChildren() = 0;
+        virtual size_t childCount() = 0;
+        virtual std::shared_ptr<IWindow> getChildByID(WindowID id) = 0;
         virtual bool addChild(const std::shared_ptr<IWindow>& child) = 0;
+        virtual bool removeChildByID(WindowID id) = 0;
+        virtual void removeAllChildren() = 0;
+        virtual void forEachChild(const std::function<bool(const std::shared_ptr<IWindow>&)>& cb) = 0;
+        virtual void forEachChildReverse(const std::function<bool(const std::shared_ptr<IWindow>&)>& cb) = 0;
+    };
 
+    class IWindow : public IWindowContainer
+    {
+    public:
         virtual std::shared_ptr<IWindow> getParent() const = 0;
         virtual void setParent(const std::shared_ptr<IWindow>& parent) = 0;
 
@@ -579,25 +597,144 @@ namespace twm
         virtual std::string getText() const = 0;
         virtual void setText(const std::string& text) = 0;
 
+        virtual bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
+        virtual void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
+        virtual bool processQueue() = 0;
+
+        virtual bool redraw() = 0;
+        virtual bool hide() = 0;
+        virtual bool show() = 0;
+        virtual bool processInput(InputParams* params) = 0;
+        virtual bool destroy() = 0;
+
+    protected:
         virtual bool onCreate(MsgParam p1, MsgParam p2) = 0;
         virtual bool onDestroy(MsgParam p1, MsgParam p2) = 0;
         virtual bool onDraw(MsgParam p1, MsgParam p2) = 0;
         virtual bool onInput(MsgParam p1, MsgParam p2) = 0;
         virtual bool onEvent(MsgParam p1, MsgParam p2) = 0;
         virtual bool onResize(MsgParam p1, MsgParam p2) = 0;
-
-        virtual bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
-        virtual void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
-        virtual bool processQueue() = 0;
     };
 
-    using WindowPtr = std::shared_ptr<IWindow>;
+    using WindowPtr          = std::shared_ptr<IWindow>;
+    using WindowContainerPtr = std::shared_ptr<IWindowContainer>;
+
+    class WindowContainer : public IWindowContainer
+    {
+    public:
+        using WindowStack = std::vector<WindowPtr>;
+
+        WindowContainer() = default;
+        virtual ~WindowContainer() = default;
+
+        bool hasChildren() override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            return !_children.empty();
+        }
+
+        size_t childCount() override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            return _children.size();
+        }
+
+        WindowPtr getChildByID(WindowID id) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            for (auto win : _children) {
+                if (id == win->getID()) {
+                    return win;
+                }
+            }
+            return nullptr;
+        }
+
+        bool addChild(const WindowPtr& child) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            if (getChildByID(child->getID()) != nullptr) {
+                return false;
+            }
+            TWM_LOG(TWM_DEBUG, "add %hhu, count %zu", child->getID(),
+                _children.size() + 1);
+            _children.push_back(child);
+            return true;
+        }
+
+        bool removeChildByID(WindowID id) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            TWM_LOG(TWM_DEBUG, "att rem %hhu, count %zu", id, _children.size());
+            for (auto it = _children.begin(); it != _children.end(); it++) {
+                if (id == (*it)->getID()) {
+                    TWM_LOG(TWM_DEBUG, "rem %hhu, count %zu", (*it)->getID(),
+                        _children.size() - 1);
+                    _children.erase(it);
+                    return true;
+                }
+            }
+            TWM_LOG(TWM_DEBUG, "fail rem %hhu, count %zu", id, _children.size());
+            return false;
+        }
+
+        void removeAllChildren() override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            TWM_LOG(TWM_DEBUG, "clearing, count %zu", _children.size());
+            _children.clear();
+        }
+
+        void forEachChild(const std::function<bool(const WindowPtr&)>& cb) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            if (cb) {
+                for (auto it = _children.begin(); it != _children.end(); it++) {
+                    if (!cb((*it))) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        void forEachChildReverse(const std::function<bool(const WindowPtr&)>& cb) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            if (cb) {
+                for (auto it = _children.rbegin(); it != _children.rend(); it++) {
+                    if (!cb((*it))) {
+                        break;
+                    }
+                }
+            }
+        }
+
+    protected:
+        WindowStack _children;
+# if !defined(TWM_SINGLETHREAD)
+        Mutex _childMtx;
+# endif
+    };
 
     class TWM : public std::enable_shared_from_this<TWM>
     {
     public:
-        using WindowRegistry = std::map<WindowID, WindowPtr>;
-
         TWM() = delete;
 
         explicit TWM(const GfxDriverPtr& gfx, const ThemePtr& theme)
@@ -608,6 +745,8 @@ namespace twm
             if (_theme && _gfx) {
                 _theme->setGfxDriver(_gfx);
             }
+            _registry = std::make_shared<WindowContainer>();
+            TWM_ASSERT(_registry);
         }
 
         virtual ~TWM() = default;
@@ -617,31 +756,30 @@ namespace twm
 
         virtual void tearDown()
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_regMtx);
-# endif
-            _registry.clear();
+            _registry->forEachChild([](const WindowPtr& child)
+            {
+                child->destroy();
+                return true;
+            });
         }
 
         virtual void update()
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_regMtx);
-# endif
-            if (_registry.empty() && _theme) {
+            if (!_registry->hasChildren() && _theme) {
                 _theme->drawBlankScreen();
                 return;
             }
 
-            for (auto it : _registry) {
+            _registry->forEachChild([](const WindowPtr& win)
+            {
+                win->processQueue();
+
                 // TODO: is this window completely covered by another, or off
                 // the screen?
-                if (bitsHigh(it.second->getStyle(), STY_VISIBLE) &&
-                    bitsHigh(it.second->getState(), STA_ALIVE)) {
-                    it.second->routeMessage(MSG_DRAW);
-                }
-                it.second->processQueue();
-            }
+                win->redraw();
+
+                return true;
+            });
         }
 
         template<class TWindow>
@@ -657,20 +795,6 @@ namespace twm
             const std::function<bool(const std::shared_ptr<TWindow>&)>& preCreateHook = nullptr
         )
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_regMtx);
-# endif
-            size_t numWindows = _registry.size();
-            TWM_ASSERT(numWindows < std::numeric_limits<WindowID>::max() - 1);
-            if (numWindows >= std::numeric_limits<WindowID>::max() - 1) {
-                TWM_LOG(TWM_ERROR, "max window count exceeded");
-                return nullptr;
-            }
-            auto it = _registry.find(id);
-            if (it != _registry.end()) {
-                TWM_LOG(TWM_ERROR, "duplicate %hhu", id);
-                return nullptr;
-            }
             Rect rect;
             rect.left = x;
             rect.top = y;
@@ -687,14 +811,12 @@ namespace twm
                 )
             );
             if (!win) {
-                TWM_LOG(TWM_ERROR, "alloc failed");
+                TWM_LOG(TWM_ERROR, "oom");
                 return nullptr;
             }
-            if (bitsHigh(style, STY_CHILD)) {
-                if (!parent) {
-                    TWM_LOG(TWM_ERROR, "STY_CHILD w/ null parent");
-                    return nullptr;
-                }
+            if (bitsHigh(style, STY_CHILD) && !parent) {
+                TWM_LOG(TWM_ERROR, "STY_CHILD w/ null parent");
+                return nullptr;
             }
             if (preCreateHook && !preCreateHook(win)) {
                 TWM_LOG(TWM_ERROR, "pre-create hook false");
@@ -704,15 +826,23 @@ namespace twm
                 TWM_LOG(TWM_ERROR, "MSG_CREATE false");
                 return nullptr;
             }
+            bool dupe = false;
+            if (parent) {
+                dupe = !parent->addChild(win);
+            } else {
+                dupe = !_registry->addChild(win);
+            }
+            if (dupe) {
+                TWM_LOG(TWM_ERROR, "dupe ID %hhu", id);
+                return nullptr;
+            }
             win->setState(STA_ALIVE);
             if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
                 win->routeMessage(MSG_RESIZE);
             }
             if (bitsHigh(win->getStyle(), STY_VISIBLE)) {
-                win->routeMessage(MSG_DRAW);
+                win->redraw();
             }
-            _registry[id] = win;
-            TWM_LOG(TWM_DEBUG, "registered %hhu; count: %zu", id, _registry.size());
             return win;
         }
 
@@ -720,7 +850,7 @@ namespace twm
         inline std::shared_ptr<TPrompt> createPrompt(
             const WindowPtr& parent,
             const std::string& text,
-            const std::vector<std::pair<WindowID, std::string>>& buttons,
+            const std::vector<typename TPrompt::ButtonInfo>& buttonInfo,
             const typename TPrompt::ResultCallback& callback
         )
         {
@@ -735,8 +865,8 @@ namespace twm
                 text,
                 [&](const std::shared_ptr<TPrompt>& win)
                 {
-                    for (const auto& btn : buttons) {
-                        if (!win->addButton(btn.first, btn.second)) {
+                    for (const auto& btn : buttonInfo) {
+                        if (!win->addButton(btn)) {
                             return false;
                         }
                     }
@@ -747,98 +877,48 @@ namespace twm
             return prompt;
         }
 
-        WindowPtr findWindow(WindowID id)
+        Extent getScreenWidth() const
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_regMtx);
-# endif
-            auto it = _registry.find(id);
-            return it != _registry.end() ? it->second : nullptr;
+            return _gfx != nullptr ? _gfx->width() : 0;
         }
 
-        bool destroyWindow(WindowID id)
+        Extent getScreenHeight() const
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_regMtx);
-# endif
-            auto it = _registry.find(id);
-            if (it != _registry.end()) {
-                if (it->second) {
-                    std::vector<WindowRegistry::iterator> children;
-                    for (auto it2 = _registry.begin(); it2 != _registry.end(); it2++) {
-                        if (it2->second && it2->second->getParent() == it->second) {
-                            children.push_back(it2);
-                            it2->second->queueMessage(MSG_DESTROY);
-                            it2->second->setState(it2->second->getState() & ~STA_ALIVE);
-                        }
-                    }
-                    it->second->queueMessage(MSG_DESTROY);
-                    it->second->setState(it->second->getState() & ~STA_ALIVE);
-                    for (auto it2 : children) {
-                        WindowID idChild = it2->first;
-                        _registry.erase(it2);
-                        TWM_LOG(TWM_DEBUG, "destroyed child %hhu (%hhu)", idChild, id);
-                    }
-                    Rect dirtyRect = it->second->getRect();
-                    _registry.erase(it);
-                    TWM_LOG(TWM_DEBUG, "destroyed %hhu; count: %zu", id, _registry.size());
-                    for (auto it : _registry) {
-                        if (it.second) {
-                            Rect curRect = it.second->getRect();
-                            if (curRect.overlaps(dirtyRect)) {
-                                it.second->queueMessage(MSG_DRAW);
-                            }
-                        }
-                    }
-                    return true;
-                }
-            }
-            return false;
+            return _gfx != nullptr ? _gfx->height() : 0;
         }
 
         void hitTest(Coord x, Coord y)
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_regMtx);
-# endif
-            //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
-            for (auto it = _registry.rbegin(); it != _registry.rend(); it++) {
-                if (it->second) {
-                    if (!bitsHigh(it->second->getStyle(), STY_VISIBLE) ||
-                        !bitsHigh(it->second->getState(), STA_ALIVE)) {
-                        continue;
-                    }
-                    auto rect = it->second->getRect();
-                    if (rect.isPointWithin(Point(x, y))) {
-                        InputParams params;
-                        params.type = INPUT_TAP;
-                        params.x    = x;
-                        params.y    = y;
-                        if (it->second->routeMessage(MSG_INPUT,
-                            reinterpret_cast<MsgParam>(&params))) {
-                            //TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
-                            //    win->getID(), x, y);
-                            break;
-                        }
-                    }
+            TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
+            _registry->forEachChildReverse([&](const WindowPtr& child)
+            {
+                InputParams params;
+                params.type = INPUT_TAP;
+                params.x    = x;
+                params.y    = y;
+                if (child->processInput(&params)) {
+                    TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
+                        params.handledBy, x, y);
+                    return false;
                 }
-            }
+                return true;
+            });
         }
 
     protected:
-        WindowRegistry _registry;
-# if !defined(TWM_SINGLETHREAD)
-        Mutex _regMtx;
-# endif
+        WindowContainerPtr _registry;
         GfxDriverPtr _gfx;
         ThemePtr _theme;
     };
 
     using TWMPtr = std::shared_ptr<TWM>;
 
-    class Window : public IWindow, public std::enable_shared_from_this<IWindow>
+    class Window : public IWindow, public WindowContainer,
+        public std::enable_shared_from_this<IWindow>
     {
     public:
+        using ContainerImpl = WindowContainer;
+
         Window() = default;
 
         Window(
@@ -852,54 +932,56 @@ namespace twm
         {
         }
 
-        virtual ~Window() = default;
+        virtual ~Window()
+        {
+            if (hasChildren()) {
+                TWM_LOG(TWM_DEBUG, "clearing %zu orphans", childCount());
+                _children.clear();
+            }
+        }
+
+        bool hasChildren() override
+        {
+            return ContainerImpl::hasChildren();
+        }
+
+        size_t childCount() override
+        {
+            return ContainerImpl::childCount();
+        }
 
         WindowPtr getChildByID(WindowID id) override
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_childMtx);
-# endif
-            auto it = _children.find(id);
-            if (it != _children.end()) {
-                return it->second;
-            }
-            return nullptr;
-        }
-
-        bool removeChildByID(WindowID id) override
-        {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_childMtx);
-# endif
-            auto it = _children.find(id);
-            if (it != _children.end()) {
-                _children.erase(it);
-                TWM_LOG(TWM_DEBUG, "rem child %hhu from %hhu (count: %zu)", id,
-                    getID(), _children.size());
-                return true;
-            }
-            return false;
+            return ContainerImpl::getChildByID(id);
         }
 
         bool addChild(const WindowPtr& child) override
         {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_childMtx);
-# endif
-            WindowID id = child->getID();
-            auto it = _children.find(id);
-            if (it != _children.end()) {
-                TWM_LOG(TWM_ERROR, "child %hhu duplicate in %hhu", id, getID());
-                return false;
-            }
-            _children[id] = child;
-            TWM_LOG(TWM_DEBUG, "add child %hhu to %hhu (count: %zu)", id, getID(),
-                _children.size());
-            return true;
+            return ContainerImpl::addChild(child);
         }
 
-        std::shared_ptr<IWindow> getParent() const override { return _parent; }
-        void setParent(const std::shared_ptr<IWindow>& parent) override { _parent = parent; }
+        bool removeChildByID(WindowID id) override
+        {
+            return ContainerImpl::removeChildByID(id);
+        }
+
+        void removeAllChildren() override
+        {
+            return ContainerImpl::removeAllChildren();
+        }
+
+        void forEachChild(const std::function<bool(const WindowPtr&)>& cb) override
+        {
+            return ContainerImpl::forEachChild(cb);
+        }
+
+        void forEachChildReverse(const std::function<bool(const WindowPtr&)>& cb) override
+        {
+            return ContainerImpl::forEachChildReverse(cb);
+        }
+
+        WindowPtr getParent() const override { return _parent; }
+        void setParent(const WindowPtr& parent) override { _parent = parent; }
 
         Rect getRect() const override { return _rect; }
         void setRect(const Rect& rect) override { _rect = rect; }
@@ -915,13 +997,146 @@ namespace twm
         std::string getText() const override { return _text; }
         void setText(const std::string& text) override { _text = text; }
 
+        bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
+        {
+            switch (msg) {
+                case MSG_CREATE:  return onCreate(p1, p2);
+                case MSG_DESTROY: return onDestroy(p1, p2);
+                case MSG_DRAW:    return onDraw(p1, p2);
+                case MSG_INPUT:   return onInput(p1, p2);
+                case MSG_EVENT:   return onEvent(p1, p2);
+                case MSG_RESIZE:  return onResize(p1, p2);
+                default:
+                    TWM_ASSERT(false);
+                return false;
+            }
+        }
+
+        void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_queueMtx);
+# endif
+            PackagedMessage pm;
+            pm.msg = msg;
+            pm.p1 = p1;
+            pm.p2 = p2;
+            _queue.push(pm);
+        }
+
+        bool processQueue() override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_queueMtx);
+# endif
+            bool processed = false;
+            if (!_queue.empty()) {
+                auto pm = _queue.front();
+                _queue.pop();
+                processed = routeMessage(pm.msg, pm.p1, pm.p2);
+            }
+            forEachChild([&](const WindowPtr& child)
+            {
+                processed &= child->processQueue();
+                return true;
+            });
+            return processed;
+        }
+
+        bool redraw() override
+        {
+            if (!bitsHigh(getStyle(), STY_VISIBLE) ||
+                !bitsHigh(getState(), STA_ALIVE)) {
+                return false;
+            }
+            bool redrawn = routeMessage(MSG_DRAW);
+            forEachChild([&](const WindowPtr& child)
+            {
+                redrawn &= child->redraw();
+                return true;
+            });
+            return redrawn;
+        }
+
+        bool hide() override
+        {
+            if (!bitsHigh(getStyle(), STY_VISIBLE)) {
+                return false;
+            }
+            setStyle(getStyle() & ~STY_VISIBLE);
+            return true;
+        }
+
+        bool show() override
+        {
+            if (bitsHigh(getStyle(), STY_VISIBLE)) {
+                return false;
+            }
+            setStyle(getStyle() | STY_VISIBLE);
+            return redraw();
+        }
+
+        bool processInput(InputParams* params) override
+        {
+            if (!bitsHigh(getStyle(), STY_VISIBLE) ||
+                !bitsHigh(getState(), STA_ALIVE)) {
+                return false;
+            }
+            Rect rect = getRect();
+            if (!rect.isPointWithin(params->x, params->y)) {
+                return false;
+            }
+            bool handled = false;
+            forEachChildReverse([&](const WindowPtr& child)
+            {
+                handled = child->processInput(params);
+                if (handled) {
+                    return false;
+                }
+                return true;
+            });
+            if (!handled) {
+                handled = routeMessage(
+                    MSG_INPUT,
+                    reinterpret_cast<MsgParam>(params)
+                );
+                if (handled) {
+                    params->handledBy = getID();
+                }
+            }
+            return handled;
+        }
+
+        bool destroy() override
+        {
+            bool destroyed = routeMessage(MSG_DESTROY);
+            forEachChild([&](const WindowPtr& child)
+            {
+                destroyed &= child->destroy();
+                return true;
+            });
+            removeAllChildren();
+            return destroyed;
+        }
+
+    protected:
         /** MSG_CREATE: param1 = nullptr, param2 = nullptr. */
         bool onCreate(MsgParam p1, MsgParam p2) override { return true; }
-        bool onDestroy(MsgParam p1, MsgParam p2) override { return true; }
+
+        /** MSG_DESTROY: param1 = nullptr, param2 = nullptr. */
+        bool onDestroy(MsgParam p1, MsgParam p2) override
+        {
+            setState(getState() & ~STA_ALIVE);
+            return true;
+        }
 
         /** MSG_DRAW: param1 = nullptr, param2 = nullptr. */
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
+            if (!bitsHigh(getStyle(), STY_VISIBLE) ||
+                !bitsHigh(getState(), STA_ALIVE)) {
+                return false;
+            }
             auto theme = _getTheme();
             if (theme) {
                 Rect rect = getRect();
@@ -946,47 +1161,6 @@ namespace twm
             return false;
         }
 
-        bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
-        {
-            switch (msg) {
-                case MSG_CREATE:  return onCreate(p1, p2);
-                case MSG_DESTROY: return onDestroy(p1, p2);
-                case MSG_DRAW:    return onDraw(p1, p2);
-                case MSG_INPUT:   return onInput(p1, p2);
-                case MSG_EVENT:   return onEvent(p1, p2);
-                case MSG_RESIZE:  return onResize(p1, p2);
-                default:
-                    TWM_ASSERT(!"unknown message");
-                return false;
-            }
-        }
-
-        void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
-        {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_queueMtx);
-# endif
-            PackagedMessage pm;
-            pm.msg = msg;
-            pm.p1 = p1;
-            pm.p2 = p2;
-            _queue.push(pm);
-        }
-
-        bool processQueue() override
-        {
-# if !defined(TWM_SINGLETHREAD)
-            ScopeLock lock(_queueMtx);
-# endif
-            if (!_queue.empty()) {
-                auto pm = _queue.front();
-                _queue.pop();
-                return routeMessage(pm.msg, pm.p1, pm.p2);
-            }
-            return false;
-        }
-
-    protected:
         TWMPtr _getWM() const
         {
             TWM_ASSERT(_wm);
@@ -1016,11 +1190,9 @@ namespace twm
         }
 
     protected:
-        WindowRegistry _children;
         PackagedMessageQueue _queue;
 # if !defined(TWM_SINGLETHREAD)
         Mutex _queueMtx;
-        Mutex _childMtx;
 # endif
         TWMPtr _wm;
         WindowPtr _parent;
@@ -1034,8 +1206,6 @@ namespace twm
     class Button : public Window
     {
     public:
-        static constexpr u_long TappedDurationMsec = 100;
-
         using Window::Window;
         Button() = default;
         virtual ~Button() = default;
@@ -1043,9 +1213,10 @@ namespace twm
         virtual void onTapped()
         {
             _lastTapped = millis();
-            TWM_ASSERT(_parent);
-            if (_parent) {
-                _parent->queueMessage(
+            auto parent = getParent();
+            TWM_ASSERT(parent);
+            if (parent) {
+                parent->queueMessage(
                     MSG_EVENT,
                     EVT_CHILD_TAPPED,
                     getID()
@@ -1057,7 +1228,7 @@ namespace twm
         {
             auto theme = _getTheme();
             if (theme) {
-                bool pressed = (millis() - _lastTapped < TappedDurationMsec);
+                bool pressed = (millis() - _lastTapped < theme->getButtonTappedDuration());
                 Rect rect = getRect();
                 theme->drawButtonBackground(pressed, rect);
                 theme->drawButtonFrame(pressed, rect);
@@ -1148,6 +1319,7 @@ namespace twm
     class Prompt : public Window
     {
     public:
+        using ButtonInfo     = std::pair<WindowID, std::string>;
         using ResultCallback = std::function<void(WindowID)>;
 
         using Window::Window;
@@ -1159,30 +1331,23 @@ namespace twm
             _callback = callback;
         }
 
-        bool addButton(WindowID id, const std::string& label)
+        bool addButton(const ButtonInfo& bi)
         {
-            if (_buttons.size() >= 2) {
-                TWM_LOG(TWM_ERROR, "max 2 prompt buttons");
-                return false;
-            }
             auto wm = _getWM();
             if (wm) {
                 auto theme = _getTheme();
                 if (theme) {
                     auto btn = wm->createWindow<Button>(
                         shared_from_this(),
-                        id,
-                        STY_CHILD | STY_VISIBLE | STY_AUTOSIZE,
+                        bi.first,
+                        STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON,
                         0,
                         0,
                         0,
                         0,
-                        label
+                        bi.second
                     );
-                    if (btn) {
-                        _buttons.push_back(btn);
-                        return true;
-                    }
+                    return btn != nullptr;
                 }
             }
             return false;
@@ -1209,22 +1374,28 @@ namespace twm
                         return false;
                     }
                     Rect rectLbl = _label->getRect();
-                    uint8_t idx = 0;
-                    for (auto& btn : _buttons) {
-                        Rect rectBtn = btn->getRect();
+                    bool first = true;
+                    forEachChild([&](const WindowPtr& child)
+                    {
+                        if (!bitsHigh(child->getStyle(), STY_BUTTON)) {
+                            return true;
+                        }
+                        Rect rectBtn = child->getRect();
                         rectBtn.top = rectLbl.bottom + theme->getWindowYPadding();
                         rectBtn.bottom = rectBtn.top + theme->getButtonHeight();
                         auto width = rectBtn.width();
-                        if (idx == 0) {
+                        if (first) {
+                            first = false;
                             rectBtn.left = rect.left + theme->getWindowXPadding();
                             rectBtn.right = rectBtn.left + width;
                         } else {
                             rectBtn.right = rect.right - theme->getWindowXPadding();
                             rectBtn.left = rectBtn.right - width;
                         }
-                        btn->setRect(rectBtn);
-                        idx++;
-                    }
+                        child->setRect(rectBtn);
+                        return true;
+                    });
+
                     return true;
                 }
             }
@@ -1238,10 +1409,7 @@ namespace twm
                     if (_callback) {
                         _callback(static_cast<WindowID>(param2));
                     }
-                    auto wm = _getWM();
-                    if (wm) {
-                        wm->destroyWindow(getID());
-                    }
+                    destroy();
                 }
                 break;
                 default:
@@ -1253,7 +1421,6 @@ namespace twm
 
     protected:
         WindowPtr _label;
-        std::vector<WindowPtr> _buttons;
         ResultCallback _callback;
     };
 } // namespace twm

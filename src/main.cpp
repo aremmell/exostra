@@ -148,7 +148,7 @@ void setup(void)
     on_fatal_error(ums3);
   }
 
-  /*auto defaultWin = wm->createWindow<DefaultWindow>(desktop, 2,
+ /*  auto defaultWin = wm->createWindow<DefaultWindow>(desktopWnd, 2,
     STY_CHILD | STY_VISIBLE, 20, 20, TFT_HEIGHT - 40, TFT_WIDTH - 40);
   if (!defaultWin) {
     on_fatal_error(ums3);
@@ -168,11 +168,11 @@ void setup(void)
     on_fatal_error(ums3);
   }
 
-  button1->setLabel(label1);*/
+  button1->setLabel(label1); */
   testPromptWnd = wm->createPrompt<TestPrompt>(
     desktopWnd,
     "This is a test prompt. Please choose an option.",
-    std::initializer_list<std::pair<WindowID, std::string>>({{100, "Yes"}, {101, "No"}}),
+    std::initializer_list<Prompt::ButtonInfo>({{100, "Yes"}, {101, "No"}}),
     [](WindowID id)
     {
       TWM_LOG(TWM_DEBUG, "prompt button chosen: %hhu", id);
@@ -216,5 +216,5 @@ TODO_refactor:
   }
 
   display.drawRGBBitmap(0, 0, wm->getGfx()->getBuffer(), wm->getGfx()->width(), wm->getGfx()->height());
-  //delay(100);
+  delay(10);
 }
