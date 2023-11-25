@@ -849,9 +849,6 @@ namespace twm
             tearDown();
         }
 
-        GfxDriverPtr getGfx() const { return _gfx; }
-        ThemePtr getTheme() const { return _theme; }
-
         virtual void tearDown()
         {
             _registry->forEachChild([](const WindowPtr& child)
@@ -861,6 +858,12 @@ namespace twm
             });
             _registry->removeAllChildren();
         }
+
+        GfxDriverPtr getGfx() const { return _gfx; }
+        ThemePtr getTheme() const { return _theme; }
+
+        Extent getScreenWidth() const { return _gfx->width(); }
+        Extent getScreenHeight() const { return _gfx->height(); }
 
         virtual void update()
         {
@@ -932,15 +935,18 @@ namespace twm
         template<class TPrompt>
         inline std::shared_ptr<TPrompt> createPrompt(
             const WindowPtr& parent,
+            WindowID id,
+            Style style,
             const std::string& text,
             const std::vector<typename TPrompt::ButtonInfo>& buttonInfo,
             const typename TPrompt::ResultCallback& callback
         )
         {
+            TWM_ASSERT(bitsHigh(style, STY_PROMPT));
             auto prompt = createWindow<TPrompt>(
                 parent,
-                WID_PROMPT,
-                (parent ? STY_CHILD : 0) | STY_VISIBLE | STY_PROMPT,
+                id,
+                style,
                 _theme->getWindowXPadding(),
                 _theme->getWindowYPadding(),
                 _gfx->width() - (_theme->getWindowXPadding() * 2),
@@ -972,6 +978,7 @@ namespace twm
             Style pbarStyle
         )
         {
+            TWM_ASSERT(bitsHigh(style, STY_PROGBAR));
             auto pbar = createWindow<TBar>(parent, id, style, x, y, width, height);
             if (pbar) {
                 pbar->setProgressBarStyle(pbarStyle);
@@ -1443,6 +1450,13 @@ namespace twm
             return false;
         }
 
+        void setText(const std::string& text) override
+        {
+            if (_label) {
+                _label->setText(text);
+            }
+        }
+
         bool onCreate(MsgParam param1, MsgParam param2) override
         {
             auto wm = _getWM();
@@ -1520,7 +1534,7 @@ namespace twm
                     if (_callback) {
                         _callback(static_cast<WindowID>(param2));
                     }
-                    destroy();
+                    hide();
                 }
                 break;
                 default:

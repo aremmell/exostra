@@ -55,6 +55,7 @@ public:
   virtual ~EveryDayNormalButton() = default;
 
   void setLabel(const WindowPtr& label) { _label = label; }
+  void setPrompt(const WindowPtr& prompt) { _prompt = prompt; }
 
   void onTapped() override
   {
@@ -62,10 +63,14 @@ public:
     if (_label) {
       _label->setText("Tapped!");
     }
+    if (_prompt) {
+      _prompt->show();
+    }
   }
 
 private:
   WindowPtr _label;
+  WindowPtr _prompt;
 };
 
 class DefaultWindow : public Window
@@ -92,15 +97,24 @@ public:
   virtual ~TestProgressBar() = default;
 };
 
-class TestPrompt : public Prompt
+class TestYesNoPrompt : public Prompt
 {
 public:
   using Prompt::Prompt;
-  TestPrompt() = default;
-  virtual ~TestPrompt() = default;
+  TestYesNoPrompt() = default;
+  virtual ~TestYesNoPrompt() = default;
 };
 
-std::shared_ptr<TestPrompt> testPromptWnd;
+class TestOKPrompt : public Prompt
+{
+public:
+  using Prompt::Prompt;
+  TestOKPrompt() = default;
+  virtual ~TestOKPrompt() = default;
+};
+
+std::shared_ptr<TestYesNoPrompt> yesNoPromptWnd;
+std::shared_ptr<TestOKPrompt> okPrompt;
 std::shared_ptr<TestProgressBar> testProgressBar;
 
 void setup(void)
@@ -133,8 +147,8 @@ void setup(void)
     STY_VISIBLE,
     xPadding,
     xPadding,
-    wm->getGfx()->width() - (xPadding * 2),
-    wm->getGfx()->height() - (xPadding * 2)
+    wm->getScreenWidth() - (xPadding * 2),
+    wm->getScreenHeight() - (xPadding * 2)
   );
   if (!defaultWin) {
     on_fatal_error(ums3);
@@ -163,19 +177,41 @@ void setup(void)
     on_fatal_error(ums3);
   }
 
-  /*testPromptWnd = wm->createPrompt<TestPrompt>(
+  okPrompt = wm->createPrompt<TestOKPrompt>(
     nullptr,
-    "This is a test prompt. Please choose an option.",
-    /* {{100, "Yes"}, {101, "No"}} * /
+    6,
+    STY_PROMPT,
+    "You did a thing, and now this is on your screen.",
     {{100, "OK"}},
     [](WindowID id)
     {
-      TWM_LOG(TWM_DEBUG, "prompt button chosen: %hhu", id);
+      TWM_LOG(TWM_DEBUG, "dismiss OK prompt");
     }
   );
-  if (!testPromptWnd) {
+  if (!okPrompt) {
     on_fatal_error(ums3);
-  }*/
+  }
+
+  yesNoPromptWnd = wm->createPrompt<TestYesNoPrompt>(
+    nullptr,
+    7,
+    STY_PROMPT,
+    "This is a test prompt. Please choose an option.",
+    {{100, "Yes"}, {101, "No"}},
+    [&](WindowID id)
+    {
+      TWM_LOG(TWM_DEBUG, "prompt button chosen: %hhu", id);
+      std::string prompt = "You tapped the ";
+      prompt += id == 100 ? "Yes" : "No";
+      prompt += " button.";
+      okPrompt->setText(prompt);
+      okPrompt->show();
+    }
+  );
+  if (!yesNoPromptWnd) {
+    on_fatal_error(ums3);
+  }
+  button1->setPrompt(yesNoPromptWnd);
 }
 
 float curProgress = 0.0f;
@@ -219,5 +255,4 @@ TODO_refactor:
   }
 
   display.drawRGBBitmap(0, 0, wm->getGfx()->getBuffer(), wm->getGfx()->width(), wm->getGfx()->height());
-  delay(10);
 }
