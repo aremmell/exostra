@@ -7,8 +7,8 @@
 #include <Adafruit_CST8XX.h>
 
 //#define TFT_720_SQUARE
-#define TFT_480_ROUND
-//#define TFT_320_RECTANGLE
+//#define TFT_480_ROUND
+#define TFT_320_RECTANGLE
 
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
 /***
@@ -23,12 +23,6 @@
  */
 # define TFT_CS 12
 # define TFT_DC 13
-/*
- * Display size
- */
-# define TFT_WIDTH 240
-# define TFT_HEIGHT 320
-# define I2C_TOUCH_ADDR 0x38
 # include <Adafruit_ILI9341.h>
 # include <UMS3.h>
 # include <aremmell_um.h>
@@ -40,6 +34,8 @@ using namespace aremmell;
 # else
 #  define PIN_NS
 # endif
+#endif
+
 # if defined(TFT_720_SQUARE)
 #  define TFT_WIDTH 720
 #  define TFT_HEIGHT 720
@@ -55,9 +51,8 @@ using namespace aremmell;
 #  define TS_MINY 0
 #  define TS_MAXX TFT_WIDTH
 #  define TS_MAXY TFT_HEIGHT
+#  define I2C_TOUCH_ADDR 0x38
 # endif
-//0x15 0x3f, 0x38
-#endif
 
 // If no touches are registered in this time, paint the screen
 // black as a pseudo-screensaver. In the future, save what was on
