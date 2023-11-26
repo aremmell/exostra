@@ -1015,7 +1015,7 @@ namespace twm
             if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
                 win->routeMessage(MSG_RESIZE);
             }
-            if (win->isVisible()) {
+            if (win->isVisible() && (!parent || parent->isVisible())) {
                 win->redraw();
             }
             return win;
