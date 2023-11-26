@@ -637,7 +637,7 @@ namespace twm
                     + WindowTextYOffset;
             const Extent xPadding =
                 ((singleLine && !xCenter) ? 0 : getWindowXPadding());
-            const Extent xExtent = rect.right - (xPadding * 2);
+            const Extent xExtent = rect.right - xPadding;
 
             const char* cursor = text;
             while (*cursor != '\0') {
