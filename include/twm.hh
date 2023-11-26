@@ -1280,14 +1280,10 @@ namespace twm
             pm.p1 = p1;
             pm.p2 = p2;
             _queue.push(pm);
-
-            bool wanted = false;
-            switch (pm.msg) {
-                case MSG_INPUT:
-                    wanted = getMsgParamLoWord(pm.p1) == INPUT_TAP;
-                break;
+            if (pm.msg == MSG_INPUT) {
+                return getMsgParamLoWord(pm.p1) == INPUT_TAP;
             }
-            return wanted;
+            return false;
         }
 
         bool processQueue() override
@@ -1431,6 +1427,10 @@ namespace twm
             switch (params.type) {
                 case INPUT_TAP:
                     handled = onTapped(params.x, params.y);
+                break;
+                case INPUT_NONE:
+                default:
+                    TWM_ASSERT(false);
                 break;
             }
             return handled;
