@@ -1180,7 +1180,12 @@ namespace twm
             switch (msg) {
                 case MSG_CREATE:  return onCreate(p1, p2);
                 case MSG_DESTROY: return onDestroy(p1, p2);
-                case MSG_DRAW:    return onDraw(p1, p2);
+                case MSG_DRAW: {
+                    if (!isVisible() || !isAlive()) {
+                        return false;
+                    }
+                    return onDraw(p1, p2);
+                }
                 case MSG_INPUT:   return onInput(p1, p2);
                 case MSG_EVENT:   return onEvent(p1, p2);
                 case MSG_RESIZE:  return onResize(p1, p2);
