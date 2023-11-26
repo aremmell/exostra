@@ -1,3 +1,10 @@
+#include <twm.hh>
+#include <Arduino.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Arduino_GFX_Library.h>
+#include <Adafruit_FT6206.h>
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
 /***
  * TFT capacative touch on ProS3. Pins:
  * sda 8
@@ -5,42 +12,47 @@
  * tcs 12
  * dc 13
  * rst 14
+ *
+ * The display also uses hardware SPI, plus these pins:
  */
-
-#include <twm.hh>
-#include <SPI.h>
-#include <Wire.h>
-#include <Adafruit_ILI9341.h>
-#include <Adafruit_FT6206.h>
-#include <aremmell_um.h>
-#include <UMS3.h>
-
-// The display also uses hardware SPI, plus these pins:
-#define TFT_CS 12
-#define TFT_DC 13
+# define TFT_CS 12
+# define TFT_DC 13
+/*
+ * Display size
+ */
+# define TFT_WIDTH 240
+# define TFT_HEIGHT 320
+# include <Adafruit_ILI9341.h>
+# include <UMS3.h>
+# include <aremmell_um.h>
+using namespace aremmell;
+// Calibration data
+# define TS_MINX 0
+# define TS_MINY 0
+# define TS_MAXX 240
+# define TS_MAXY 320
+# else // Implied Qualia RGB666 for now.
+# include <Adafruit_CST8XX.h>
+# define TFT_WIDTH 720
+# define TFT_HEIGHT 720
+#endif
 
 // If no touches are registered in this time, paint the screen
 // black as a pseudo-screensaver. In the future, save what was on
 // the screen and restore it after.
 #define TFT_TOUCH_TIMEOUT 60000
 
-// Display size
-#define TFT_WIDTH 240
-#define TFT_HEIGHT 320
-
-// Calibration data
-#define TS_MINX 0
-#define TS_MINY 0
-#define TS_MAXX 240
-#define TS_MAXY 320
-
-using namespace aremmell;
 using namespace twm;
 
 // The FT6206 uses hardware I2C (SCL/SDA)
 Adafruit_FT6206 ctp;
+
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
 Adafruit_ILI9341 display(TFT_CS, TFT_DC);
 UMS3 ums3;
+#else
+
+#endif
 
 auto wm = std::make_shared<TWM>(
   std::make_shared<GFXcanvas16>(TFT_HEIGHT, TFT_WIDTH),
@@ -117,6 +129,15 @@ std::shared_ptr<TestYesNoPrompt> yesNoPromptWnd;
 std::shared_ptr<TestOKPrompt> okPrompt;
 std::shared_ptr<TestProgressBar> testProgressBar;
 
+void on_fatal_error()
+{
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+  aremmell::on_fatal_error(ums3);
+#else
+#error "no support for qualia yet"
+#endif
+}
+
 void setup(void)
 {
   Serial.begin(115200);
@@ -127,11 +148,13 @@ void setup(void)
 
   delay(500);
 
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
   ums3.begin();
+#endif
 
   if (!ctp.begin(40, &Wire)) {
     Serial.println("FT6206: error!");
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
 
   Serial.println("FT6206: OK");
@@ -151,21 +174,21 @@ void setup(void)
     wm->getScreenHeight() - (xPadding * 2)
   );
   if (!defaultWin) {
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
 
   auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
     STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, 40, 50, 0, 0,
     "pres me");
   if (!button1) {
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
 
   auto labelX = defaultWin->getRect().width() - (130 - xPadding);
   auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
     labelX, 50, 130 - xPadding, 30, "A static label");
   if (!label1) {
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
   button1->setLabel(label1);
 
@@ -174,7 +197,7 @@ void setup(void)
     STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, 90 + yPadding,
     defaultWin->getRect().width() - (xPadding * 2), 30, PBR_INDETERMINATE);
   if (!testProgressBar) {
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
 
   okPrompt = wm->createPrompt<TestOKPrompt>(
@@ -189,7 +212,7 @@ void setup(void)
     }
   );
   if (!okPrompt) {
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
 
   yesNoPromptWnd = wm->createPrompt<TestYesNoPrompt>(
@@ -209,7 +232,7 @@ void setup(void)
     }
   );
   if (!yesNoPromptWnd) {
-    on_fatal_error(ums3);
+    on_fatal_error();
   }
   button1->setPrompt(yesNoPromptWnd);
 }

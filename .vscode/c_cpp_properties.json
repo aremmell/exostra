@@ -10,6 +10,8 @@
             "includePath": [
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/include",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/src",
+                "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/GFX Library for Arduino/src",
+                "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit CST8XX Library",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit FT6206 Library",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit ILI9341",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/UMS3 Helper/src",
@@ -252,6 +254,8 @@
                 "path": [
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/include",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/src",
+                    "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/GFX Library for Arduino/src",
+                    "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit CST8XX Library",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit FT6206 Library",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit ILI9341",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/UMS3 Helper/src",
