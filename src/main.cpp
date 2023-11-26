@@ -101,15 +101,16 @@ public:
   void setLabel(const WindowPtr& label) { _label = label; }
   void setPrompt(const WindowPtr& prompt) { _prompt = prompt; }
 
-  void onTapped() override
+  bool onTapped(Coord x, Coord y) override
   {
-    Button::onTapped();
+    Button::onTapped(x, y);
     if (_label) {
       _label->setText("Tapped!");
     }
     if (_prompt) {
       _prompt->show();
     }
+    return true;
   }
 
 private:

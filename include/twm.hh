@@ -176,7 +176,10 @@ namespace twm
     using State = uint16_t;
 
     /** Window message parameter type. */
-    using MsgParam = uintptr_t;
+    using MsgParam = uint64_t;
+
+    /** Window message parameter sub-type. */
+    using MsgParamWord = uint32_t;
 
     /** Use the smallest type that can contain all possible colors. */
 # if defined(TWM_COLOR_MONOCHROME) || defined(TWM_COLOR_256)
@@ -359,6 +362,21 @@ namespace twm
         Coord y = 0;
     };
 
+    inline MsgParam makeMsgParam(MsgParamWord hiWord, MsgParamWord loWord)
+    {
+        return (static_cast<MsgParam>(hiWord) << 32) | (loWord & 0xffffffffU);
+    }
+
+    inline MsgParamWord getMsgParamHiWord(MsgParam msgParam)
+    {
+        return ((msgParam >> 32) & 0xffffffffU);
+    }
+
+    inline MsgParamWord getMsgParamLoWord(MsgParam msgParam)
+    {
+        return (msgParam & 0xffffffffU);
+    }
+
     class ITheme
     {
     public:
@@ -443,7 +461,7 @@ namespace twm
         TWM_CONST(Color, ButtonFrameColorPressed, 0x6b6d);
         TWM_CONST(Color, ButtonBgColorPressed, 0x738e);
         TWM_CONST(Color, ButtonTextColorPressed, 0xffff);
-        TWM_CONST(u_long, ButtonTappedDuration, 250);
+        TWM_CONST(u_long, ButtonTappedDuration, 200);
         TWM_CONST(Coord, ButtonCornerRadius, 4);
         TWM_CONST(Color, ProgressBarBackgroundColor, 0xef5d);
         TWM_CONST(Color, ProgressBarFrameColor, 0x9cf3);
@@ -839,12 +857,12 @@ namespace twm
         virtual void setText(const std::string& text) = 0;
 
         virtual bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
-        virtual void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
+        virtual bool queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
         virtual bool processQueue() = 0;
 
         virtual bool redraw() = 0;
-        virtual bool hide() = 0;
-        virtual bool show() = 0;
+        virtual bool hide() noexcept = 0;
+        virtual bool show() noexcept = 0;
         virtual bool isVisible() const noexcept = 0;
         virtual bool processInput(InputParams* params) = 0;
         virtual bool destroy() = 0;
@@ -857,6 +875,8 @@ namespace twm
         virtual bool onInput(MsgParam p1, MsgParam p2) = 0;
         virtual bool onEvent(MsgParam p1, MsgParam p2) = 0;
         virtual bool onResize(MsgParam p1, MsgParam p2) = 0;
+
+        virtual bool onTapped(Coord x, Coord y) = 0;
     };
 
     using WindowPtr          = std::shared_ptr<IWindow>;
@@ -1250,7 +1270,7 @@ namespace twm
             }
         }
 
-        void queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
+        bool queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
         {
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_queueMtx);
@@ -1260,6 +1280,14 @@ namespace twm
             pm.p1 = p1;
             pm.p2 = p2;
             _queue.push(pm);
+
+            bool wanted = false;
+            switch (pm.msg) {
+                case MSG_INPUT:
+                    wanted = getMsgParamLoWord(pm.p1) == INPUT_TAP;
+                break;
+            }
+            return wanted;
         }
 
         bool processQueue() override
@@ -1294,7 +1322,7 @@ namespace twm
             return redrawn;
         }
 
-        bool hide() override
+        bool hide() noexcept override
         {
             if (!isVisible()) {
                 return false;
@@ -1303,7 +1331,7 @@ namespace twm
             return true;
         }
 
-        bool show() override
+        bool show() noexcept override
         {
             if (isVisible()) {
                 return false;
@@ -1336,9 +1364,10 @@ namespace twm
                 return true;
             });
             if (!handled) {
-                handled = routeMessage(
+                handled = queueMessage(
                     MSG_INPUT,
-                    reinterpret_cast<MsgParam>(params)
+                    makeMsgParam(0, params->type),
+                    makeMsgParam(params->x, params->y)
                 );
                 if (handled) {
                     params->handledBy = getID();
@@ -1389,9 +1418,23 @@ namespace twm
             return false;
         }
 
-        /** MSG_INPUT: param1 = InputParams*, param2 = nullptr. Returns true if
-         * the input event was consumed by this window, false otherwise. */
-        bool onInput(MsgParam p1, MsgParam p2) override { return false; }
+        /** MSG_INPUT: param1 = (loword: type), param2 = (hiword: x, loword: y).
+         * Returns true if the input event was consumed by this window, false otherwise. */
+        bool onInput(MsgParam p1, MsgParam p2) override
+        {
+            InputParams params;
+            params.type = static_cast<InputType>(getMsgParamLoWord(p1));
+            params.x    = getMsgParamHiWord(p2);
+            params.y    = getMsgParamLoWord(p2);
+
+            bool handled = false;
+            switch (params.type) {
+                case INPUT_TAP:
+                    handled = onTapped(params.x, params.y);
+                break;
+            }
+            return handled;
+        }
 
         /** MSG_EVENT: param1 = EventType, param2 = child WindowID. */
         bool onEvent(MsgParam p1, MsgParam p2) override { return true; }
@@ -1401,6 +1444,8 @@ namespace twm
             TWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
             return false;
         }
+
+        bool onTapped(Coord x, Coord y) override { return false; }
 
         TWMPtr _getWM() const
         {
@@ -1452,10 +1497,10 @@ namespace twm
         Button() = default;
         virtual ~Button() = default;
 
-        virtual void onTapped()
+        bool onTapped(Coord x, Coord y) override
         {
             _lastTapped = millis();
-            queueMessage(MSG_DRAW);
+            routeMessage(MSG_DRAW);
             auto parent = getParent();
             TWM_ASSERT(parent);
             if (parent) {
@@ -1465,6 +1510,7 @@ namespace twm
                     getID()
                 );
             }
+            return true;
         }
 
         bool onDraw(MsgParam p1, MsgParam p2) override
@@ -1476,17 +1522,6 @@ namespace twm
                 theme->drawButtonBackground(pressed, rect);
                 theme->drawButtonFrame(pressed, rect);
                 theme->drawButtonLabel(getText().c_str(), pressed, rect);
-                return true;
-            }
-            return false;
-        }
-
-        bool onInput(MsgParam p1, MsgParam p2) override
-        {
-            InputParams* ip = reinterpret_cast<InputParams*>(p1);
-            TWM_ASSERT(ip != nullptr);
-            if (ip != nullptr && ip->type == INPUT_TAP) {
-                onTapped();
                 return true;
             }
             return false;
@@ -1615,7 +1650,7 @@ namespace twm
                     _label = wm->createWindow<MultilineLabel>(
                         shared_from_this(),
                         WID_PROMPTLBL,
-                        STY_CHILD | STY_VISIBLE,
+                        STY_CHILD | STY_VISIBLE | STY_LABEL,
                         rect.left + theme->getWindowXPadding(),
                         rect.top + theme->getWindowYPadding(),
                         rect.right - rect.left - (theme->getWindowXPadding() * 2),
@@ -1679,10 +1714,10 @@ namespace twm
         {
             switch (static_cast<EventType>(param1)) {
                 case EVT_CHILD_TAPPED: {
+                    hide();
                     if (_callback) {
                         _callback(static_cast<WindowID>(param2));
                     }
-                    hide();
                 }
                 break;
                 default:
