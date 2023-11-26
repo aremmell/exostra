@@ -30,13 +30,11 @@
 # include <cstdint>
 # include <cinttypes>
 # include <type_traits>
-# include <initializer_list>
-# include <stdexcept>
 # include <functional>
 # include <string>
 # include <memory>
-# include <vector>
 # include <queue>
+# include <vector>
 # include <mutex>
 # include <map>
 
