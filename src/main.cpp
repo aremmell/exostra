@@ -307,7 +307,6 @@ void loop()
     if (screensaverOn) {
       screensaverOn = false;
     }
-
     TS_Point pt = focal_ctp.getPoint();
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
     // Rotated rectangular display.
@@ -319,6 +318,10 @@ void loop()
 #endif
     wm->hitTest(pt.x, pt.y);
   } else if (!isFocalTouch && cst_ctp.touched()) {
+    lastTouch = millis();
+    if (screensaverOn) {
+      screensaverOn = false;
+    }
     CST_TS_Point pt = cst_ctp.getPoint();
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
     // Rotated rectangular display.
@@ -331,7 +334,7 @@ void loop()
     wm->hitTest(pt.x, pt.y);
   } else {
     if (!screensaverOn && millis() - lastTouch > TFT_TOUCH_TIMEOUT) {
-TODO_refactor:
+      // TODO: refactor
       wm->getTheme()->drawScreensaver();
       screensaverOn = true;
     }
