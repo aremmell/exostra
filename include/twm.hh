@@ -40,7 +40,8 @@
 
 # include <Adafruit_GFX.h>
 # include <Fonts/FreeSans9pt7b.h>
-# include <Fonts/FreeMono9pt7b.h>
+# include <Fonts/FreeSans12pt7b.h>
+# include <Fonts/FreeSans18pt7b.h>
 # include <glcdfont.c>
 
 # if !defined(_ARDUINO_GFX_H_)
@@ -379,15 +380,21 @@ namespace twm
         virtual void setGfxDriver(const GfxDriverPtr& gfx) = 0;
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
-        virtual const GFXfont* getDefaultFont() const = 0;
-        virtual const GFXfont* getDefaultMonoFont() const = 0;
+        virtual void setFont(const GFXfont* font) const = 0;
+        virtual void setSmallFont() const = 0;
+        virtual void setMediumFont() const = 0;
+        virtual void setLargeFont() const = 0;
+        virtual void autoSelectFont() const = 0;
+        virtual const GFXfont* getSmallFont() const = 0;
+        virtual const GFXfont* getMediumFont() const = 0;
+        virtual const GFXfont* getLargeFont() const = 0;
         virtual Extent getWindowXPadding() const = 0;
         virtual Extent getWindowYPadding() const = 0;
+        virtual Extent getButtonWidth() const = 0;
+        virtual Extent getButtonHeight() const = 0;
         virtual uint8_t getButtonTextSize() const = 0;
         virtual Color getButtonTextColor() const = 0;
         virtual Color getButtonTextColorPressed() const = 0;
-        virtual Extent getButtonWidth() const = 0;
-        virtual Extent getButtonHeight() const = 0;
         virtual Extent getButtonLabelPadding() const = 0;
         virtual u_long getButtonTappedDuration() const = 0;
         virtual uint8_t getWindowTextSize() const = 0;
@@ -412,15 +419,18 @@ namespace twm
     public:
         TWM_CONST(Color, ScreensaverColor, 0x0000);
         TWM_CONST(Color, DesktopWindowColor, 0xb59a);
-        TWM_CONST(Extent, WindowXPadding, 20);
-        TWM_CONST(Extent, WindowYPadding, 20);
+        TWM_CONST(const GFXfont*, SmallFont, &FreeSans9pt7b);
+        TWM_CONST(const GFXfont*, MediumFont, &FreeSans12pt7b);
+        TWM_CONST(const GFXfont*, LargeFont, &FreeSans18pt7b);
+        TWM_CONST(float, WindowXPadFactor, 0.07f);
+        TWM_CONST(float, WindowYPadFactor, 0.07f);
+        TWM_CONST(float, ButtonWidthFactor, 0.27f);
+        TWM_CONST(float, ButtonHeightFactor, ButtonWidthFactor * 0.57f);
         TWM_CONST(Extent, WindowFrameThickness, 1);
         TWM_CONST(Color, WindowFrameColor, 0x7bef);
         TWM_CONST(Color, WindowFrameShadowColor, 0xad75);
         TWM_CONST(Color, WindowBgColor, 0xc618);
         TWM_CONST(Color, WindowTextColor, 0x0000);
-        TWM_CONST(Extent, ButtonWidth, 90);
-        TWM_CONST(Extent, ButtonHeight, 40);
         TWM_CONST(Coord, ButtonCornerRadius, 4);
         TWM_CONST(Color, ButtonFrameColor, 0x4208);
         TWM_CONST(Color, ButtonBgColor, 0x7bef);
@@ -434,11 +444,11 @@ namespace twm
         TWM_CONST(Color, ProgressBarFrameColor, 0x7bef);
         TWM_CONST(Color, ProgressBarProgressColor, 0x0ce0);
         TWM_CONST(float, ProgressBarIndeterminateBandWidth, 0.33f);
+        TWM_CONST(Coord, ScreenThresholdSmall, 320);
+        TWM_CONST(Coord, ScreenThresholdMedium, 480);
         TWM_CONST(uint8_t, WindowTextSize, 1);
         TWM_CONST(uint8_t, ButtonTextSize, 1);
         TWM_CONST(Coord, WindowTextYOffset, 4);
-        TWM_CONST(const GFXfont*, DefaultFont, &FreeSans9pt7b);
-        TWM_CONST(const GFXfont*, DefaultMonoFont, &FreeMono9pt7b);
 
         void setGfxDriver(const GfxDriverPtr& gfx)
         {
@@ -456,16 +466,75 @@ namespace twm
             _gfx->fillRect(0, 0, _gfx->width(), _gfx->height(), DesktopWindowColor);
         }
 
-        const GFXfont* getDefaultFont() const final { return DefaultFont; }
-        const GFXfont* getDefaultMonoFont() const final { return DefaultMonoFont; }
+        void setFont(const GFXfont* font) const final
+        {
+            _gfx->setFont(font);
+        }
 
-        Extent getWindowXPadding() const final { return WindowXPadding; }
-        Extent getWindowYPadding() const final { return WindowYPadding; }
+        void setSmallFont() const final
+        {
+            _gfx->setFont(getSmallFont());
+        }
+
+        void setMediumFont() const final
+        {
+            _gfx->setFont(getMediumFont());
+        }
+
+        void setLargeFont() const final
+        {
+            _gfx->setFont(getLargeFont());
+        }
+
+        void autoSelectFont() const final
+        {
+            if (_gfx->width() <= ScreenThresholdSmall) {
+                setSmallFont();
+            } else if (_gfx->width() <= ScreenThresholdMedium) {
+                setMediumFont();
+            } else {
+                setLargeFont();
+            }
+        }
+
+        const GFXfont* getSmallFont() const final
+        {
+            return SmallFont;
+        }
+
+        const GFXfont* getMediumFont() const
+        {
+            return MediumFont;
+        }
+
+        const GFXfont* getLargeFont() const
+        {
+            return LargeFont;
+        }
+
+        Extent getWindowXPadding() const final
+        {
+            return abs(_gfx->width() * WindowXPadFactor);
+        }
+
+        Extent getWindowYPadding() const final
+        {
+            return abs(_gfx->height() * WindowYPadFactor);
+        }
+
+        Extent getButtonWidth() const final
+        {
+            return abs(_gfx->width() * ButtonWidthFactor);
+        }
+
+        Extent getButtonHeight() const final
+        {
+            return abs(_gfx->height() * ButtonHeightFactor);
+        }
+
         uint8_t getButtonTextSize() const final { return ButtonTextSize; }
         Color getButtonTextColor() const final { return ButtonTextColor; }
         Color getButtonTextColorPressed() const final { return ButtonTextColorPressed; }
-        Extent getButtonWidth() const final { return ButtonWidth; }
-        Extent getButtonHeight() const final { return ButtonHeight; }
         Extent getButtonLabelPadding() const final { return ButtonLabelPadding; }
         u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
         uint8_t getWindowTextSize() const final { return WindowTextSize; }
@@ -509,9 +578,11 @@ namespace twm
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
             Extent xAccum = 0;
-            Extent yAccum = rect.top + (singleLine ? (rect.height() / 2) : WindowYPadding);
+            Extent yAccum =
+                rect.top + (singleLine ? (rect.height() / 2) : getWindowYPadding())
+                    + WindowTextYOffset;
             const Extent xPadding =
-                ((singleLine && !xCenter) ? 0 : WindowXPadding);
+                ((singleLine && !xCenter) ? 0 : getWindowXPadding());
             const Extent xExtent = rect.right - (xPadding * 2);
 
             const char* cursor = text;
@@ -528,8 +599,8 @@ namespace twm
                         &yAdv,
                         &xOff,
                         &yOff,
-                        WindowTextSize,
-                        WindowTextSize,
+                        textSize,
+                        textSize,
                         DefaultFont
                     );
                     charXAdvs.push_back(xAdv);
@@ -840,7 +911,7 @@ namespace twm
             TWM_ASSERT(_theme);
             if (_theme && _gfx) {
                 _theme->setGfxDriver(_gfx);
-                _gfx->setFont(_theme->getDefaultFont());
+                _theme->autoSelectFont();
             }
             _registry = std::make_shared<WindowContainer>();
             TWM_ASSERT(_registry);
@@ -1473,10 +1544,10 @@ namespace twm
                         shared_from_this(),
                         WID_PROMPTLBL,
                         STY_CHILD | STY_VISIBLE,
-                        rect.top + theme->getWindowXPadding(),
-                        rect.left + theme->getWindowYPadding(),
-                        rect.width() - theme->getWindowXPadding() * 2,
-                        rect.height() - ((theme->getWindowYPadding() * 3) + theme->getButtonHeight()),
+                        rect.left + theme->getWindowXPadding(),
+                        rect.top + theme->getWindowYPadding(),
+                        rect.right - rect.left - (theme->getWindowXPadding() * 2),
+                        rect.bottom - rect.top - ((theme->getWindowYPadding() * 3) + theme->getButtonHeight()),
                         getText()
                     );
                     if (!_label) {
