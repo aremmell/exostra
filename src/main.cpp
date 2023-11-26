@@ -98,7 +98,7 @@ Arduino_RGB_Display *display = new Arduino_RGB_Display(
 # endif
 #endif
 
-auto wm = std::make_shared<TWM>(
+auto wm = std::make_shared<WindowManager>(
   std::make_shared<GFXcanvas16>(TFT_HEIGHT, TFT_WIDTH),
   std::make_shared<DefaultTheme>()
 );
@@ -154,6 +154,14 @@ public:
   virtual ~TestProgressBar() = default;
 };
 
+class TestCheckbox : public CheckBox
+{
+public:
+  using CheckBox::CheckBox;
+  TestCheckbox() = default;
+  virtual ~TestCheckbox() = default;
+};
+
 class TestYesNoPrompt : public Prompt
 {
 public:
@@ -173,6 +181,7 @@ public:
 std::shared_ptr<TestYesNoPrompt> yesNoPromptWnd;
 std::shared_ptr<TestOKPrompt> okPrompt;
 std::shared_ptr<TestProgressBar> testProgressBar;
+std::shared_ptr<TestCheckbox> testCheckbox;
 
 void on_fatal_error()
 {
@@ -285,6 +294,16 @@ void setup(void)
     STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2), cy, PBR_INDETERMINATE);
   if (!testProgressBar) {
+    on_fatal_error();
+  }
+
+  x = defaultWin->getRect().left + xPadding;
+  y = testProgressBar->getRect().bottom + yPadding;
+  cx = scaledValue(100);
+  cy = scaledValue(30);
+  testCheckbox = wm->createWindow<TestCheckbox>(defaultWin, 8,
+    STY_CHILD | STY_VISIBLE | STY_CHECKBOX, x, y, cx, cy, "Testing 123");
+  if (!testCheckbox) {
     on_fatal_error();
   }
 
