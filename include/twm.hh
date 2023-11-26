@@ -257,21 +257,6 @@ namespace twm
             bottom -= px;
         }
 
-        inline bool isSquare() const noexcept
-        {
-            return width() == height();
-        }
-
-        inline bool isHorizontal() const noexcept
-        {
-            return width() > height();
-        }
-
-        inline bool isVertical() const noexcept
-        {
-            return height() > width();
-        }
-
         inline bool overlaps(const Rect& other) const noexcept
         {
             if ((left >= other.left && left <= other.right) ||
