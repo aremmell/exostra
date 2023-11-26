@@ -1,6 +1,6 @@
-/* #include <Arduino.h>
+#include <Arduino.h>
 #include <SPI.h>
-#include <Wire.h> */
+#include <Wire.h>
 #include <Arduino_GFX_Library.h>
 #include <twm.hh>
 #include <Adafruit_FT6206.h>
@@ -266,7 +266,7 @@ void setup(void)
     {{100, "OK"}},
     [](WindowID id)
     {
-      TWM_LOG(TWM_DEBUG, "dismiss OK prompt");
+      // NOOP.
     }
   );
   if (!okPrompt) {
@@ -281,7 +281,6 @@ void setup(void)
     {{100, "Yes"}, {101, "No"}},
     [&](WindowID id)
     {
-      TWM_LOG(TWM_DEBUG, "prompt button chosen: %hhu", id);
       std::string prompt = "You tapped the ";
       prompt += id == 100 ? "Yes" : "No";
       prompt += " button.";
@@ -339,7 +338,6 @@ void loop()
       screensaverOn = true;
     }
   }
-
   if (!screensaverOn) {
     if (curProgress < 100.0f) {
       curProgress += 1.0f;
@@ -349,7 +347,6 @@ void loop()
     testProgressBar->setProgressValue(curProgress);
     wm->update();
   }
-
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
   display.drawRGBBitmap(
     0,

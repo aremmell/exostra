@@ -431,7 +431,7 @@ namespace twm
         TWM_CONST(Color, ButtonFrameColorPressed, 0x4208);
         TWM_CONST(Color, ButtonBgColorPressed, 0x4208);
         TWM_CONST(Color, ButtonTextColorPressed, 0xffff);
-        TWM_CONST(u_long, ButtonTappedDuration, 100);
+        TWM_CONST(u_long, ButtonTappedDuration, 250);
         TWM_CONST(Color, ProgressBarBackgroundColor, 0xc618);
         TWM_CONST(Color, ProgressBarFrameColor, 0x7bef);
         TWM_CONST(Color, ProgressBarProgressColor, 0x0ce0);
@@ -510,7 +510,8 @@ namespace twm
 
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
-            Extent xAccum = 0, yAccum = rect.top + WindowYPadding;
+            Extent xAccum = 0;
+            Extent yAccum = rect.top + (singleLine ? (rect.height() / 2) : WindowYPadding);
             const Extent xPadding =
                 ((singleLine && !xCenter) ? 0 : WindowXPadding);
             const Extent xExtent = rect.right - (xPadding * 2);
@@ -558,8 +559,8 @@ namespace twm
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + xPadding;
                 while (old_cursor < cursor) {
-                    _gfx->drawChar(xAccum, yAccum, *old_cursor++, WindowTextColor,
-                        WindowTextColor, WindowTextSize);
+                    _gfx->drawChar(xAccum, yAccum, *old_cursor++, textColor,
+                        textColor, textSize);
                     xAccum += charXAdvs[
                         charXAdvs.size() - 2 - ((cursor + rewound) - old_cursor - 1)
                     ];
@@ -1313,6 +1314,7 @@ namespace twm
         virtual void onTapped()
         {
             _lastTapped = millis();
+            queueMessage(MSG_DRAW);
             auto parent = getParent();
             TWM_ASSERT(parent);
             if (parent) {
@@ -1359,7 +1361,7 @@ namespace twm
                 Extent width, height;
                 gfx->getTextBounds(getText().c_str(), 0, 0, &x, &y, &width, &height);
                 Rect rect = getRect();
-                rect.right = rect.left + max(width, theme->getButtonWidth())  + (theme->getButtonLabelPadding() * 2);
+                rect.right = rect.left + max(width, theme->getButtonWidth()) + (theme->getButtonLabelPadding() * 2);
                 rect.bottom = rect.top + theme->getButtonHeight();
                 setRect(rect);
                 // TODO: if not autosize, clip label, perhaps with ellipsis.
