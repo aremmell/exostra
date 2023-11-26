@@ -362,6 +362,12 @@ namespace twm
     class ITheme
     {
     public:
+        enum ScreenSize
+        {
+            Small = 0,
+            Medium,
+            Large
+        };
         virtual void setGfxDriver(const GfxDriverPtr&) = 0;
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
@@ -373,17 +379,22 @@ namespace twm
         virtual const GFXfont* getSmallFont() const = 0;
         virtual const GFXfont* getMediumFont() const = 0;
         virtual const GFXfont* getLargeFont() const = 0;
+        virtual ScreenSize getScreenSize() const = 0;
         virtual Extent getScaledValue(Extent) const = 0;
         virtual Extent getWindowXPadding() const = 0;
         virtual Extent getWindowYPadding() const = 0;
         virtual Extent getButtonWidth() const = 0;
         virtual Extent getButtonHeight() const = 0;
-        virtual Extent getProgressBarHeight() const = 0;
         virtual uint8_t getButtonTextSize() const = 0;
         virtual Color getButtonTextColor() const = 0;
         virtual Color getButtonTextColorPressed() const = 0;
+        virtual Color getButtonBgColor() const = 0;
+        virtual Color getButtonBgColorPressed() const = 0;
+        virtual Color getButtonFrameColor() const = 0;
+        virtual Color getButtonFrameColorPressed() const = 0;
         virtual Extent getButtonLabelPadding() const = 0;
         virtual u_long getButtonTappedDuration() const = 0;
+        virtual Coord getButtonCornerRadius() const = 0;
         virtual uint8_t getWindowTextSize() const = 0;
         virtual Color getWindowTextColor() const = 0;
         virtual Extent getWindowFrameThickness() const = 0;
@@ -394,6 +405,8 @@ namespace twm
         virtual void drawButtonFrame(bool, const Rect&) const = 0;
         virtual void drawButtonBackground(bool, const Rect&) const = 0;
         virtual void drawButtonLabel(const char*, bool, const Rect&) const = 0;
+        virtual Extent getProgressBarHeight() const = 0;
+        virtual float getProgressBarIndeterminateStep() const = 0;
         virtual void drawProgressBarBackground(const Rect&) const = 0;
         virtual void drawProgressBarFrame(const Rect&) const = 0;
         virtual void drawProgressBarProgress(const Rect&, float) const = 0;
@@ -416,26 +429,27 @@ namespace twm
         TWM_CONST(float, WindowXPadFactor, 0.07f);
         TWM_CONST(float, WindowYPadFactor, 0.07f);
         TWM_CONST(float, ButtonWidthFactor, 0.27f);
-        TWM_CONST(float, ButtonHeightFactor, ButtonWidthFactor * 0.57f);
-        TWM_CONST(float, ProgressBarHeightFactor, 0.17f);
+        TWM_CONST(float, ButtonHeightFactor, ButtonWidthFactor * 0.52f);
+        TWM_CONST(float, ProgressBarHeightFactor, 0.12f);
         TWM_CONST(Extent, WindowFrameThickness, 1);
-        TWM_CONST(Color, WindowFrameColor, 0x7bef);
-        TWM_CONST(Color, WindowFrameShadowColor, 0xad75);
-        TWM_CONST(Color, WindowBgColor, 0xc618);
+        TWM_CONST(Color, WindowFrameColor, 0x9cf3);
+        TWM_CONST(Color, WindowFrameShadowColor, 0xb5b6);
+        TWM_CONST(Color, WindowBgColor, 0xdedb);
         TWM_CONST(Color, WindowTextColor, 0x0000);
-        TWM_CONST(Coord, ButtonCornerRadius, 4);
-        TWM_CONST(Color, ButtonFrameColor, 0x4208);
-        TWM_CONST(Color, ButtonBgColor, 0x7bef);
+        TWM_CONST(Color, ButtonFrameColor, 0x6b6d);
+        TWM_CONST(Color, ButtonBgColor, 0x8c71);
         TWM_CONST(Color, ButtonTextColor, 0xffff);
         TWM_CONST(Extent, ButtonLabelPadding, 10);
-        TWM_CONST(Color, ButtonFrameColorPressed, 0x4208);
-        TWM_CONST(Color, ButtonBgColorPressed, 0x4208);
+        TWM_CONST(Color, ButtonFrameColorPressed, 0x6b6d);
+        TWM_CONST(Color, ButtonBgColorPressed, 0x738e);
         TWM_CONST(Color, ButtonTextColorPressed, 0xffff);
         TWM_CONST(u_long, ButtonTappedDuration, 250);
-        TWM_CONST(Color, ProgressBarBackgroundColor, 0xc618);
-        TWM_CONST(Color, ProgressBarFrameColor, 0x7bef);
+        TWM_CONST(Coord, ButtonCornerRadius, 4);
+        TWM_CONST(Color, ProgressBarBackgroundColor, 0xef5d);
+        TWM_CONST(Color, ProgressBarFrameColor, 0x9cf3);
         TWM_CONST(Color, ProgressBarProgressColor, 0x0ce0);
         TWM_CONST(float, ProgressBarIndeterminateBandWidth, 0.33f);
+        TWM_CONST(float, ProgressBarIndeterminateStep, 1.0f);
         TWM_CONST(Coord, ScreenThresholdSmall, 320);
         TWM_CONST(Coord, ScreenThresholdMedium, 480);
         TWM_CONST(uint8_t, WindowTextSize, 1);
@@ -458,63 +472,55 @@ namespace twm
             _gfx->fillRect(0, 0, _gfx->width(), _gfx->height(), DesktopWindowColor);
         }
 
-        void setFont(const GFXfont* font) const final
-        {
-            _gfx->setFont(font);
-        }
-
-        void setSmallFont() const final
-        {
-            _gfx->setFont(getSmallFont());
-        }
-
-        void setMediumFont() const final
-        {
-            _gfx->setFont(getMediumFont());
-        }
-
-        void setLargeFont() const final
-        {
-            _gfx->setFont(getLargeFont());
-        }
+        void setFont(const GFXfont* font) const final { _gfx->setFont(font); }
+        void setSmallFont() const final { _gfx->setFont(getSmallFont()); }
+        void setMediumFont() const final { _gfx->setFont(getMediumFont()); }
+        void setLargeFont() const final { _gfx->setFont(getLargeFont()); }
 
         const GFXfont* autoSelectFont() const final
         {
             const GFXfont* font = nullptr;
-            if (_gfx->width() <= ScreenThresholdSmall) {
-                font = getSmallFont();
-            } else if (_gfx->width() <= ScreenThresholdMedium) {
-                font = getMediumFont();
-            } else {
-                font = getLargeFont();
+            switch (getScreenSize()) {
+                default:
+                case ScreenSize::Small:
+                    font = getSmallFont();
+                break;
+                case ScreenSize::Medium:
+                    font = getMediumFont();
+                break;
+                case ScreenSize::Large:
+                    font = getLargeFont();
+                break;
             }
             setFont(font);
             return font;
         }
 
-        const GFXfont* getSmallFont() const final
-        {
-            return SmallFont;
-        }
+        const GFXfont* getSmallFont() const final { return SmallFont; }
+        const GFXfont* getMediumFont() const final { return MediumFont; }
+        const GFXfont* getLargeFont() const final { return LargeFont; }
 
-        const GFXfont* getMediumFont() const
+        ScreenSize getScreenSize() const final
         {
-            return MediumFont;
-        }
-
-        const GFXfont* getLargeFont() const
-        {
-            return LargeFont;
+            if (_gfx->width() <= ScreenThresholdSmall) {
+                return ScreenSize::Small;
+            } else if (_gfx->width() <= ScreenThresholdMedium) {
+                return ScreenSize::Medium;
+            } else {
+                return ScreenSize::Large;
+            }
         }
 
         Extent getScaledValue(Extent value) const final
         {
-            if (_gfx->width() <= ScreenThresholdSmall) {
-                return abs(value * SmallScaleFactor);
-            } else if (_gfx->width() <= ScreenThresholdMedium) {
-                return abs(value * MediumScaleFactor);
-            } else {
-                return abs(value * LargeScaleFactor);
+            switch (getScreenSize()) {
+                default:
+                case ScreenSize::Small:
+                    return abs(value * SmallScaleFactor);
+                case ScreenSize::Medium:
+                    return abs(value * MediumScaleFactor);
+                case ScreenSize::Large:
+                    return abs(value * LargeScaleFactor);
             }
         }
 
@@ -538,14 +544,26 @@ namespace twm
             return abs(_gfx->height() * ButtonHeightFactor);
         }
 
-        Extent getProgressBarHeight() const final
+        Coord getButtonCornerRadius() const final
         {
-            return abs(_gfx->height() * ProgressBarHeightFactor);
+            switch (getScreenSize()) {
+                default:
+                case ScreenSize::Small:
+                    return ButtonCornerRadius;
+                case ScreenSize::Medium:
+                    return ButtonCornerRadius + 1;
+                case ScreenSize::Large:
+                    return ButtonCornerRadius + 2;
+            }
         }
 
         uint8_t getButtonTextSize() const final { return ButtonTextSize; }
         Color getButtonTextColor() const final { return ButtonTextColor; }
         Color getButtonTextColorPressed() const final { return ButtonTextColorPressed; }
+        Color getButtonBgColor() const final { return ButtonBgColor; }
+        Color getButtonBgColorPressed() const final { return ButtonBgColorPressed; }
+        Color getButtonFrameColor() const final { return ButtonFrameColor; }
+        Color getButtonFrameColorPressed() const final { return ButtonFrameColorPressed; }
         Extent getButtonLabelPadding() const final { return ButtonLabelPadding; }
         u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
         uint8_t getWindowTextSize() const final { return WindowTextSize; }
@@ -559,19 +577,24 @@ namespace twm
         void drawWindowFrame(const Rect& rect) const final
         {
             Rect tmp = rect;
-            tmp.deflate(getWindowFrameThickness());
-            _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
-                WindowFrameColor);
-            _gfx->drawFastHLine(
-                rect.left + (getWindowFrameThickness() * 2),
-                rect.bottom - getWindowFrameThickness(),
-                rect.width() - (getWindowFrameThickness() * 2),
+            auto pixels = getWindowFrameThickness();
+            while (pixels-- > 0) {
+                _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
+                    WindowFrameColor);
+                tmp.deflate(1);
+            }
+            _gfx->drawLine(
+                rect.left + 1,
+                rect.bottom,
+                rect.left + (rect.width() - 1),
+                rect.bottom,
                 WindowFrameShadowColor
             );
-            _gfx->drawFastVLine(
-                rect.right - getWindowFrameThickness(),
-                rect.top + (getWindowFrameThickness() * 2),
-                rect.height() - (getWindowFrameThickness() * 2),
+            _gfx->drawLine(
+                rect.right,
+                rect.top + 1,
+                rect.right,
+                rect.top + (rect.height() - 1),
                 WindowFrameShadowColor
             );
         }
@@ -585,9 +608,6 @@ namespace twm
         void drawText(const char* text, uint8_t flags, const Rect& rect,
             uint8_t textSize, Color textColor) const final
         {
-            _gfx->setTextSize(textSize);
-            _gfx->setTextColor(textColor);
-
             bool xCenter = bitsHigh(flags, DTF_CENTER);
             bool singleLine = bitsHigh(flags, DTF_SINGLE);
 
@@ -661,20 +681,50 @@ namespace twm
 
         void drawButtonFrame(bool pressed, const Rect& rect) const final
         {
-            _gfx->drawRoundRect(rect.left, rect.top, rect.width(), rect.height(),
-                ButtonCornerRadius, pressed ? ButtonFrameColorPressed : ButtonFrameColor);
+            _gfx->drawRoundRect(
+                rect.left,
+                rect.top,
+                rect.width(),
+                rect.height(),
+                getButtonCornerRadius(),
+                pressed ? getButtonFrameColorPressed() : getButtonFrameColor()
+            );
         }
 
         void drawButtonBackground(bool pressed, const Rect& rect) const final
         {
-            _gfx->fillRoundRect(rect.left, rect.top, rect.width(), rect.height(),
-                ButtonCornerRadius, pressed ? ButtonBgColorPressed : ButtonBgColor);
+            _gfx->fillRoundRect(
+                rect.left,
+                rect.top,
+                rect.width(),
+                rect.height(),
+                getButtonCornerRadius(),
+                pressed ? getButtonBgColorPressed() : getButtonBgColor()
+            );
         }
 
         void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const final
         {
             drawText(lbl, DTF_SINGLE | DTF_CENTER, rect, getButtonTextSize(),
                 pressed ? getButtonTextColorPressed() : getButtonTextColor());
+        }
+
+        Extent getProgressBarHeight() const final
+        {
+            return abs(_gfx->height() * ProgressBarHeightFactor);
+        }
+
+        float getProgressBarIndeterminateStep() const final
+        {
+            switch (getScreenSize()) {
+                default:
+                case ScreenSize::Small:
+                    return ProgressBarIndeterminateStep;
+                case ScreenSize::Medium:
+                    return ProgressBarIndeterminateStep * 2;
+                case ScreenSize::Large:
+                    return ProgressBarIndeterminateStep * 4;
+            }
         }
 
         void drawProgressBarBackground(const Rect& rect) const final
@@ -686,35 +736,40 @@ namespace twm
         void drawProgressBarFrame(const Rect& rect) const final
         {
             Rect tmp = rect;
-            tmp.deflate(getWindowFrameThickness());
-            _gfx->drawRect(rect.left, rect.top, rect.width(), rect.height(),
-                ProgressBarFrameColor);
+            auto pixels = getWindowFrameThickness();
+            while (pixels-- > 0) {
+                _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
+                    ProgressBarFrameColor);
+                tmp.deflate(1);
+            }
         }
 
         void drawProgressBarProgress(const Rect& rect, float percent) const final
         {
             TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
-            Rect progressRect = rect;
-            progressRect.deflate(getWindowFrameThickness() * 2);
-            float progressWidth = (progressRect.width() * (percent / 100.0f));
-            progressRect.right = progressRect.left + abs(progressWidth);
-            _gfx->fillRect(progressRect.left, progressRect.top, progressRect.width(),
-                progressRect.height(), ProgressBarProgressColor);
+            Rect barRect = rect;
+            barRect.deflate(getWindowFrameThickness() * 2);
+            float progressWidth = (barRect.width() * (min(100.0f, percent) / 100.0f));
+            barRect.right = barRect.left + abs(progressWidth);
+            _gfx->fillRect(barRect.left, barRect.top, barRect.width(),
+                barRect.height(), ProgressBarProgressColor);
         }
 
         void drawProgressBarIndeterminate(const Rect& rect, float counter) const final
         {
             TWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
-            Rect progressRect = rect;
-            progressRect.deflate(WindowFrameThickness * 2);
-            Extent bandWidth = (progressRect.width() * ProgressBarIndeterminateBandWidth);
-            Coord offset = progressRect.width() * (counter / 100.0f);
+            Rect barRect = rect;
+            barRect.deflate(getWindowFrameThickness() * 2);
+            Extent bandWidth
+                = (barRect.width() * ProgressBarIndeterminateBandWidth);
+            Coord offset
+                = (barRect.width() + bandWidth) * (min(100.0f, counter) / 100.0f);
             static Coord reverseOffset = bandWidth;
 
             Coord x = 0;
             Extent width = 0;
             if (offset < bandWidth) {
-                x = progressRect.left;
+                x = barRect.left;
                 if (counter <= __FLT_EPSILON__) {
                     reverseOffset = bandWidth;
                 }
@@ -724,15 +779,15 @@ namespace twm
                     ? offset - reverseOffset--
                     : offset;
                 x = min(
-                    static_cast<Coord>(progressRect.left + realOffset),
-                    progressRect.right
+                    static_cast<Coord>(barRect.left + realOffset),
+                    barRect.right
                 );
                 width = min(
                     bandWidth,
-                    static_cast<Extent>(progressRect.right - x)
+                    static_cast<Extent>(barRect.right - x)
                 );
             }
-            _gfx->fillRect(x, progressRect.top, width, progressRect.height(),
+            _gfx->fillRect(x, barRect.top, width, barRect.height(),
                 ProgressBarProgressColor);
         }
 
@@ -957,12 +1012,10 @@ namespace twm
         virtual void update()
         {
             _theme->drawDesktopBackground();
-
             _registry->forEachChild([](const WindowPtr& win)
             {
                 win->processQueue();
-                // TODO: is this window completely covered by another, or off
-                // the screen?
+                // TODO: is this window completely covered by another, or off the screen?
                 win->redraw();
                 return true;
             });
@@ -1181,7 +1234,9 @@ namespace twm
                 case MSG_CREATE:  return onCreate(p1, p2);
                 case MSG_DESTROY: return onDestroy(p1, p2);
                 case MSG_DRAW: {
-                    if (!isVisible() || !isAlive()) {
+                    auto parent = getParent();
+                    if (!isVisible() || !isAlive() ||
+                        (parent && (!parent->isVisible() || !parent->isAlive()))) {
                         return false;
                     }
                     return onDraw(p1, p2);
@@ -1212,18 +1267,17 @@ namespace twm
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_queueMtx);
 # endif
-            bool processed = false;
             if (!_queue.empty()) {
                 auto pm = _queue.front();
                 _queue.pop();
-                processed = routeMessage(pm.msg, pm.p1, pm.p2);
+                routeMessage(pm.msg, pm.p1, pm.p2);
             }
             forEachChild([&](const WindowPtr& child)
             {
-                processed &= child->processQueue();
+                child->processQueue();
                 return true;
             });
-            return processed;
+            return !_queue.empty();
         }
 
         bool redraw() override
@@ -1242,7 +1296,7 @@ namespace twm
 
         bool hide() override
         {
-            if (!bitsHigh(getStyle(), STY_VISIBLE)) {
+            if (!isVisible()) {
                 return false;
             }
             setStyle(getStyle() & ~STY_VISIBLE);
@@ -1251,7 +1305,7 @@ namespace twm
 
         bool show() override
         {
-            if (bitsHigh(getStyle(), STY_VISIBLE)) {
+            if (isVisible()) {
                 return false;
             }
             setStyle(getStyle() | STY_VISIBLE);
@@ -1324,9 +1378,6 @@ namespace twm
         /** MSG_DRAW: param1 = nullptr, param2 = nullptr. */
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
-            if (!isVisible() || !isAlive()) {
-                return false;
-            }
             auto theme = _getTheme();
             if (theme) {
                 Rect rect = getRect();

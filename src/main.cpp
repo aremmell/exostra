@@ -245,7 +245,7 @@ void setup(void)
     return wm->getTheme()->getScaledValue(value);
   };
 
-  auto x = scaledValue(40);
+  auto x = xPadding * 2;
   auto y = scaledValue(50);
   auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
     STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, x, y, 0, 0,
@@ -254,12 +254,12 @@ void setup(void)
     on_fatal_error();
   }
 
-  auto cx = scaledValue(70);
+  auto cx = scaledValue(90);
   auto cy = scaledValue(30);
-  x = defaultWin->getRect().left + defaultWin->getRect().width() - (cx - xPadding);
+  x = defaultWin->getRect().right - (cx + xPadding);
   y = scaledValue(50);
   auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
-    x, y, cx - xPadding, cy, "A static label");
+    x, y, cx, cy, "A static label");
   if (!label1) {
     on_fatal_error();
   }
@@ -267,8 +267,7 @@ void setup(void)
 
   auto yPadding = wm->getTheme()->getWindowYPadding();
 
-  cx = scaledValue(90);
-  cy = scaledValue(30);
+  cy = wm->getTheme()->getProgressBarHeight();
   testProgressBar = wm->createProgressBar<TestProgressBar>(defaultWin, 5,
     STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2), cy, PBR_INDETERMINATE);
@@ -319,6 +318,24 @@ bool screensaverOn = false;
 
 void loop()
 {
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+    // Rotated rectangular display.
+    auto mapXCoord = [](Coord x)
+    {
+      return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
+    };
+    auto mapYCoord = [](Coord y)
+    {
+      return map(y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
+    };
+    auto swapCoords = [&](Coord x, Coord y)
+    {
+      auto tmp = y;
+      y = x;
+      x = wm->getGfx()->width() - tmp;
+      return std::make_pair(x, y);
+    };
+#endif
   if (isFocalTouch && focal_ctp.touched()) {
     lastTouch = millis();
     if (screensaverOn) {
@@ -326,12 +343,9 @@ void loop()
     }
     TS_Point pt = focal_ctp.getPoint();
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
-    // Rotated rectangular display.
-    pt.x = map(pt.x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
-    pt.y = map(pt.y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
-    long tmp = pt.y;
-    pt.y = pt.x;
-    pt.x = wm->getGfx()->width() - tmp;
+    auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
+    pt.x = tmp.first;
+    pt.y = tmp.second;
 #endif
     wm->hitTest(pt.x, pt.y);
   } else if (!isFocalTouch && cst_ctp.touched()) {
@@ -341,12 +355,9 @@ void loop()
     }
     CST_TS_Point pt = cst_ctp.getPoint();
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
-    // Rotated rectangular display.
-    pt.x = map(pt.x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
-    pt.y = map(pt.y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
-    long tmp = pt.y;
-    pt.y = pt.x;
-    pt.x = wm->getGfx()->width() - tmp;
+    auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
+    pt.x = tmp.first;
+    pt.y = tmp.second;
 #endif
     wm->hitTest(pt.x, pt.y);
   } else {
@@ -358,7 +369,7 @@ void loop()
   }
   if (!screensaverOn) {
     if (curProgress < 100.0f) {
-      curProgress += 1.0f;
+      curProgress += wm->getTheme()->getProgressBarIndeterminateStep();
     } else {
       curProgress = 0.0f;
     }
