@@ -2,9 +2,14 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <Arduino_GFX_Library.h>
-#include <twm.hh>
+#include "twm.hh"
 #include <Adafruit_FT6206.h>
 #include <Adafruit_CST8XX.h>
+
+//#define TFT_720_SQUARE
+#define TFT_480_ROUND
+//#define TFT_320_RECTANGLE
+
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
 /***
  * TFT capacative touch on ProS3. Pins:
@@ -28,11 +33,6 @@
 # include <UMS3.h>
 # include <aremmell_um.h>
 using namespace aremmell;
-// Calibration data
-# define TS_MINX 0
-# define TS_MINY 0
-# define TS_MAXX 240
-# define TS_MAXY 320
 # else // Implied Qualia RGB666 for now.
 # if !defined(ARDUINO)
 #  include <esp32_qualia.h>
@@ -40,9 +40,23 @@ using namespace aremmell;
 # else
 #  define PIN_NS
 # endif
-# define TFT_WIDTH 720
-# define TFT_HEIGHT 720
-# define I2C_TOUCH_ADDR 0x48//0x15 0x3f, 0x38
+# if defined(TFT_720_SQUARE)
+#  define TFT_WIDTH 720
+#  define TFT_HEIGHT 720
+#  define I2C_TOUCH_ADDR 0x48
+# elif defined(TFT_480_ROUND)
+#  define TFT_WIDTH 480
+#  define TFT_HEIGHT 480
+#  define I2C_TOUCH_ADDR 0x15
+# elif defined(TFT_320_RECTANGLE)
+#  define TFT_WIDTH 240
+#  define TFT_HEIGHT 320
+#  define TS_MINX 0
+#  define TS_MINY 0
+#  define TS_MAXX TFT_WIDTH
+#  define TS_MAXY TFT_HEIGHT
+# endif
+//0x15 0x3f, 0x38
 #endif
 
 // If no touches are registered in this time, paint the screen
@@ -75,15 +89,18 @@ Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
     );
 
 Arduino_RGB_Display *display = new Arduino_RGB_Display(
+# if defined(TFT_720_SQUARE)
   // 4.0" 720x720 square display
   720 /* width */, 720 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
   expander, GFX_NOT_DEFINED /* RST */, NULL, 0);
-  // 4.0" 720x720 round display
-  //    720 /* width */, 720 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
-  //    expander, GFX_NOT_DEFINED /* RST */, hd40015c40_init_operations, sizeof(hd40015c40_init_operations));
-  // needs also the rgbpanel to have these pulse/sync values:
-  //    1 /* hync_polarity */, 46 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
-  //    1 /* vsync_polarity */, 50 /* vsync_front_porch */, 16 /* vsync_pulse_width */, 16 /* vsync_back_porch */
+# elif defined(TFT_480_ROUND)
+  // 2.1" 480x480 round display
+  480 /* width */, 480 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
+  expander, GFX_NOT_DEFINED /* RST */, TL021WVC02_init_operations, sizeof(TL021WVC02_init_operations));
+  // 2.8" 480x480 round display
+  //480 /* width */, 480 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
+  //expander, GFX_NOT_DEFINED /* RST */, TL028WVC01_init_operations, sizeof(TL028WVC01_init_operations));
+# endif
 #endif
 
 auto wm = std::make_shared<TWM>(
