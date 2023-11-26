@@ -377,21 +377,23 @@ namespace twm
     class ITheme
     {
     public:
-        virtual void setGfxDriver(const GfxDriverPtr& gfx) = 0;
+        virtual void setGfxDriver(const GfxDriverPtr&) = 0;
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
-        virtual void setFont(const GFXfont* font) const = 0;
+        virtual void setFont(const GFXfont*) const = 0;
         virtual void setSmallFont() const = 0;
         virtual void setMediumFont() const = 0;
         virtual void setLargeFont() const = 0;
-        virtual void autoSelectFont() const = 0;
+        virtual const GFXfont* autoSelectFont() const = 0;
         virtual const GFXfont* getSmallFont() const = 0;
         virtual const GFXfont* getMediumFont() const = 0;
         virtual const GFXfont* getLargeFont() const = 0;
+        virtual Extent getScaledValue(Extent) const = 0;
         virtual Extent getWindowXPadding() const = 0;
         virtual Extent getWindowYPadding() const = 0;
         virtual Extent getButtonWidth() const = 0;
         virtual Extent getButtonHeight() const = 0;
+        virtual Extent getProgressBarHeight() const = 0;
         virtual uint8_t getButtonTextSize() const = 0;
         virtual Color getButtonTextColor() const = 0;
         virtual Color getButtonTextColorPressed() const = 0;
@@ -399,17 +401,18 @@ namespace twm
         virtual u_long getButtonTappedDuration() const = 0;
         virtual uint8_t getWindowTextSize() const = 0;
         virtual Color getWindowTextColor() const = 0;
-        virtual void drawWindowFrame(const Rect& rect) const = 0;
-        virtual void drawWindowBackground(const Rect& rect) const = 0;
-        virtual void drawText(const char* text, uint8_t flags,
-            const Rect& rect, uint8_t textSize, Color textColor) const = 0;
-        virtual void drawButtonFrame(bool pressed, const Rect& rect) const = 0;
-        virtual void drawButtonBackground(bool pressed, const Rect& rect) const = 0;
-        virtual void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const = 0;
-        virtual void drawProgressBarBackground(const Rect& rect) const = 0;
-        virtual void drawProgressBarFrame(const Rect& rect) const = 0;
-        virtual void drawProgressBarProgress(const Rect& rect, float percent) const = 0;
-        virtual void drawProgressBarIndeterminate(const Rect& rect, float counter) const = 0;
+        virtual Extent getWindowFrameThickness() const = 0;
+        virtual void drawWindowFrame(const Rect&) const = 0;
+        virtual void drawWindowBackground(const Rect&) const = 0;
+        virtual void drawText(const char*, uint8_t,
+            const Rect&, uint8_t, Color) const = 0;
+        virtual void drawButtonFrame(bool, const Rect&) const = 0;
+        virtual void drawButtonBackground(bool, const Rect&) const = 0;
+        virtual void drawButtonLabel(const char*, bool, const Rect&) const = 0;
+        virtual void drawProgressBarBackground(const Rect&) const = 0;
+        virtual void drawProgressBarFrame(const Rect&) const = 0;
+        virtual void drawProgressBarProgress(const Rect&, float) const = 0;
+        virtual void drawProgressBarIndeterminate(const Rect&, float) const = 0;
     };
 
     using ThemePtr = std::shared_ptr<ITheme>;
@@ -422,10 +425,14 @@ namespace twm
         TWM_CONST(const GFXfont*, SmallFont, &FreeSans9pt7b);
         TWM_CONST(const GFXfont*, MediumFont, &FreeSans12pt7b);
         TWM_CONST(const GFXfont*, LargeFont, &FreeSans18pt7b);
+        TWM_CONST(float, SmallScaleFactor, 1.0f);
+        TWM_CONST(float, MediumScaleFactor, 2.0f);
+        TWM_CONST(float, LargeScaleFactor, 3.0f);
         TWM_CONST(float, WindowXPadFactor, 0.07f);
         TWM_CONST(float, WindowYPadFactor, 0.07f);
         TWM_CONST(float, ButtonWidthFactor, 0.27f);
         TWM_CONST(float, ButtonHeightFactor, ButtonWidthFactor * 0.57f);
+        TWM_CONST(float, ProgressBarHeightFactor, 0.17f);
         TWM_CONST(Extent, WindowFrameThickness, 1);
         TWM_CONST(Color, WindowFrameColor, 0x7bef);
         TWM_CONST(Color, WindowFrameShadowColor, 0xad75);
@@ -486,15 +493,18 @@ namespace twm
             _gfx->setFont(getLargeFont());
         }
 
-        void autoSelectFont() const final
+        const GFXfont* autoSelectFont() const final
         {
+            const GFXfont* font = nullptr;
             if (_gfx->width() <= ScreenThresholdSmall) {
-                setSmallFont();
+                font = getSmallFont();
             } else if (_gfx->width() <= ScreenThresholdMedium) {
-                setMediumFont();
+                font = getMediumFont();
             } else {
-                setLargeFont();
+                font = getLargeFont();
             }
+            setFont(font);
+            return font;
         }
 
         const GFXfont* getSmallFont() const final
@@ -510,6 +520,17 @@ namespace twm
         const GFXfont* getLargeFont() const
         {
             return LargeFont;
+        }
+
+        Extent getScaledValue(Extent value) const final
+        {
+            if (_gfx->width() <= ScreenThresholdSmall) {
+                return abs(value * SmallScaleFactor);
+            } else if (_gfx->width() <= ScreenThresholdMedium) {
+                return abs(value * MediumScaleFactor);
+            } else {
+                return abs(value * LargeScaleFactor);
+            }
         }
 
         Extent getWindowXPadding() const final
@@ -532,6 +553,11 @@ namespace twm
             return abs(_gfx->height() * ButtonHeightFactor);
         }
 
+        Extent getProgressBarHeight() const final
+        {
+            return abs(_gfx->height() * ProgressBarHeightFactor);
+        }
+
         uint8_t getButtonTextSize() const final { return ButtonTextSize; }
         Color getButtonTextColor() const final { return ButtonTextColor; }
         Color getButtonTextColorPressed() const final { return ButtonTextColorPressed; }
@@ -540,22 +566,27 @@ namespace twm
         uint8_t getWindowTextSize() const final { return WindowTextSize; }
         Color getWindowTextColor() const final { return WindowTextColor; }
 
+        Extent getWindowFrameThickness() const final
+        {
+            return getScaledValue(WindowFrameThickness);
+        }
+
         void drawWindowFrame(const Rect& rect) const final
         {
             Rect tmp = rect;
-            tmp.deflate(WindowFrameThickness);
+            tmp.deflate(getWindowFrameThickness());
             _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
                 WindowFrameColor);
             _gfx->drawFastHLine(
-                rect.left + (WindowFrameThickness * 2),
-                rect.bottom - WindowFrameThickness,
-                rect.width() - (WindowFrameThickness * 2),
+                rect.left + (getWindowFrameThickness() * 2),
+                rect.bottom - getWindowFrameThickness(),
+                rect.width() - (getWindowFrameThickness() * 2),
                 WindowFrameShadowColor
             );
             _gfx->drawFastVLine(
-                rect.right - WindowFrameThickness,
-                rect.top + (WindowFrameThickness * 2),
-                rect.height() - (WindowFrameThickness * 2),
+                rect.right - getWindowFrameThickness(),
+                rect.top + (getWindowFrameThickness() * 2),
+                rect.height() - (getWindowFrameThickness() * 2),
                 WindowFrameShadowColor
             );
         }
@@ -601,7 +632,7 @@ namespace twm
                         &yOff,
                         textSize,
                         textSize,
-                        DefaultFont
+                        autoSelectFont()
                     );
                     charXAdvs.push_back(xAdv);
                     xAccum += xAdv;
@@ -663,14 +694,14 @@ namespace twm
 
         void drawProgressBarBackground(const Rect& rect) const final
         {
-            _gfx->fillRect(rect.left, rect.right, rect.width(), rect.height(),
+            _gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
                 ProgressBarBackgroundColor);
         }
 
         void drawProgressBarFrame(const Rect& rect) const final
         {
             Rect tmp = rect;
-            tmp.deflate(WindowFrameThickness);
+            tmp.deflate(getWindowFrameThickness());
             _gfx->drawRect(rect.left, rect.top, rect.width(), rect.height(),
                 ProgressBarFrameColor);
         }
@@ -679,7 +710,7 @@ namespace twm
         {
             TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
             Rect progressRect = rect;
-            progressRect.deflate(WindowFrameThickness * 2);
+            progressRect.deflate(getWindowFrameThickness() * 2);
             float progressWidth = (progressRect.width() * (percent / 100.0f));
             progressRect.right = progressRect.left + abs(progressWidth);
             _gfx->fillRect(progressRect.left, progressRect.top, progressRect.width(),

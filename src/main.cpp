@@ -34,7 +34,12 @@ using namespace aremmell;
 # define TS_MAXX 240
 # define TS_MAXY 320
 # else // Implied Qualia RGB666 for now.
-# include <esp32_qualia.h>
+# if !defined(ARDUINO)
+#  include <esp32_qualia.h>
+#  define PIN_NS qualia
+# else
+#  define PIN_NS
+# endif
 # define TFT_WIDTH 720
 # define TFT_HEIGHT 720
 # define I2C_TOUCH_ADDR 0x48//0x15 0x3f, 0x38
@@ -56,14 +61,14 @@ Adafruit_ILI9341 display(TFT_CS, TFT_DC);
 UMS3 ums3;
 #else
 Arduino_XCA9554SWSPI *expander = new Arduino_XCA9554SWSPI(
-    qualia::PCA_TFT_RESET, qualia::PCA_TFT_CS, qualia::PCA_TFT_SCK, qualia::PCA_TFT_MOSI, &Wire, 0x3F
+    PIN_NS::PCA_TFT_RESET, PIN_NS::PCA_TFT_CS, PIN_NS::PCA_TFT_SCK, PIN_NS::PCA_TFT_MOSI, &Wire, 0x3F
 );
 
 Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
-    qualia::TFT_DE, qualia::TFT_VSYNC, qualia::TFT_HSYNC, qualia::TFT_PCLK,
-    qualia::TFT_R1, qualia::TFT_R2, qualia::TFT_R3, qualia::TFT_R4, qualia::TFT_R5,
-    qualia::TFT_G0, qualia::TFT_G1, qualia::TFT_G2, qualia::TFT_G3, qualia::TFT_G4, qualia::TFT_G5,
-    qualia::TFT_B1, qualia::TFT_B2, qualia::TFT_B3, qualia::TFT_B4, qualia::TFT_B5,
+    PIN_NS::TFT_DE, PIN_NS::TFT_VSYNC, PIN_NS::TFT_HSYNC, PIN_NS::TFT_PCLK,
+    PIN_NS::TFT_R1, PIN_NS::TFT_R2, PIN_NS::TFT_R3, PIN_NS::TFT_R4, PIN_NS::TFT_R5,
+    PIN_NS::TFT_G0, PIN_NS::TFT_G1, PIN_NS::TFT_G2, PIN_NS::TFT_G3, PIN_NS::TFT_G4, PIN_NS::TFT_G5,
+    PIN_NS::TFT_B1, PIN_NS::TFT_B2, PIN_NS::TFT_B3, PIN_NS::TFT_B4, PIN_NS::TFT_B5,
     1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
     1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
   //    ,1, 30000000
@@ -196,8 +201,8 @@ void setup(void)
   }
   Serial.println("RGBDisplay: OK");
   wm->getTheme()->drawDesktopBackground();
-  expander->pinMode(qualia::PCA_TFT_BACKLIGHT, OUTPUT);
-  expander->digitalWrite(qualia::PCA_TFT_BACKLIGHT, HIGH);
+  expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
+  expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
 
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
@@ -235,25 +240,38 @@ void setup(void)
     on_fatal_error();
   }
 
+  auto scaledValue = [&](Extent value)
+  {
+    return wm->getTheme()->getScaledValue(value);
+  };
+
+  auto x = scaledValue(40);
+  auto y = scaledValue(50);
   auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
-    STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, 40, 50, 0, 0,
+    STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, x, y, 0, 0,
     "pres me");
   if (!button1) {
     on_fatal_error();
   }
 
-  auto labelX = defaultWin->getRect().width() - (130 - xPadding);
+  auto cx = scaledValue(70);
+  auto cy = scaledValue(30);
+  x = defaultWin->getRect().left + defaultWin->getRect().width() - (cx - xPadding);
+  y = scaledValue(50);
   auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
-    labelX, 50, 130 - xPadding, 30, "A static label");
+    x, y, cx - xPadding, cy, "A static label");
   if (!label1) {
     on_fatal_error();
   }
   button1->setLabel(label1);
 
   auto yPadding = wm->getTheme()->getWindowYPadding();
+
+  cx = scaledValue(90);
+  cy = scaledValue(30);
   testProgressBar = wm->createProgressBar<TestProgressBar>(defaultWin, 5,
-    STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, 90 + yPadding,
-    defaultWin->getRect().width() - (xPadding * 2), 30, PBR_INDETERMINATE);
+    STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, button1->getRect().bottom + yPadding,
+    defaultWin->getRect().width() - (xPadding * 2), cy, PBR_INDETERMINATE);
   if (!testProgressBar) {
     on_fatal_error();
   }
