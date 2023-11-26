@@ -43,8 +43,9 @@
 # include <Adafruit_GFX.h>
 # include <Fonts/FreeSans9pt7b.h>
 # include <Fonts/FreeMono9pt7b.h>
-
 # include <glcdfont.c>
+
+# if !defined(_ARDUINO_GFX_H_)
 # if defined(__AVR__)
 #  include <avr/pgmspace.h>
 # elif defined(ESP8266) || defined(ESP32)
@@ -77,6 +78,7 @@ inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* gfxFont, uint8_t c)
     return gfxFont->glyph + c;
 # endif
 }
+# endif // !_ARDUINO_GFX_H_
 
 static void AdafruitExt_getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
     uint8_t* xAdv, uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
@@ -384,14 +386,18 @@ namespace twm
         virtual Extent getWindowXPadding() const = 0;
         virtual Extent getWindowYPadding() const = 0;
         virtual uint8_t getButtonTextSize() const = 0;
+        virtual Color getButtonTextColor() const = 0;
+        virtual Color getButtonTextColorPressed() const = 0;
         virtual Extent getButtonWidth() const = 0;
         virtual Extent getButtonHeight() const = 0;
         virtual Extent getButtonLabelPadding() const = 0;
         virtual u_long getButtonTappedDuration() const = 0;
+        virtual uint8_t getWindowTextSize() const = 0;
+        virtual Color getWindowTextColor() const = 0;
         virtual void drawWindowFrame(const Rect& rect) const = 0;
         virtual void drawWindowBackground(const Rect& rect) const = 0;
         virtual void drawText(const char* text, uint8_t flags,
-            const Rect& rect) const = 0;
+            const Rect& rect, uint8_t textSize, Color textColor) const = 0;
         virtual void drawButtonFrame(bool pressed, const Rect& rect) const = 0;
         virtual void drawButtonBackground(bool pressed, const Rect& rect) const = 0;
         virtual void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const = 0;
@@ -420,11 +426,11 @@ namespace twm
         TWM_CONST(Coord, ButtonCornerRadius, 4);
         TWM_CONST(Color, ButtonFrameColor, 0x4208);
         TWM_CONST(Color, ButtonBgColor, 0x7bef);
-        TWM_CONST(Color, ButtonLabelColor, 0xffff);
+        TWM_CONST(Color, ButtonTextColor, 0xffff);
         TWM_CONST(Extent, ButtonLabelPadding, 10);
         TWM_CONST(Color, ButtonFrameColorPressed, 0x4208);
         TWM_CONST(Color, ButtonBgColorPressed, 0x4208);
-        TWM_CONST(Color, ButtonLabelColorPressed, 0xffff);
+        TWM_CONST(Color, ButtonTextColorPressed, 0xffff);
         TWM_CONST(u_long, ButtonTappedDuration, 100);
         TWM_CONST(Color, ProgressBarBackgroundColor, 0xc618);
         TWM_CONST(Color, ProgressBarFrameColor, 0x7bef);
@@ -458,10 +464,14 @@ namespace twm
         Extent getWindowXPadding() const final { return WindowXPadding; }
         Extent getWindowYPadding() const final { return WindowYPadding; }
         uint8_t getButtonTextSize() const final { return ButtonTextSize; }
+        Color getButtonTextColor() const final { return ButtonTextColor; }
+        Color getButtonTextColorPressed() const final { return ButtonTextColorPressed; }
         Extent getButtonWidth() const final { return ButtonWidth; }
         Extent getButtonHeight() const final { return ButtonHeight; }
         Extent getButtonLabelPadding() const final { return ButtonLabelPadding; }
         u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
+        uint8_t getWindowTextSize() const final { return WindowTextSize; }
+        Color getWindowTextColor() const final { return WindowTextColor; }
 
         void drawWindowFrame(const Rect& rect) const final
         {
@@ -489,10 +499,11 @@ namespace twm
                 WindowBgColor);
         }
 
-        void drawText(const char* text, uint8_t flags, const Rect& rect) const final
+        void drawText(const char* text, uint8_t flags, const Rect& rect,
+            uint8_t textSize, Color textColor) const final
         {
-            _gfx->setTextSize(WindowTextSize);
-            _gfx->setTextColor(WindowTextColor);
+            _gfx->setTextSize(textSize);
+            _gfx->setTextColor(textColor);
 
             bool xCenter = bitsHigh(flags, DTF_CENTER);
             bool singleLine = bitsHigh(flags, DTF_SINGLE);
@@ -576,16 +587,8 @@ namespace twm
 
         void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const final
         {
-            int16_t x, y;
-            uint16_t width, height;
-            _gfx->setTextSize(ButtonTextSize);
-            _gfx->getTextBounds(lbl, rect.left, rect.top, &x, &y, &width, &height);
-            _gfx->setCursor(
-                x + (rect.width() / 2) - (width / 2),
-                rect.top + (rect.height() / 2) + WindowTextYOffset
-            );
-            _gfx->setTextColor(pressed ? ButtonLabelColorPressed : ButtonLabelColor);
-            _gfx->print(lbl);
+            drawText(lbl, DTF_SINGLE | DTF_CENTER, rect, getButtonTextSize(),
+                pressed ? getButtonTextColorPressed() : getButtonTextColor());
         }
 
         void drawProgressBarBackground(const Rect& rect) const final
@@ -1024,7 +1027,7 @@ namespace twm
             Style style,
             const Rect& rect,
             const std::string& text
-        ) : _wm(wm), _parent(parent), _style(style), _rect(rect), _id(id), _text(text)
+        ) : _wm(wm), _parent(parent), _rect(rect), _style(style), _id(id), _text(text)
         {
         }
 
@@ -1384,7 +1387,8 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawText(getText().c_str(), DrawTextFlags, rect);
+                theme->drawText(getText().c_str(), DrawTextFlags, rect,
+                    theme->getWindowTextSize(), theme->getWindowTextColor());
                 return true;
             }
             return false;
@@ -1406,7 +1410,8 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawText(getText().c_str(), DrawTextFlags, rect);
+                theme->drawText(getText().c_str(), DrawTextFlags, rect,
+                    theme->getWindowTextSize(), theme->getWindowTextColor());
                 return true;
             }
             return false;

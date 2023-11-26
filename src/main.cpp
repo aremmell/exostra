@@ -1,9 +1,10 @@
-#include <twm.hh>
-#include <Arduino.h>
+/* #include <Arduino.h>
 #include <SPI.h>
-#include <Wire.h>
+#include <Wire.h> */
 #include <Arduino_GFX_Library.h>
+#include <twm.hh>
 #include <Adafruit_FT6206.h>
+#include <Adafruit_CST8XX.h>
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
 /***
  * TFT capacative touch on ProS3. Pins:
@@ -22,6 +23,7 @@
  */
 # define TFT_WIDTH 240
 # define TFT_HEIGHT 320
+# define I2C_TOUCH_ADDR 0x38
 # include <Adafruit_ILI9341.h>
 # include <UMS3.h>
 # include <aremmell_um.h>
@@ -32,9 +34,10 @@ using namespace aremmell;
 # define TS_MAXX 240
 # define TS_MAXY 320
 # else // Implied Qualia RGB666 for now.
-# include <Adafruit_CST8XX.h>
+# include <esp32_qualia.h>
 # define TFT_WIDTH 720
 # define TFT_HEIGHT 720
+# define I2C_TOUCH_ADDR 0x48//0x15 0x3f, 0x38
 #endif
 
 // If no touches are registered in this time, paint the screen
@@ -45,13 +48,37 @@ using namespace aremmell;
 using namespace twm;
 
 // The FT6206 uses hardware I2C (SCL/SDA)
-Adafruit_FT6206 ctp;
+Adafruit_FT6206 focal_ctp;
+Adafruit_CST8XX cst_ctp;
 
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
 Adafruit_ILI9341 display(TFT_CS, TFT_DC);
 UMS3 ums3;
 #else
+Arduino_XCA9554SWSPI *expander = new Arduino_XCA9554SWSPI(
+    qualia::PCA_TFT_RESET, qualia::PCA_TFT_CS, qualia::PCA_TFT_SCK, qualia::PCA_TFT_MOSI, &Wire, 0x3F
+);
 
+Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
+    qualia::TFT_DE, qualia::TFT_VSYNC, qualia::TFT_HSYNC, qualia::TFT_PCLK,
+    qualia::TFT_R1, qualia::TFT_R2, qualia::TFT_R3, qualia::TFT_R4, qualia::TFT_R5,
+    qualia::TFT_G0, qualia::TFT_G1, qualia::TFT_G2, qualia::TFT_G3, qualia::TFT_G4, qualia::TFT_G5,
+    qualia::TFT_B1, qualia::TFT_B2, qualia::TFT_B3, qualia::TFT_B4, qualia::TFT_B5,
+    1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
+    1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
+  //    ,1, 30000000
+    );
+
+Arduino_RGB_Display *display = new Arduino_RGB_Display(
+  // 4.0" 720x720 square display
+  720 /* width */, 720 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
+  expander, GFX_NOT_DEFINED /* RST */, NULL, 0);
+  // 4.0" 720x720 round display
+  //    720 /* width */, 720 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
+  //    expander, GFX_NOT_DEFINED /* RST */, hd40015c40_init_operations, sizeof(hd40015c40_init_operations));
+  // needs also the rgbpanel to have these pulse/sync values:
+  //    1 /* hync_polarity */, 46 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
+  //    1 /* vsync_polarity */, 50 /* vsync_front_porch */, 16 /* vsync_pulse_width */, 16 /* vsync_back_porch */
 #endif
 
 auto wm = std::make_shared<TWM>(
@@ -134,9 +161,14 @@ void on_fatal_error()
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
   aremmell::on_fatal_error(ums3);
 #else
-#error "no support for qualia yet"
+// TODO: blink an LED or something.
+  Serial.println("fatal error");
+  while (true);
 #endif
 }
+
+bool touchInitialized = false;
+bool isFocalTouch = false;
 
 void setup(void)
 {
@@ -150,18 +182,44 @@ void setup(void)
 
 #if defined(ARDUINO_PROS3) && !defined(QUALIA)
   ums3.begin();
-#endif
-
-  if (!ctp.begin(40, &Wire)) {
-    Serial.println("FT6206: error!");
-    on_fatal_error();
-  }
-
-  Serial.println("FT6206: OK");
-
   display.begin();
   display.setRotation(3);
   display.setCursor(0, 0);
+#else
+#ifdef GFX_EXTRA_PRE_INIT
+  GFX_EXTRA_PRE_INIT();
+#endif
+  Wire.setClock(1000000);
+  if (!display->begin()) {
+    Serial.println("RGBDisplay: error!");
+    on_fatal_error();
+  }
+  Serial.println("RGBDisplay: OK");
+  wm->getTheme()->drawDesktopBackground();
+  expander->pinMode(qualia::PCA_TFT_BACKLIGHT, OUTPUT);
+  expander->digitalWrite(qualia::PCA_TFT_BACKLIGHT, HIGH);
+#endif
+
+  if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
+    Serial.print("FT6206: error at 0x");
+    Serial.println(I2C_TOUCH_ADDR, HEX);
+    if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
+      Serial.print("CST8XX: error at 0x");
+      Serial.println(I2C_TOUCH_ADDR, HEX);
+    } else {
+      touchInitialized = true;
+      isFocalTouch = false;
+      Serial.println("CST8XX: OK");
+    }
+  } else {
+    touchInitialized = true;
+    isFocalTouch = true;
+    Serial.println("FT6206: OK");
+  }
+
+  if (!touchInitialized) {
+    on_fatal_error();
+  }
 
   auto xPadding = wm->getTheme()->getWindowXPadding();
   auto defaultWin = wm->createWindow<DefaultWindow>(
@@ -244,20 +302,32 @@ bool screensaverOn = false;
 
 void loop()
 {
-  if (ctp.touched()) {
+  if (isFocalTouch && focal_ctp.touched()) {
     lastTouch = millis();
     if (screensaverOn) {
       screensaverOn = false;
     }
 
-    TS_Point pt = ctp.getPoint();
+    TS_Point pt = focal_ctp.getPoint();
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+    // Rotated rectangular display.
     pt.x = map(pt.x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
     pt.y = map(pt.y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
-
     long tmp = pt.y;
     pt.y = pt.x;
     pt.x = wm->getGfx()->width() - tmp;
-
+#endif
+    wm->hitTest(pt.x, pt.y);
+  } else if (!isFocalTouch && cst_ctp.touched()) {
+    CST_TS_Point pt = cst_ctp.getPoint();
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+    // Rotated rectangular display.
+    pt.x = map(pt.x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
+    pt.y = map(pt.y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
+    long tmp = pt.y;
+    pt.y = pt.x;
+    pt.x = wm->getGfx()->width() - tmp;
+#endif
     wm->hitTest(pt.x, pt.y);
   } else {
     if (!screensaverOn && millis() - lastTouch > TFT_TOUCH_TIMEOUT) {
@@ -277,5 +347,21 @@ TODO_refactor:
     wm->update();
   }
 
-  display.drawRGBBitmap(0, 0, wm->getGfx()->getBuffer(), wm->getGfx()->width(), wm->getGfx()->height());
+#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+  display.drawRGBBitmap(
+    0,
+    0,
+    wm->getGfx()->getBuffer(),
+    wm->getGfx()->width(),
+    wm->getGfx()->height()
+  );
+#else
+  display->draw16bitRGBBitmap(
+    0,
+    0,
+    wm->getGfx()->getBuffer(),
+    wm->getScreenWidth(),
+    wm->getScreenHeight()
+  );
+#endif
 }
