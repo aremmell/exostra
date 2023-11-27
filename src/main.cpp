@@ -271,17 +271,17 @@ void setup(void)
   auto y = scaledValue(50);
   auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
     STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, x, y, 0, 0,
-    "pres me");
+    "butan");
   if (!button1) {
     on_fatal_error();
   }
 
-  auto cx = scaledValue(90);
+  auto cx = scaledValue(100);
   auto cy = scaledValue(30);
   x = defaultWin->getRect().right - (cx + xPadding);
   y = scaledValue(50);
   auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
-    x, y, cx, cy, "A static label");
+    x, y, cx, cy, "Label");
   if (!label1) {
     on_fatal_error();
   }
@@ -299,10 +299,10 @@ void setup(void)
 
   x = defaultWin->getRect().left + xPadding;
   y = testProgressBar->getRect().bottom + yPadding;
-  cx = scaledValue(100);
+  cx = scaledValue(130);
   cy = scaledValue(30);
   testCheckbox = wm->createWindow<TestCheckbox>(defaultWin, 8,
-    STY_CHILD | STY_VISIBLE | STY_CHECKBOX, x, y, cx, cy, "Testing 123");
+    STY_CHILD | STY_VISIBLE | STY_CHECKBOX, x, y, cx, cy, "Check me");
   if (!testCheckbox) {
     on_fatal_error();
   }

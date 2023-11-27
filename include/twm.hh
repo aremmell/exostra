@@ -439,6 +439,7 @@ namespace twm
         virtual void drawProgressBarProgress(const Rect&, float) const = 0;
         virtual void drawProgressBarIndeterminate(const Rect&, float) const = 0;
         virtual Rect getCheckBoxCheckableArea(const Rect&) const = 0;
+        virtual u_long getCheckBoxCheckDelay() const = 0;
         virtual void drawCheckBox(const char*, bool, const Rect&) const = 0;
     };
 
@@ -481,12 +482,13 @@ namespace twm
         TWM_CONST(float, ProgressBarIndeterminateStep, 1.0f);
         TWM_CONST(Extent, CheckBoxCheckableAreaPadding, 6);
         TWM_CONST(Color, CheckBoxCheckableAreaBgColor, 0xef5d);
-        TWM_CONST(Color, CheckBoxCheckMarkColor, 0x4208);
+        TWM_CONST(Color, CheckBoxCheckMarkColor, 0x3166);
+        TWM_CONST(u_long, CheckBoxCheckDelay, 200);
         TWM_CONST(Coord, ScreenThresholdSmall, 320);
         TWM_CONST(Coord, ScreenThresholdMedium, 480);
         TWM_CONST(uint8_t, WindowTextSize, 1);
         TWM_CONST(uint8_t, ButtonTextSize, 1);
-        TWM_CONST(Coord, WindowTextYOffset, 4);
+        TWM_CONST(Coord, WindowTextYOffset, 5);
 
         void setGfxDriver(const GfxDriverPtr& gfx)
         {
@@ -648,7 +650,7 @@ namespace twm
             Extent xAccum = 0;
             Extent yAccum =
                 rect.top + (singleLine ? (rect.height() / 2) : getWindowYPadding())
-                    + WindowTextYOffset;
+                    + getScaledValue(WindowTextYOffset);
             const Extent xPadding =
                 ((singleLine && !xCenter) ? 0 : getWindowXPadding());
             const Extent xExtent = rect.right - xPadding;
@@ -842,14 +844,16 @@ namespace twm
         {
             auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
             Rect checkRect(
-                rect.left + checkPadding,
+                rect.left,
                 rect.top + checkPadding,
-                rect.left + (rect.height() - (checkPadding)),
-                rect.top + (rect.height() - (checkPadding))
+                rect.left + (rect.height() - (checkPadding * 2)),
+                rect.top + (rect.height() - checkPadding)
             );
             checkRect.top = rect.top + ((rect.height() / 2) - (checkRect.height() / 2));
             return checkRect;
         }
+
+        u_long getCheckBoxCheckDelay() const final { return CheckBoxCheckDelay; }
 
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
@@ -882,23 +886,19 @@ namespace twm
                 };
                 static_assert(sizeof(begins) == sizeof(ends));
                 for (size_t n = 0; n < (sizeof(begins) / sizeof(begins[0])); n++) {
-                    _gfx->drawLine(
-                        begins[n].x,
-                        begins[n].y,
-                        ends[n].x,
-                        ends[n].y,
-                        CheckBoxCheckMarkColor
-                    );
+                    _gfx->drawLine(begins[n].x, begins[n].y, ends[n].x,
+                        ends[n].y, CheckBoxCheckMarkColor);
                 }
             }
             auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
             Rect textRect(
                 checkRect.right + checkPadding,
                 rect.top,
-                checkRect.right + checkPadding + rect.width(),
+                checkRect.right + (rect.width() - checkRect.width()),
                 rect.top + rect.height()
             );
-            drawText(lbl, DTF_SINGLE, textRect, getWindowTextSize(), getWindowTextColor());
+            drawText(lbl, DTF_SINGLE | DTF_ELLIPSIS, textRect,
+                getWindowTextSize(), getWindowTextColor());
         }
 
     private:
@@ -1635,7 +1635,6 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawWindowFrame(rect);
                 theme->drawText(getText().c_str(), DrawTextFlags, rect,
                     theme->getWindowTextSize(), theme->getWindowTextColor());
                 return true;
@@ -1664,46 +1663,6 @@ namespace twm
                 return true;
             }
             return false;
-        }
-    };
-
-    class CheckBox : public Window
-    {
-    public:
-        using Window::Window;
-        CheckBox() = default;
-        virtual ~CheckBox() = default;
-
-        void setChecked(bool checked)
-        {
-            if (isChecked() != checked) {
-                if (checked) {
-                    setState(getState() | STA_CHECKED);
-                } else {
-                    setState(getState() & ~STA_CHECKED);
-                }
-                redraw();
-            }
-        }
-
-        bool isChecked() const noexcept { return bitsHigh(getState(), STA_CHECKED); }
-
-    protected:
-        bool onDraw(MsgParam p1, MsgParam p2) override
-        {
-            auto theme = _getTheme();
-            if (theme) {
-                Rect rect = getRect();
-                theme->drawCheckBox(getText().c_str(), isChecked(), rect);
-                return true;
-            }
-            return false;
-        }
-
-        bool onTapped(Coord x, Coord y) override
-        {
-            setChecked(!isChecked());
-            return routeMessage(MSG_DRAW);
         }
     };
 
@@ -1878,6 +1837,56 @@ namespace twm
 
         Style _pbarStyle = 0;
         float _value = 0;
+    };
+
+    class CheckBox : public Window
+    {
+    public:
+        using Window::Window;
+        CheckBox() = default;
+        virtual ~CheckBox() = default;
+
+        void setChecked(bool checked)
+        {
+            if (isChecked() != checked) {
+                _lastCheckedChange = millis();
+                if (checked) {
+                    setState(getState() | STA_CHECKED);
+                } else {
+                    setState(getState() & ~STA_CHECKED);
+                }
+                redraw();
+            }
+        }
+
+        bool isChecked() const noexcept { return bitsHigh(getState(), STA_CHECKED); }
+
+    protected:
+        bool onDraw(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                Rect rect = getRect();
+                theme->drawCheckBox(getText().c_str(), isChecked(), rect);
+                return true;
+            }
+            return false;
+        }
+
+        bool onTapped(Coord x, Coord y) override
+        {
+            auto theme = _getTheme();
+            if (theme) {
+                if (millis() - _lastCheckedChange >= theme->getCheckBoxCheckDelay()) {
+                    setChecked(!isChecked());
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    private:
+        u_long _lastCheckedChange = 0UL;
     };
 } // namespace twm
 
