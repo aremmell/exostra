@@ -920,55 +920,55 @@ namespace twm
     public:
         virtual bool hasChildren() = 0;
         virtual size_t childCount() = 0;
-        virtual std::shared_ptr<IWindow> getChildByID(WindowID id) = 0;
-        virtual bool addChild(const std::shared_ptr<IWindow>& child) = 0;
-        virtual bool removeChildByID(WindowID id) = 0;
+        virtual std::shared_ptr<IWindow> getChildByID(WindowID) = 0;
+        virtual bool addChild(const std::shared_ptr<IWindow>&) = 0;
+        virtual bool removeChildByID(WindowID) = 0;
         virtual void removeAllChildren() = 0;
-        virtual void forEachChild(const std::function<bool(const std::shared_ptr<IWindow>&)>& cb) = 0;
-        virtual void forEachChildReverse(const std::function<bool(const std::shared_ptr<IWindow>&)>& cb) = 0;
+        virtual void forEachChild(const std::function<bool(const std::shared_ptr<IWindow>&)>&) = 0;
+        virtual void forEachChildReverse(const std::function<bool(const std::shared_ptr<IWindow>&)>&) = 0;
     };
 
     class IWindow : public IWindowContainer
     {
     public:
         virtual std::shared_ptr<IWindow> getParent() const = 0;
-        virtual void setParent(const std::shared_ptr<IWindow>& parent) = 0;
+        virtual void setParent(const std::shared_ptr<IWindow>&) = 0;
 
         virtual Rect getRect() const noexcept = 0;
-        virtual void setRect(const Rect& rect) noexcept = 0;
+        virtual void setRect(const Rect&) noexcept = 0;
 
         virtual Style getStyle() const noexcept = 0;
-        virtual void setStyle(Style style) noexcept = 0;
+        virtual void setStyle(Style) noexcept = 0;
 
         virtual WindowID getID() const noexcept = 0;
 
         virtual State getState() const noexcept = 0;
-        virtual void setState(State state) noexcept = 0;
+        virtual void setState(State) noexcept = 0;
 
         virtual std::string getText() const = 0;
-        virtual void setText(const std::string& text) = 0;
+        virtual void setText(const std::string&) = 0;
 
-        virtual bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
-        virtual bool queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) = 0;
+        virtual bool routeMessage(Message, MsgParam, MsgParam) = 0;
+        virtual bool queueMessage(Message, MsgParam, MsgParam) = 0;
         virtual bool processQueue() = 0;
 
         virtual bool redraw() = 0;
         virtual bool hide() noexcept = 0;
         virtual bool show() noexcept = 0;
         virtual bool isVisible() const noexcept = 0;
-        virtual bool processInput(InputParams* params) = 0;
+        virtual bool processInput(InputParams*) = 0;
         virtual bool destroy() = 0;
         virtual bool isAlive() const noexcept = 0;
 
     protected:
-        virtual bool onCreate(MsgParam p1, MsgParam p2) = 0;
-        virtual bool onDestroy(MsgParam p1, MsgParam p2) = 0;
-        virtual bool onDraw(MsgParam p1, MsgParam p2) = 0;
-        virtual bool onInput(MsgParam p1, MsgParam p2) = 0;
-        virtual bool onEvent(MsgParam p1, MsgParam p2) = 0;
-        virtual bool onResize(MsgParam p1, MsgParam p2) = 0;
+        virtual bool onCreate(MsgParam, MsgParam) = 0;
+        virtual bool onDestroy(MsgParam, MsgParam) = 0;
+        virtual bool onDraw(MsgParam, MsgParam) = 0;
+        virtual bool onInput(MsgParam, MsgParam) = 0;
+        virtual bool onEvent(MsgParam, MsgParam) = 0;
+        virtual bool onResize(MsgParam, MsgParam) = 0;
 
-        virtual bool onTapped(Coord x, Coord y) = 0;
+        virtual bool onTapped(Coord /* x */, Coord /* y */) = 0;
     };
 
     using WindowPtr          = std::shared_ptr<IWindow>;
