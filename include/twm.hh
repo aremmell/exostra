@@ -79,7 +79,7 @@ inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* gfxFont, uint8_t c)
 }
 # endif // !_ARDUINO_GFX_H_
 
-static void AdafruitExt_getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
+static void Ada_charBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
     uint8_t* xAdv, uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
     uint8_t textSizeY = 1, const GFXfont* gfxFont = nullptr)
 {
@@ -201,7 +201,12 @@ namespace twm
     /** Point in 2D space. */
     struct Point
     {
-        Point(Coord _x, Coord _y) : x(_x), y(_y) { }
+        template<typename T1, typename T2>
+        Point(T1 xAxis, T2 yAxis)
+        {
+            x = static_cast<Coord>(xAxis);
+            y = static_cast<Coord>(yAxis);
+        }
 
         Coord x = 0; /** X-axis value. */
         Coord y = 0; /** Y-axis value. */
@@ -343,8 +348,10 @@ namespace twm
 
     typedef enum
     {
-        DTF_CENTER = 1 << 0, /**< Horizontal align center. */
-        DTF_SINGLE = 1 << 1  /**< Single line of text. */
+        DTF_CENTER   = 1 << 0, /**< Horizontal align center. */
+        DTF_SINGLE   = 1 << 1, /**< Single line of text. */
+        DTF_CLIP     = 1 << 2, /**< Text outside the rect will not be drawn. */
+        DTF_ELLIPSIS = 1 << 3 /**< Replace clipped text with '...' */
     } _DrawTextFlags;
 
     typedef enum {
@@ -589,7 +596,7 @@ namespace twm
         Color getButtonBgColorPressed() const final { return ButtonBgColorPressed; }
         Color getButtonFrameColor() const final { return ButtonFrameColor; }
         Color getButtonFrameColorPressed() const final { return ButtonFrameColorPressed; }
-        Extent getButtonLabelPadding() const final { return ButtonLabelPadding; }
+        Extent getButtonLabelPadding() const final { return getScaledValue(ButtonLabelPadding); }
         u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
         uint8_t getWindowTextSize() const final { return WindowTextSize; }
         Color getWindowTextColor() const final { return WindowTextColor; }
@@ -645,25 +652,31 @@ namespace twm
             const Extent xPadding =
                 ((singleLine && !xCenter) ? 0 : getWindowXPadding());
             const Extent xExtent = rect.right - xPadding;
-
             const char* cursor = text;
             while (*cursor != '\0') {
                 xAccum = rect.left + xPadding;
                 const char* old_cursor = cursor;
                 std::vector<uint8_t> charXAdvs;
-                while (xAccum < xExtent && *cursor != '\0') {
-                    AdafruitExt_getCharBounds(
-                        *cursor,
-                        nullptr,
-                        nullptr,
-                        &xAdv,
-                        &yAdv,
-                        &xOff,
-                        &yOff,
-                        textSize,
-                        textSize,
-                        autoSelectFont()
-                    );
+                bool clipped = false;
+                while (xAccum <= xExtent && *cursor != '\0') {
+                    Ada_charBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
+                        &yOff, textSize, textSize, autoSelectFont());
+                    if (xAccum + xAdv > xExtent) {
+                        if (singleLine && bitsHigh(flags, DTF_CLIP)) {
+                            clipped = true;
+                            break;
+                        }
+                        if (singleLine && bitsHigh(flags, DTF_ELLIPSIS)) {
+                            auto it = charXAdvs.rbegin();
+                            if (it != charXAdvs.rend()) {
+                                clipped = true;
+                                xAccum -= (*it);
+                                charXAdvs.pop_back();
+                                cursor--;
+                                break;
+                            }
+                        }
+                    }
                     charXAdvs.push_back(xAdv);
                     xAccum += xAdv;
                     cursor++;
@@ -699,6 +712,15 @@ namespace twm
                     if (rewound > 0) { cursor++; }
                     yAccum += yAdvMax + yOffMin;
                 } else {
+                    if (clipped && bitsHigh(flags, DTF_ELLIPSIS)) {
+                        Ada_charBounds('.', nullptr, nullptr, &xAdv, &yAdv,
+                            &xOff, &yOff, textSize, textSize, autoSelectFont());
+                        for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
+                            _gfx->drawChar(xAccum, yAccum, '.', textColor,
+                                textColor, textSize);
+                            xAccum += xAdv;
+                        }
+                    }
                     break;
                 }
             }
@@ -816,7 +838,7 @@ namespace twm
                 ProgressBarProgressColor);
         }
 
-        Rect getCheckBoxCheckableArea(const Rect& rect) const override
+        Rect getCheckBoxCheckableArea(const Rect& rect) const final
         {
             auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
             Rect checkRect(
@@ -829,31 +851,34 @@ namespace twm
             return checkRect;
         }
 
-        void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const override
+        void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
             drawWindowBackground(rect);
             Rect checkRect = getCheckBoxCheckableArea(rect);
-            _gfx->fillRect(checkRect.left, checkRect.top, checkRect.width(),
-                checkRect.height(), CheckBoxCheckableAreaBgColor);
+            _gfx->fillRect(
+                checkRect.left,
+                checkRect.top,
+                checkRect.width(),
+                checkRect.height(),
+                CheckBoxCheckableAreaBgColor
+            );
             drawWindowFrame(checkRect);
             if (checked) {
                 const Point begins[] = {
-                    {checkRect.left, checkRect.top + 1},
-                    {checkRect.left, checkRect.top},
-                    {checkRect.left + 1, checkRect.top},
-
-                    {checkRect.right - 1, checkRect.top},
-                    {checkRect.right, checkRect.top},
-                    {checkRect.right, checkRect.top + 1},
+                    Point(checkRect.left, checkRect.top + 1),
+                    Point(checkRect.left, checkRect.top),
+                    Point(checkRect.left + 1, checkRect.top),
+                    Point(checkRect.right - 1, checkRect.top),
+                    Point(checkRect.right, checkRect.top),
+                    Point(checkRect.right, checkRect.top + 1)
                 };
                 const Point ends[] = {
-                    {checkRect.right - 1, checkRect.bottom},
-                    {checkRect.right, checkRect.bottom},
-                    {checkRect.right, checkRect.bottom - 1},
-
-                    {checkRect.left, checkRect.bottom - 1},
-                    {checkRect.left, checkRect.bottom},
-                    {checkRect.left + 1, checkRect.bottom}
+                    Point(checkRect.right - 1, checkRect.bottom),
+                    Point(checkRect.right, checkRect.bottom),
+                    Point(checkRect.right, checkRect.bottom - 1),
+                    Point(checkRect.left, checkRect.bottom - 1),
+                    Point(checkRect.left, checkRect.bottom),
+                    Point(checkRect.left + 1, checkRect.bottom)
                 };
                 static_assert(sizeof(begins) == sizeof(ends));
                 for (size_t n = 0; n < (sizeof(begins) / sizeof(begins[0])); n++) {
@@ -873,12 +898,7 @@ namespace twm
                 checkRect.right + checkPadding + rect.width(),
                 rect.top + rect.height()
             );
-            //_gfx->drawRect(textRect.left, textRect.top, textRect.width(), textRect.height(), 0xf800);
             drawText(lbl, DTF_SINGLE, textRect, getWindowTextSize(), getWindowTextColor());
-            /*_gfx->fillRect(checkRect.left, checkRect.top, checkRect.width(), checkRect.height(),
-                0x00f1);
-            _gfx->fillRect(textRect.left, textRect.top, textRect.width(), textRect.height(),
-                0xf800);*/
         }
 
     private:
@@ -1585,8 +1605,8 @@ namespace twm
                 gfx->setTextSize(theme->getButtonTextSize());
                 Coord x, y;
                 Extent width, height;
-                gfx->getTextBounds(getText().c_str(), 0, 0, &x, &y, &width, &height);
                 Rect rect = getRect();
+                gfx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
                 rect.right = rect.left + max(width, theme->getButtonWidth()) + (theme->getButtonLabelPadding() * 2);
                 rect.bottom = rect.top + theme->getButtonHeight();
                 setRect(rect);
@@ -1603,7 +1623,7 @@ namespace twm
     class Label : public Window
     {
     public:
-        TWM_CONST(uint8_t, DrawTextFlags, DTF_SINGLE);
+        TWM_CONST(uint8_t, DrawTextFlags, DTF_SINGLE | DTF_ELLIPSIS);
 
         using Window::Window;
         Label() = default;
@@ -1615,6 +1635,7 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
+                theme->drawWindowFrame(rect);
                 theme->drawText(getText().c_str(), DrawTextFlags, rect,
                     theme->getWindowTextSize(), theme->getWindowTextColor());
                 return true;
