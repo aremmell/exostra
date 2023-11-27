@@ -425,7 +425,7 @@ namespace twm
         virtual uint8_t getWindowTextSize() const = 0;
         virtual Color getWindowTextColor() const = 0;
         virtual Extent getWindowFrameThickness() const = 0;
-        virtual void drawWindowFrame(const Rect&) const = 0;
+        virtual void drawWindowFrame(const Rect&, bool) const = 0;
         virtual void drawWindowBackground(const Rect&) const = 0;
         virtual void drawText(const char*, uint8_t,
             const Rect&, uint8_t, Color) const = 0;
@@ -435,7 +435,6 @@ namespace twm
         virtual Extent getProgressBarHeight() const = 0;
         virtual float getProgressBarIndeterminateStep() const = 0;
         virtual void drawProgressBarBackground(const Rect&) const = 0;
-        virtual void drawProgressBarFrame(const Rect&) const = 0;
         virtual void drawProgressBarProgress(const Rect&, float) const = 0;
         virtual void drawProgressBarIndeterminate(const Rect&, float) const = 0;
         virtual Rect getCheckBoxCheckableArea(const Rect&) const = 0;
@@ -476,11 +475,11 @@ namespace twm
         TWM_CONST(u_long, ButtonTappedDuration, 200);
         TWM_CONST(Coord, ButtonCornerRadius, 4);
         TWM_CONST(Color, ProgressBarBackgroundColor, 0xef5d);
-        TWM_CONST(Color, ProgressBarFrameColor, 0x9cf3);
         TWM_CONST(Color, ProgressBarProgressColor, 0x0ce0);
         TWM_CONST(float, ProgressBarIndeterminateBandWidth, 0.33f);
         TWM_CONST(float, ProgressBarIndeterminateStep, 1.0f);
         TWM_CONST(Extent, CheckBoxCheckableAreaPadding, 6);
+        TWM_CONST(Extent, CheckBoxCheckMarkPadding, 4);
         TWM_CONST(Color, CheckBoxCheckableAreaBgColor, 0xef5d);
         TWM_CONST(Color, CheckBoxCheckMarkColor, 0x3166);
         TWM_CONST(u_long, CheckBoxCheckDelay, 200);
@@ -608,7 +607,7 @@ namespace twm
             return getScaledValue(WindowFrameThickness);
         }
 
-        void drawWindowFrame(const Rect& rect) const final
+        void drawWindowFrame(const Rect& rect, bool drawShadow = true) const final
         {
             Rect tmp = rect;
             auto pixels = getWindowFrameThickness();
@@ -617,20 +616,22 @@ namespace twm
                     WindowFrameColor);
                 tmp.deflate(1);
             }
-            _gfx->drawLine(
-                rect.left + 1,
-                rect.bottom,
-                rect.left + (rect.width() - 1),
-                rect.bottom,
-                WindowFrameShadowColor
-            );
-            _gfx->drawLine(
-                rect.right,
-                rect.top + 1,
-                rect.right,
-                rect.top + (rect.height() - 1),
-                WindowFrameShadowColor
-            );
+            if (drawShadow) {
+                _gfx->drawLine(
+                    rect.left + 1,
+                    rect.bottom,
+                    rect.left + (rect.width() - 1),
+                    rect.bottom,
+                    WindowFrameShadowColor
+                );
+                _gfx->drawLine(
+                    rect.right,
+                    rect.top + 1,
+                    rect.right,
+                    rect.top + (rect.height() - 1),
+                    WindowFrameShadowColor
+                );
+            }
         }
 
         void drawWindowBackground(const Rect& rect) const final
@@ -782,17 +783,6 @@ namespace twm
                 ProgressBarBackgroundColor);
         }
 
-        void drawProgressBarFrame(const Rect& rect) const final
-        {
-            Rect tmp = rect;
-            auto pixels = getWindowFrameThickness();
-            while (pixels-- > 0) {
-                _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
-                    ProgressBarFrameColor);
-                tmp.deflate(1);
-            }
-        }
-
         void drawProgressBarProgress(const Rect& rect, float percent) const final
         {
             TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
@@ -843,14 +833,14 @@ namespace twm
         Rect getCheckBoxCheckableArea(const Rect& rect) const final
         {
             auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
-            Rect checkRect(
+            Rect checkableRect(
                 rect.left,
                 rect.top + checkPadding,
                 rect.left + (rect.height() - (checkPadding * 2)),
                 rect.top + (rect.height() - checkPadding)
             );
-            checkRect.top = rect.top + ((rect.height() / 2) - (checkRect.height() / 2));
-            return checkRect;
+            checkableRect.top = rect.top + ((rect.height() / 2) - (checkableRect.height() / 2));
+            return checkableRect;
         }
 
         u_long getCheckBoxCheckDelay() const final { return CheckBoxCheckDelay; }
@@ -858,43 +848,26 @@ namespace twm
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
             drawWindowBackground(rect);
-            Rect checkRect = getCheckBoxCheckableArea(rect);
+            Rect checkableRect = getCheckBoxCheckableArea(rect);
             _gfx->fillRect(
-                checkRect.left,
-                checkRect.top,
-                checkRect.width(),
-                checkRect.height(),
+                checkableRect.left,
+                checkableRect.top,
+                checkableRect.width(),
+                checkableRect.height(),
                 CheckBoxCheckableAreaBgColor
             );
-            drawWindowFrame(checkRect);
+            drawWindowFrame(checkableRect, false);
             if (checked) {
-                const Point begins[] = {
-                    Point(checkRect.left, checkRect.top + 1),
-                    Point(checkRect.left, checkRect.top),
-                    Point(checkRect.left + 1, checkRect.top),
-                    Point(checkRect.right - 1, checkRect.top),
-                    Point(checkRect.right, checkRect.top),
-                    Point(checkRect.right, checkRect.top + 1)
-                };
-                const Point ends[] = {
-                    Point(checkRect.right - 1, checkRect.bottom),
-                    Point(checkRect.right, checkRect.bottom),
-                    Point(checkRect.right, checkRect.bottom - 1),
-                    Point(checkRect.left, checkRect.bottom - 1),
-                    Point(checkRect.left, checkRect.bottom),
-                    Point(checkRect.left + 1, checkRect.bottom)
-                };
-                static_assert(sizeof(begins) == sizeof(ends));
-                for (size_t n = 0; n < (sizeof(begins) / sizeof(begins[0])); n++) {
-                    _gfx->drawLine(begins[n].x, begins[n].y, ends[n].x,
-                        ends[n].y, CheckBoxCheckMarkColor);
-                }
+                Rect rectCheckMark = checkableRect;
+                rectCheckMark.deflate(getScaledValue(CheckBoxCheckMarkPadding));
+                _gfx->fillRect(rectCheckMark.left, rectCheckMark.top,
+                    rectCheckMark.width(), rectCheckMark.height(), CheckBoxCheckMarkColor);
             }
             auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
             Rect textRect(
-                checkRect.right + checkPadding,
+                checkableRect.right + checkPadding,
                 rect.top,
-                checkRect.right + (rect.width() - checkRect.width()),
+                checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
             );
             drawText(lbl, DTF_SINGLE | DTF_ELLIPSIS, textRect,
@@ -1478,7 +1451,7 @@ namespace twm
                 Rect rect = getRect();
                 TWM_ASSERT(rect.width() > 0 && rect.height() > 0);
                 theme->drawWindowBackground(rect);
-                theme->drawWindowFrame(rect);
+                theme->drawWindowFrame(rect, true);
                 return true;
             }
             return false;
@@ -1822,7 +1795,7 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawProgressBarBackground(rect);
-                theme->drawProgressBarFrame(rect);
+                theme->drawWindowFrame(rect, false);
                 if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
                     theme->drawProgressBarProgress(rect, getProgressValue());
                     return true;
