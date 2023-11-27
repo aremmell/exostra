@@ -3,7 +3,7 @@ Thumby Window Manager[^1]
 
 A window management framework designed to run on microcontrollers that are attached to a touch-capable display.
 
-1. WIP. I have only written the basic window classes like button, label, progress bar, checkbox, etc. as of now, but stay tuned!
+1. WIP. I have only written the basic window classes like button, label, progress bar, prompt (message box), checkbox, etc. as of now, but stay tuned!
 2. Currently building on top of Adafruit's GFX library, since it has a common interface for every display controller they support. I may decide to shim it out so that other graphics libraries can be plugged in instead.
 3. Trying to keep it minimal, but my desktop C++ habits have caused some more bloat than I would like. I will need to rein that in. Maybe that's what I will do next.
 
