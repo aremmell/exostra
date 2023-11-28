@@ -28,7 +28,6 @@
 
 # include <cstdlib>
 # include <cstdint>
-# include <cinttypes>
 # include <type_traits>
 # include <functional>
 # include <string>
