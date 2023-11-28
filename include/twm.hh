@@ -225,29 +225,29 @@ namespace twm
         Coord right  = 0; /**< X-axis value of the right edge. */
         Coord bottom = 0; /**< Y-axis value of the bottom edge. */
 
-        inline Extent width() const noexcept
+        Extent width() const noexcept
         {
             TWM_ASSERT(right >= left);
             return static_cast<Extent>(right - left);
         }
 
-        inline Extent height() const noexcept
+        Extent height() const noexcept
         {
             TWM_ASSERT(bottom >= top);
             return static_cast<Extent>(bottom - top);
         }
 
-        inline Point getTopLeft() const noexcept
+        Point getTopLeft() const noexcept
         {
             return { left, top };
         }
 
-        inline Point getBottomRight() const noexcept
+        Point getBottomRight() const noexcept
         {
             return { right, bottom };
         }
 
-        inline void inflate(Extent px) noexcept
+        void inflate(Extent px) noexcept
         {
             left   -= px;
             top    -= px;
@@ -255,7 +255,7 @@ namespace twm
             bottom += px;
         }
 
-        inline void deflate(Extent px) noexcept
+        void deflate(Extent px) noexcept
         {
             left   += px;
             top    += px;
@@ -263,7 +263,7 @@ namespace twm
             bottom -= px;
         }
 
-        inline bool overlaps(const Rect& other) const noexcept
+        bool overlaps(const Rect& other) const noexcept
         {
             if ((left >= other.left && left <= other.right) ||
                 (right <= other.right && right >= other.left)) {
@@ -285,18 +285,13 @@ namespace twm
             return false;
         }
 
-        inline bool isPointWithin(Coord x, Coord y) const noexcept
+        bool isPointWithin(Coord x, Coord y) const noexcept
         {
             if (x >= left && x <= left + width() &&
                 y >= top  && y <= top + height()) {
                 return true;
             }
             return false;
-        }
-
-        inline bool isPointWithin(const Point& point) const noexcept
-        {
-            return isPointWithin(point.x, point.y);
         }
     };
 
