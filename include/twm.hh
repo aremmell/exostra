@@ -81,24 +81,20 @@ inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* font, uint8_t c)
 
 static void Ada_charBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
     uint8_t* xAdv, uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
-    uint8_t textSizeY = 1, const GFXfont* gfxFont = nullptr)
+    uint8_t textSizeY = 1, const GFXfont* font = nullptr)
 {
-    if (gfxFont) { // Next line: x = start; y += textSizeY * yAdv;
-        uint8_t first = pgm_read_byte(&gfxFont->first),
-                last  = pgm_read_byte(&gfxFont->last);
+    if (font) {
+        uint8_t first = pgm_read_byte(&font->first);
+        uint8_t last = pgm_read_byte(&font->last);
         bool inRange = (ch >= first && ch <= last);
-        GFXglyph* glyph = inRange ? pgm_read_glyph_ptr(gfxFont, ch - first) : nullptr;
-        if (cx) {
-            *cx = inRange ? pgm_read_byte(&glyph->width) : 0;
-        }
-        if (cy) {
-            *cy = inRange ? pgm_read_byte(&glyph->height) : 0;
-        }
-        *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) : 0;
-        *yAdv = inRange ? pgm_read_byte(&gfxFont->yAdvance) : 0;
+        auto glyph = inRange ? pgm_read_glyph_ptr(font, ch - first) : nullptr;
+        if (cx) { *cx = inRange ? pgm_read_byte(&glyph->width) * textSizeX : 0; }
+        if (cy) { *cy = inRange ? pgm_read_byte(&glyph->height) * textSizeY : 0; }
+        *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) * textSizeX : 0;
+        *yAdv = inRange ? pgm_read_byte(&font->yAdvance) : 0;
         *xOff = inRange ? pgm_read_byte(&glyph->xOffset) : 0;
         *yOff = inRange ? pgm_read_byte(&glyph->yOffset) : 0;
-    } else { // Next line: x = start; y += textSizeY * 8;
+    } else {
         *cx = textSizeX * 6;
         *cy = textSizeY * 8;
         *xAdv = *cx;
