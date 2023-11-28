@@ -388,20 +388,21 @@ namespace twm
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
         virtual void setFont(const GFXfont*) const = 0;
-        virtual void setSmallFont() const = 0;
-        virtual void setMediumFont() const = 0;
-        virtual void setLargeFont() const = 0;
+        virtual void setTextSizeMultiplier(uint8_t) const = 0;
         virtual const GFXfont* autoSelectFont() const = 0;
         virtual const GFXfont* getSmallFont() const = 0;
         virtual const GFXfont* getMediumFont() const = 0;
         virtual const GFXfont* getLargeFont() const = 0;
         virtual ScreenSize getScreenSize() const = 0;
         virtual Extent getScaledValue(Extent) const = 0;
+        virtual uint8_t getTextSizeMultiplier() const = 0;
+        virtual Extent getWindowFrameThickness() const = 0;
+        virtual Coord getWindowTextYOffset() const = 0;
+        virtual Color getWindowTextColor() const = 0;
         virtual Extent getWindowXPadding() const = 0;
         virtual Extent getWindowYPadding() const = 0;
         virtual Extent getButtonWidth() const = 0;
         virtual Extent getButtonHeight() const = 0;
-        virtual uint8_t getButtonTextSize() const = 0;
         virtual Color getButtonTextColor() const = 0;
         virtual Color getButtonTextColorPressed() const = 0;
         virtual Color getButtonBgColor() const = 0;
@@ -411,9 +412,6 @@ namespace twm
         virtual Extent getButtonLabelPadding() const = 0;
         virtual u_long getButtonTappedDuration() const = 0;
         virtual Coord getButtonCornerRadius() const = 0;
-        virtual uint8_t getWindowTextSize() const = 0;
-        virtual Color getWindowTextColor() const = 0;
-        virtual Extent getWindowFrameThickness() const = 0;
         virtual void drawWindowFrame(const Rect&, bool) const = 0;
         virtual void drawWindowBackground(const Rect&) const = 0;
         virtual void drawText(const char*, uint8_t,
@@ -436,6 +434,8 @@ namespace twm
     class DefaultTheme : public ITheme
     {
     public:
+        TWM_CONST(Coord, ScreenThresholdSmall, 320);
+        TWM_CONST(Coord, ScreenThresholdMedium, 480);
         TWM_CONST(Color, ScreensaverColor, 0x0000);
         TWM_CONST(Color, DesktopWindowColor, 0xb59a);
         TWM_CONST(const GFXfont*, SmallFont, &FreeSans9pt7b);
@@ -449,7 +449,9 @@ namespace twm
         TWM_CONST(float, ButtonWidthFactor, 0.27f);
         TWM_CONST(float, ButtonHeightFactor, ButtonWidthFactor * 0.52f);
         TWM_CONST(float, ProgressBarHeightFactor, 0.12f);
+        TWM_CONST(uint8_t, TextSizeMultiplier, 1);
         TWM_CONST(Extent, WindowFrameThickness, 1);
+        TWM_CONST(Coord, WindowTextYOffset, 4);
         TWM_CONST(Color, WindowFrameColor, 0x9cf3);
         TWM_CONST(Color, WindowFrameShadowColor, 0xb5b6);
         TWM_CONST(Color, WindowBgColor, 0xdedb);
@@ -472,11 +474,6 @@ namespace twm
         TWM_CONST(Color, CheckBoxCheckableAreaBgColor, 0xef5d);
         TWM_CONST(Color, CheckBoxCheckMarkColor, 0x3166);
         TWM_CONST(u_long, CheckBoxCheckDelay, 200);
-        TWM_CONST(Coord, ScreenThresholdSmall, 320);
-        TWM_CONST(Coord, ScreenThresholdMedium, 480);
-        TWM_CONST(uint8_t, WindowTextSize, 1);
-        TWM_CONST(uint8_t, ButtonTextSize, 1);
-        TWM_CONST(Coord, WindowTextYOffset, 5);
 
         void setGfxDriver(const GfxDriverPtr& gfx)
         {
@@ -495,9 +492,7 @@ namespace twm
         }
 
         void setFont(const GFXfont* font) const final { _gfx->setFont(font); }
-        void setSmallFont() const final { _gfx->setFont(getSmallFont()); }
-        void setMediumFont() const final { _gfx->setFont(getMediumFont()); }
-        void setLargeFont() const final { _gfx->setFont(getLargeFont()); }
+        void setTextSizeMultiplier(uint8_t mul) const final { _gfx->setTextSize(mul); }
 
         const GFXfont* autoSelectFont() const final
         {
@@ -546,6 +541,9 @@ namespace twm
             }
         }
 
+        uint8_t getTextSizeMultiplier() const final { return TextSizeMultiplier; }
+        Color getWindowTextColor() const final { return WindowTextColor; }
+
         Extent getWindowXPadding() const final
         {
             return abs(_gfx->width() * WindowXPadFactor);
@@ -554,6 +552,16 @@ namespace twm
         Extent getWindowYPadding() const final
         {
             return abs(_gfx->height() * WindowYPadFactor);
+        }
+
+        Extent getWindowFrameThickness() const final
+        {
+            return getScaledValue(WindowFrameThickness);
+        }
+
+        Coord getWindowTextYOffset() const final
+        {
+            return getScaledValue(WindowTextYOffset);
         }
 
         Extent getButtonWidth() const final
@@ -579,7 +587,6 @@ namespace twm
             }
         }
 
-        uint8_t getButtonTextSize() const final { return ButtonTextSize; }
         Color getButtonTextColor() const final { return ButtonTextColor; }
         Color getButtonTextColorPressed() const final { return ButtonTextColorPressed; }
         Color getButtonBgColor() const final { return ButtonBgColor; }
@@ -588,13 +595,6 @@ namespace twm
         Color getButtonFrameColorPressed() const final { return ButtonFrameColorPressed; }
         Extent getButtonLabelPadding() const final { return getScaledValue(ButtonLabelPadding); }
         u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
-        uint8_t getWindowTextSize() const final { return WindowTextSize; }
-        Color getWindowTextColor() const final { return WindowTextColor; }
-
-        Extent getWindowFrameThickness() const final
-        {
-            return getScaledValue(WindowFrameThickness);
-        }
 
         void drawWindowFrame(const Rect& rect, bool drawShadow = true) const final
         {
@@ -640,7 +640,7 @@ namespace twm
             Extent xAccum = 0;
             Extent yAccum =
                 rect.top + (singleLine ? (rect.height() / 2) : getWindowYPadding())
-                    + getScaledValue(WindowTextYOffset);
+                    + getWindowTextYOffset();
             const Extent xPadding =
                 ((singleLine && !xCenter) ? 0 : getWindowXPadding());
             const Extent xExtent = rect.right - xPadding;
@@ -744,7 +744,7 @@ namespace twm
 
         void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const final
         {
-            drawText(lbl, DTF_SINGLE | DTF_CENTER, rect, getButtonTextSize(),
+            drawText(lbl, DTF_SINGLE | DTF_CENTER, rect, getTextSizeMultiplier(),
                 pressed ? getButtonTextColorPressed() : getButtonTextColor());
         }
 
@@ -849,8 +849,13 @@ namespace twm
             if (checked) {
                 Rect rectCheckMark = checkableRect;
                 rectCheckMark.deflate(getScaledValue(CheckBoxCheckMarkPadding));
-                _gfx->fillRect(rectCheckMark.left, rectCheckMark.top,
-                    rectCheckMark.width(), rectCheckMark.height(), CheckBoxCheckMarkColor);
+                _gfx->fillRect(
+                    rectCheckMark.left,
+                    rectCheckMark.top,
+                    rectCheckMark.width(),
+                    rectCheckMark.height(),
+                    CheckBoxCheckMarkColor
+                );
             }
             auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
             Rect textRect(
@@ -860,7 +865,7 @@ namespace twm
                 rect.top + rect.height()
             );
             drawText(lbl, DTF_SINGLE | DTF_ELLIPSIS, textRect,
-                getWindowTextSize(), getWindowTextColor());
+                getTextSizeMultiplier(), getWindowTextColor());
         }
 
     private:
@@ -1113,7 +1118,7 @@ namespace twm
                 std::make_shared<TWindow>(shared_from_this(), parent, id, style, rect, text)
             );
             if (!win) {
-                TWM_LOG(TWM_ERROR, "oom");
+                TWM_LOG(TWM_ERROR, "OOM");
                 return nullptr;
             }
             if (bitsHigh(style, STY_CHILD) && !parent) {
@@ -1165,8 +1170,8 @@ namespace twm
                 style,
                 _theme->getWindowXPadding(),
                 _theme->getWindowYPadding(),
-                _gfx->width() - (_theme->getWindowXPadding() * 2),
-                _gfx->height() - (_theme->getWindowYPadding() * 2),
+                getScreenWidth() - (_theme->getWindowXPadding() * 2),
+                getScreenHeight() - (_theme->getWindowYPadding() * 2),
                 text,
                 [&](const std::shared_ptr<TPrompt>& win)
                 {
@@ -1471,6 +1476,7 @@ namespace twm
         /** MSG_EVENT: param1 = EventType, param2 = child WindowID. */
         bool onEvent(MsgParam p1, MsgParam p2) override { return true; }
 
+        /** MSG_RESIZE: param1 = nullptr, param2 = nullptr. */
         bool onResize(MsgParam p1, MsgParam p2) override
         {
             TWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
@@ -1564,7 +1570,6 @@ namespace twm
             auto gfx = _getGfx();
             auto theme = _getTheme();
             if (gfx && theme) {
-                gfx->setTextSize(theme->getButtonTextSize());
                 Coord x, y;
                 Extent width, height;
                 Rect rect = getRect();
@@ -1598,7 +1603,7 @@ namespace twm
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
                 theme->drawText(getText().c_str(), DrawTextFlags, rect,
-                    theme->getWindowTextSize(), theme->getWindowTextColor());
+                    theme->getTextSizeMultiplier(), theme->getWindowTextColor());
                 return true;
             }
             return false;
@@ -1621,7 +1626,7 @@ namespace twm
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
                 theme->drawText(getText().c_str(), DrawTextFlags, rect,
-                    theme->getWindowTextSize(), theme->getWindowTextColor());
+                    theme->getTextSizeMultiplier(), theme->getWindowTextColor());
                 return true;
             }
             return false;
@@ -1745,18 +1750,17 @@ namespace twm
         bool onEvent(MsgParam param1, MsgParam param2) override
         {
             switch (static_cast<EventType>(param1)) {
-                case EVT_CHILD_TAPPED: {
+                case EVT_CHILD_TAPPED:
                     hide();
                     if (_callback) {
                         _callback(static_cast<WindowID>(param2));
                     }
-                }
-                break;
+                return true;
                 default:
-                    TWM_ASSERT(!"unknown event type");
+                    TWM_ASSERT(false);
                 break;
             }
-            return true;
+            return false;
         }
 
     protected:
@@ -1771,8 +1775,8 @@ namespace twm
         ProgressBar() = default;
         virtual ~ProgressBar() = default;
 
-        Style getProgressBarStyle() const noexcept { return _pbarStyle; }
-        void setProgressBarStyle(Style pbarStyle) noexcept { _pbarStyle = pbarStyle; }
+        Style getProgressBarStyle() const noexcept { return _barStyle; }
+        void setProgressBarStyle(Style pbarStyle) noexcept { _barStyle = pbarStyle; }
 
         float getProgressValue() const noexcept { return _value; }
         void setProgressValue(float value) noexcept { _value = value; }
@@ -1797,7 +1801,7 @@ namespace twm
             return false;
         }
 
-        Style _pbarStyle = 0;
+        Style _barStyle = 0;
         float _value = 0;
     };
 
