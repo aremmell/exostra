@@ -13,14 +13,14 @@
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
 # define TWM_DEFAULT_FONT &FreeSans18pt7b
-# define TFT_WIDTH 720
-# define TFT_HEIGHT 720
+# define TWM_DISPLAY_WIDTH 720
+# define TWM_DISPLAY_HEIGHT 720
 # define I2C_TOUCH_ADDR 0x48
 #elif defined(TFT_480_ROUND)
 # include <Fonts/FreeSans12pt7b.h>
 # define TWM_DEFAULT_FONT &FreeSans12pt7b
-# define TFT_WIDTH 480
-# define TFT_HEIGHT 480
+# define TWM_DISPLAY_WIDTH 480
+# define TWM_DISPLAY_HEIGHT 480
 # define I2C_TOUCH_ADDR 0x15
 #elif defined(TFT_320_RECTANGLE)
 # include <Fonts/FreeSans9pt7b.h>
@@ -31,14 +31,14 @@
 
 #if defined(TFT_320_RECTANGLE)
 # if !defined(ARDUINO_PROS3)
-#  define "only the ProS3 is configured for use with this display"
+#  error "only the ProS3 is configured for use with this display"
 # endif
-# define TFT_WIDTH 240
-# define TFT_HEIGHT 320
+# define TWM_DISPLAY_WIDTH 240
+# define TWM_DISPLAY_HEIGHT 320
 # define TS_MINX 0
 # define TS_MINY 0
-# define TS_MAXX TFT_WIDTH
-# define TS_MAXY TFT_HEIGHT
+# define TS_MAXX TWM_DISPLAY_WIDTH
+# define TS_MAXY TWM_DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
 /***
  * Unexpected Maker ProS3 implied.
@@ -58,7 +58,7 @@
 # include <aremmell_um.h>
 using namespace aremmell;
 #else // Implied Qualia RGB666 for now.
-# if !defined(ARDUINO)
+# if defined(PLATFORMIO) // TODO: detect qualia, hopefully remove hack
 #  include <esp32_qualia.h>
 #  define PIN_NS qualia
 # else
@@ -84,7 +84,6 @@ UMS3 ums3;
 Arduino_XCA9554SWSPI *expander = new Arduino_XCA9554SWSPI(
     PIN_NS::PCA_TFT_RESET, PIN_NS::PCA_TFT_CS, PIN_NS::PCA_TFT_SCK, PIN_NS::PCA_TFT_MOSI, &Wire, 0x3F
 );
-
 Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
     PIN_NS::TFT_DE, PIN_NS::TFT_VSYNC, PIN_NS::TFT_HSYNC, PIN_NS::TFT_PCLK,
     PIN_NS::TFT_R1, PIN_NS::TFT_R2, PIN_NS::TFT_R3, PIN_NS::TFT_R4, PIN_NS::TFT_R5,
@@ -92,10 +91,8 @@ Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
     PIN_NS::TFT_B1, PIN_NS::TFT_B2, PIN_NS::TFT_B3, PIN_NS::TFT_B4, PIN_NS::TFT_B5,
     1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
     1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
-  //    ,1, 30000000
-    );
-
-Arduino_RGB_Display *display = new Arduino_RGB_Display(
+);
+Arduino_RGB_Display* display = new Arduino_RGB_Display(
 # if defined(TFT_720_SQUARE)
   // 4.0" 720x720 square display
   720 /* width */, 720 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
@@ -104,15 +101,14 @@ Arduino_RGB_Display *display = new Arduino_RGB_Display(
   // 2.1" 480x480 round display
   480 /* width */, 480 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
   expander, GFX_NOT_DEFINED /* RST */, TL021WVC02_init_operations, sizeof(TL021WVC02_init_operations));
-  // 2.8" 480x480 round display
-  //480 /* width */, 480 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
-  //expander, GFX_NOT_DEFINED /* RST */, TL028WVC01_init_operations, sizeof(TL028WVC01_init_operations));
+# else
+#  error "invalid display selection"
 # endif
 #endif
 
-auto wm = std::make_shared<WindowManager>(
-  std::make_shared<GFXcanvas16>(TFT_HEIGHT, TFT_WIDTH),
-  std::make_shared<DefaultTheme>(),
+auto wm = createWindowManager<DefaultTheme>(
+  TWM_DISPLAY_HEIGHT,
+  TWM_DISPLAY_WIDTH,
   TWM_DEFAULT_FONT
 );
 
@@ -374,7 +370,7 @@ void loop()
     {
       auto tmp = y;
       y = x;
-      x = wm->getGfx()->width() - tmp;
+      x = wm->getGfxContext()->width() - tmp;
       return std::make_pair(x, y);
     };
 #endif
@@ -422,7 +418,7 @@ void loop()
   display.drawRGBBitmap(
     0,
     0,
-    wm->getGfx()->getBuffer(),
+    wm->getGfxContext()->getBuffer(),
     wm->getScreenWidth(),
     wm->getScreenHeight()
   );
@@ -430,7 +426,7 @@ void loop()
   display->draw16bitRGBBitmap(
     0,
     0,
-    wm->getGfx()->getBuffer(),
+    wm->getGfxContext()->getBuffer(),
     wm->getScreenWidth(),
     wm->getScreenHeight()
   );

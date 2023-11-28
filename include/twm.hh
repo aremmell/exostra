@@ -28,16 +28,13 @@
 #ifndef _THUMBY_H_INCLUDED
 # define _THUMBY_H_INCLUDED
 
-# include <cstdlib>
 # include <cstdint>
-# include <type_traits>
 # include <functional>
+# include <type_traits>
 # include <string>
 # include <memory>
 # include <queue>
-# include <vector>
 # include <mutex>
-# include <map>
 
 # include <Adafruit_GFX.h>
 
@@ -76,14 +73,22 @@ inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* font, uint8_t c)
 }
 # endif // !_ARDUINO_GFX_H_
 
-static void Ada_charBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
-    uint8_t* xAdv, uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
-    uint8_t textSizeY = 1, const GFXfont* font = nullptr)
+static void Ada_charBounds(
+    uint8_t ch,
+    uint8_t* cx,
+    uint8_t* cy,
+    uint8_t* xAdv,
+    uint8_t* yAdv,
+    int8_t* xOff,
+    int8_t* yOff,
+    uint8_t textSizeX = 1,
+    uint8_t textSizeY = 1,
+    const GFXfont* font = nullptr
+)
 {
-    if (font) {
+    if (font != nullptr) {
         uint8_t first = pgm_read_byte(&font->first);
-        uint8_t last = pgm_read_byte(&font->last);
-        bool inRange = (ch >= first && ch <= last);
+        bool inRange = (ch >= first && ch <= pgm_read_byte(&font->last));
         auto glyph = inRange ? pgm_read_glyph_ptr(font, ch - first) : nullptr;
         if (cx) { *cx = inRange ? pgm_read_byte(&glyph->width) * textSizeX : 0; }
         if (cy) { *cy = inRange ? pgm_read_byte(&glyph->height) * textSizeY : 0; }
@@ -108,7 +113,7 @@ static void Ada_charBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
 //#define TWM_SINGLETHREAD
 
 // Comment out to disable logging.
-# define TWM_ENABLE_LOGGING
+//# define TWM_ENABLE_LOGGING
 
 # if defined(TWM_ENABLE_LOGGING)
     typedef enum
@@ -133,27 +138,22 @@ static void Ada_charBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
         Serial.printf(__FILE__ ":" TWM_STRIFY(__LINE__) "): " fmt "\n" \
             __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
-# else
-#  define TWM_LOG(lvl, fmt, ...)
-# endif
-
 # define TWM_ASSERT(expr) \
     do { \
         if (!(expr)) { \
-            TWM_LOG(TWM_ERROR, "assert: '" #expr "'"); \
+            TWM_LOG(TWM_ERROR, "!!! ASSERT: '" #expr "'"); \
         } \
     } while (false)
+# else
+#  define TWM_LOG(lvl, fmt, ...)
+#  define TWM_ASSERT(expr)
+# endif
 
 # define TWM_CONST(type, name, value) \
-    static constexpr PROGMEM type name = value;
+    static constexpr PROGMEM type name = value
 
 namespace thumby
 {
-    /** For now, the only low-level graphics interface supported is Adafruit's. */
-    using IGfxDriver   = GFXcanvas16;
-    using GfxDriverPtr = std::shared_ptr<IGfxDriver>;
-    using Font         = GFXfont;
-
     /** Window identifier. */
     using WindowID = uint8_t;
 
@@ -170,19 +170,26 @@ namespace thumby
     /** Window message parameter type. */
     using MsgParam = uint64_t;
 
-    /** Window message parameter sub-type. */
+    /** Window message parameter component type. */
     using MsgParamWord = uint32_t;
 
     /** Use the smallest type that can contain all possible colors. */
-# if defined(TWM_COLOR_MONOCHROME) || defined(TWM_COLOR_256)
-    using Color = uint8_t; /** Color (monochrome/8-bit). */
+# if defined(TWM_COLOR_MONOCHROME)
+    using Color       = uint8_t;     /**< Color (monochrome). */
+    using IGfxContext = GFXcanvas1;
+# elif defined(TWM_COLOR_256)
+    using Color       = uint8_t;     /**< Color (8-bit). */
+    using IGfxContext = GFXcanvas8;
 # elif defined(TWM_COLOR_565)
-    using Color = uint16_t; /** Color (16-bit RGB) */
-# elif defined(TWM_COLOR_RGB) || defined(TWM_COLOR_ARGB)
-    using Color = uint32_t; /** Color (24-bit RGB/32-bit ARGB). */
+    using Color       = uint16_t;    /**< Color (16-bit 565 RGB) */
+    using IGfxContext = GFXcanvas16;
 # else
 #  error "color mode is invalid"
 # endif
+
+    /** Currently, the only low-level graphics interface supported is Adafruit's. */
+    using GfxContextPtr = std::shared_ptr<IGfxContext>;
+    using Font          = GFXfont;
 
     /** Coordinate in 3D space (e.g. X, Y, or Z). */
     using Coord = int16_t;
@@ -382,7 +389,7 @@ namespace thumby
             Medium,
             Large
         };
-        virtual void setGfxDriver(const GfxDriverPtr&) = 0;
+        virtual void setGfxContext(const GfxContextPtr&) = 0;
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
         virtual void setDefaultFont(const Font*) = 0;
@@ -467,36 +474,36 @@ namespace thumby
         TWM_CONST(Color, CheckBoxCheckMarkColor, 0x3166);
         TWM_CONST(u_long, CheckBoxCheckDelay, 200);
 
-        void setGfxDriver(const GfxDriverPtr& gfx)
+        void setGfxContext(const GfxContextPtr& gfx) final
         {
             TWM_ASSERT(gfx);
-            _gfx = gfx;
+            _gfxContext = gfx;
         }
 
         void drawScreensaver() const final
         {
-            _gfx->fillScreen(ScreensaverColor);
+            _gfxContext->fillScreen(ScreensaverColor);
         }
 
         void drawDesktopBackground() const final
         {
-            _gfx->fillRect(0, 0, _gfx->width(), _gfx->height(), DesktopWindowColor);
+            _gfxContext->fillRect(0, 0, _gfxContext->width(), _gfxContext->height(), DesktopWindowColor);
         }
 
         void setDefaultFont(const Font* font) final
         {
             _defaultFont = font;
-            _gfx->setFont(_defaultFont);
+            _gfxContext->setFont(_defaultFont);
         }
 
         const Font* getDefaultFont() const final { return _defaultFont; }
-        void setTextSizeMultiplier(uint8_t mul) const final { _gfx->setTextSize(mul); }
+        void setTextSizeMultiplier(uint8_t mul) const final { _gfxContext->setTextSize(mul); }
 
         ScreenSize getScreenSize() const final
         {
-            if (_gfx->width() <= ScreenThresholdSmall) {
+            if (_gfxContext->width() <= ScreenThresholdSmall) {
                 return ScreenSize::Small;
-            } else if (_gfx->width() <= ScreenThresholdMedium) {
+            } else if (_gfxContext->width() <= ScreenThresholdMedium) {
                 return ScreenSize::Medium;
             } else {
                 return ScreenSize::Large;
@@ -521,12 +528,12 @@ namespace thumby
 
         Extent getWindowXPadding() const final
         {
-            return abs(_gfx->width() * WindowXPadFactor);
+            return abs(_gfxContext->width() * WindowXPadFactor);
         }
 
         Extent getWindowYPadding() const final
         {
-            return abs(_gfx->height() * WindowYPadFactor);
+            return abs(_gfxContext->height() * WindowYPadFactor);
         }
 
         Extent getWindowFrameThickness() const final
@@ -541,12 +548,12 @@ namespace thumby
 
         Extent getButtonWidth() const final
         {
-            return abs(_gfx->width() * ButtonWidthFactor);
+            return abs(_gfxContext->width() * ButtonWidthFactor);
         }
 
         Extent getButtonHeight() const final
         {
-            return abs(_gfx->height() * ButtonHeightFactor);
+            return abs(_gfxContext->height() * ButtonHeightFactor);
         }
 
         Coord getButtonCornerRadius() const final
@@ -576,19 +583,19 @@ namespace thumby
             Rect tmp = rect;
             auto pixels = getWindowFrameThickness();
             while (pixels-- > 0) {
-                _gfx->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
+                _gfxContext->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
                     WindowFrameColor);
                 tmp.deflate(1);
             }
             if (drawShadow) {
-                _gfx->drawLine(
+                _gfxContext->drawLine(
                     rect.left + 1,
                     rect.bottom,
                     rect.left + (rect.width() - 1),
                     rect.bottom,
                     WindowFrameShadowColor
                 );
-                _gfx->drawLine(
+                _gfxContext->drawLine(
                     rect.right,
                     rect.top + 1,
                     rect.right,
@@ -600,7 +607,7 @@ namespace thumby
 
         void drawWindowBackground(const Rect& rect) const final
         {
-            _gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
+            _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
                 WindowBgColor);
         }
 
@@ -621,12 +628,12 @@ namespace thumby
             const Extent xExtent = rect.right - xPadding;
             const char* cursor = text;
 
-            _gfx->setFont(font);
+            _gfxContext->setFont(font);
 
             while (*cursor != '\0') {
                 xAccum = rect.left + xPadding;
                 const char* old_cursor = cursor;
-                std::vector<uint8_t> charXAdvs;
+                std::deque<uint8_t> charXAdvs;
                 bool clipped = false;
                 while (xAccum <= xExtent && *cursor != '\0') {
                     Ada_charBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
@@ -672,7 +679,7 @@ namespace thumby
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + xPadding;
                 while (old_cursor < cursor) {
-                    _gfx->drawChar(xAccum, yAccum, *old_cursor++, textColor,
+                    _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
                         textColor, textSize);
                     xAccum += charXAdvs[
                         charXAdvs.size() - 2 - ((cursor + rewound) - old_cursor - 1)
@@ -686,7 +693,7 @@ namespace thumby
                         Ada_charBounds('.', nullptr, nullptr, &xAdv, &yAdv,
                             &xOff, &yOff, textSize, textSize, font);
                         for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
-                            _gfx->drawChar(xAccum, yAccum, '.', textColor,
+                            _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
                                 textColor, textSize);
                             xAccum += xAdv;
                         }
@@ -698,7 +705,7 @@ namespace thumby
 
         void drawButtonFrame(bool pressed, const Rect& rect) const final
         {
-            _gfx->drawRoundRect(
+            _gfxContext->drawRoundRect(
                 rect.left,
                 rect.top,
                 rect.width(),
@@ -710,7 +717,7 @@ namespace thumby
 
         void drawButtonBackground(bool pressed, const Rect& rect) const final
         {
-            _gfx->fillRoundRect(
+            _gfxContext->fillRoundRect(
                 rect.left,
                 rect.top,
                 rect.width(),
@@ -734,7 +741,7 @@ namespace thumby
 
         Extent getProgressBarHeight() const final
         {
-            return abs(_gfx->height() * ProgressBarHeightFactor);
+            return abs(_gfxContext->height() * ProgressBarHeightFactor);
         }
 
         float getProgressBarIndeterminateStep() const final
@@ -752,7 +759,7 @@ namespace thumby
 
         void drawProgressBarBackground(const Rect& rect) const final
         {
-            _gfx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
+            _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
                 ProgressBarBackgroundColor);
         }
 
@@ -763,7 +770,7 @@ namespace thumby
             barRect.deflate(getWindowFrameThickness() * 2);
             float progressWidth = (barRect.width() * (min(100.0f, percent) / 100.0f));
             barRect.right = barRect.left + abs(progressWidth);
-            _gfx->fillRect(barRect.left, barRect.top, barRect.width(),
+            _gfxContext->fillRect(barRect.left, barRect.top, barRect.width(),
                 barRect.height(), ProgressBarProgressColor);
         }
 
@@ -799,7 +806,7 @@ namespace thumby
                     static_cast<Extent>(barRect.right - x)
                 );
             }
-            _gfx->fillRect(x, barRect.top, width, barRect.height(),
+            _gfxContext->fillRect(x, barRect.top, width, barRect.height(),
                 ProgressBarProgressColor);
         }
 
@@ -822,7 +829,7 @@ namespace thumby
         {
             drawWindowBackground(rect);
             Rect checkableRect = getCheckBoxCheckableArea(rect);
-            _gfx->fillRect(
+            _gfxContext->fillRect(
                 checkableRect.left,
                 checkableRect.top,
                 checkableRect.width(),
@@ -833,7 +840,7 @@ namespace thumby
             if (checked) {
                 Rect rectCheckMark = checkableRect;
                 rectCheckMark.deflate(getScaledValue(CheckBoxCheckMarkPadding));
-                _gfx->fillRect(
+                _gfxContext->fillRect(
                     rectCheckMark.left,
                     rectCheckMark.top,
                     rectCheckMark.width(),
@@ -853,7 +860,7 @@ namespace thumby
         }
 
     private:
-        GfxDriverPtr _gfx;
+        GfxContextPtr _gfxContext;
         const Font* _defaultFont = nullptr;
     };
 
@@ -929,7 +936,7 @@ namespace thumby
     class WindowContainer : public IWindowContainer
     {
     public:
-        using WindowStack = std::vector<WindowPtr>;
+        using WindowDeque = std::deque<WindowPtr>;
 
         WindowContainer() = default;
         virtual ~WindowContainer() = default;
@@ -1005,8 +1012,8 @@ namespace thumby
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_childMtx);
 # endif
-            for (auto it = _children.begin(); it != _children.end(); it++) {
-                if (!cb((*it))) {
+            for (auto child : _children) {
+                if (!cb(child)) {
                     break;
                 }
             }
@@ -1028,7 +1035,7 @@ namespace thumby
         }
 
     protected:
-        WindowStack _children;
+        WindowDeque _children;
 # if !defined(TWM_SINGLETHREAD)
         Mutex _childMtx;
 # endif
@@ -1039,13 +1046,16 @@ namespace thumby
     public:
         WindowManager() = delete;
 
-        explicit WindowManager(const GfxDriverPtr& gfx, const ThemePtr& theme,
-            const Font* defaultFont) : _gfx(gfx), _theme(theme)
+        explicit WindowManager(
+            const GfxContextPtr& gfxContext,
+            const ThemePtr& theme,
+            const Font* defaultFont
+        ) : _gfxContext(gfxContext), _theme(theme)
         {
-            TWM_ASSERT(_gfx);
+            TWM_ASSERT(_gfxContext);
             TWM_ASSERT(_theme);
-            if (_theme && _gfx) {
-                _theme->setGfxDriver(_gfx);
+            if (_theme && _gfxContext) {
+                _theme->setGfxContext(_gfxContext);
                 _theme->setDefaultFont(defaultFont);
             }
             _registry = std::make_shared<WindowContainer>();
@@ -1067,11 +1077,11 @@ namespace thumby
             _registry->removeAllChildren();
         }
 
-        GfxDriverPtr getGfx() const { return _gfx; }
+        GfxContextPtr getGfxContext() const { return _gfxContext; }
         ThemePtr getTheme() const { return _theme; }
 
-        Extent getScreenWidth() const { return _gfx->width(); }
-        Extent getScreenHeight() const { return _gfx->height(); }
+        Extent getScreenWidth() const { return _gfxContext->width(); }
+        Extent getScreenHeight() const { return _gfxContext->height(); }
 
         virtual void update()
         {
@@ -1144,7 +1154,7 @@ namespace thumby
             WindowID id,
             Style style,
             const std::string& text,
-            const std::vector<typename TPrompt::ButtonInfo>& buttonInfo,
+            const std::deque<typename TPrompt::ButtonInfo>& buttons,
             const typename TPrompt::ResultCallback& callback
         )
         {
@@ -1160,7 +1170,7 @@ namespace thumby
                 text,
                 [&](const std::shared_ptr<TPrompt>& win)
                 {
-                    for (const auto& btn : buttonInfo) {
+                    for (const auto& btn : buttons) {
                         if (!win->addButton(btn)) {
                             return false;
                         }
@@ -1212,11 +1222,26 @@ namespace thumby
 
     protected:
         WindowContainerPtr _registry;
-        GfxDriverPtr _gfx;
+        GfxContextPtr _gfxContext;
         ThemePtr _theme;
     };
 
     using WindowManagerPtr = std::shared_ptr<WindowManager>;
+
+    template<class TTheme>
+    inline WindowManagerPtr createWindowManager(
+        Extent screenWidth,
+        Extent screenHeight,
+        const Font* defaultFont
+    )
+    {
+        static_assert(std::is_base_of<ITheme, TTheme>::value);
+        return std::make_shared<WindowManager>(
+            std::make_shared<IGfxContext>(screenWidth, screenHeight),
+            std::make_shared<TTheme>(),
+            defaultFont
+        );
+    }
 
     class Window : public IWindow, public std::enable_shared_from_this<IWindow>
     {
@@ -1476,11 +1501,11 @@ namespace thumby
             return _wm;
         }
 
-        GfxDriverPtr _getGfx() const
+        GfxContextPtr _getGfxContext() const
         {
             auto wm = _getWM();
             if (wm) {
-                auto gfx = wm->getGfx();
+                auto gfx = wm->getGfxContext();
                 TWM_ASSERT(gfx);
                 return gfx;
             }
@@ -1552,7 +1577,7 @@ namespace thumby
 
         bool onResize(MsgParam p1, MsgParam p2) override
         {
-            auto gfx = _getGfx();
+            auto gfx = _getGfxContext();
             auto theme = _getTheme();
             if (gfx && theme) {
                 Coord x, y;
