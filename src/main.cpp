@@ -40,24 +40,16 @@
 # define TS_MAXX TWM_DISPLAY_WIDTH
 # define TS_MAXY TWM_DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
-/***
+/**
  * Unexpected Maker ProS3 implied.
- * Pins:
- * sda 8
- * scl 9
- * tcs 12
- * dc 13
- * rst 14
- *
- * The display also uses hardware SPI, plus these pins:
+ * Pins: sda 8, scl 9, tcs 12, dc 13, rst 14
  */
 # define TFT_CS 12
 # define TFT_DC 13
 # include <Adafruit_ILI9341.h>
 # include <UMS3.h>
-# include <aremmell_um.h>
-using namespace aremmell;
-#else // Implied Qualia RGB666 for now.
+#else
+/** Implied Qualia RGB666 for now. */
 # if defined(PLATFORMIO) // TODO: detect qualia, hopefully remove hack
 #  include <esp32_qualia.h>
 #  define PIN_NS qualia
@@ -70,8 +62,6 @@ using namespace aremmell;
 // black as a pseudo-screensaver. In the future, save what was on
 // the screen and restore it after.
 #define TFT_TOUCH_TIMEOUT 60000
-
-using namespace thumby;
 
 // The FT6206 uses hardware I2C (SCL/SDA)
 Adafruit_FT6206 focal_ctp;
@@ -95,16 +85,17 @@ Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
 Arduino_RGB_Display* display = new Arduino_RGB_Display(
 # if defined(TFT_720_SQUARE)
   // 4.0" 720x720 square display
-  720 /* width */, 720 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
-  expander, GFX_NOT_DEFINED /* RST */, NULL, 0);
+  TWM_DISPLAY_WIDTH, TWM_DISPLAY_HEIGHT, rgbpanel, 0, true, expander, GFX_NOT_DEFINED, NULL, 0);
 # elif defined(TFT_480_ROUND)
   // 2.1" 480x480 round display
-  480 /* width */, 480 /* height */, rgbpanel, 0 /* rotation */, true /* auto_flush */,
-  expander, GFX_NOT_DEFINED /* RST */, TL021WVC02_init_operations, sizeof(TL021WVC02_init_operations));
+  TWM_DISPLAY_WIDTH, TWM_DISPLAY_HEIGHT, rgbpanel, 0, true, expander, GFX_NOT_DEFINED,
+    TL021WVC02_init_operations, sizeof(TL021WVC02_init_operations));
 # else
 #  error "invalid display selection"
 # endif
 #endif
+
+using namespace thumby;
 
 auto wm = createWindowManager<DefaultTheme>(
   TWM_DISPLAY_HEIGHT,
@@ -194,10 +185,17 @@ std::shared_ptr<TestCheckbox> testCheckbox;
 
 void on_fatal_error()
 {
-#if defined(TFT_320_RECTANGLE)
-  aremmell::on_fatal_error(ums3);
+#if defined(ARDUINO_PROS3)
+  ums3.setPixelPower(true); // assume pixel could be off.
+  ums3.setPixelBrightness(255); // maximum brightness.
+  while (true) {
+    ums3.setPixelColor(0xff, 0x00, 0x00); // pure red.
+    delay(1000);
+    ums3.setPixelColor(0x00, 0x00, 0x00); // black (off).
+    delay(1000);
+  }
 #else
-// TODO: blink an LED or something.
+  // TODO: blink an LED or something.
   Serial.println("fatal error");
   while (true);
 #endif
