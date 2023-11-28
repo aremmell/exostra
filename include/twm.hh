@@ -1,6 +1,8 @@
 /*
  * twm.hh
  *
+ * Thumby Window Manager
+ *
  * Author:    Ryan M. Lederman <lederman@gmail.com>
  * Copyright: Copyright (c) 2023
  * Version:   0.0.1
@@ -23,8 +25,8 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef _TWM_H_INCLUDED
-# define _TWM_H_INCLUDED
+#ifndef _THUMBY_H_INCLUDED
+# define _THUMBY_H_INCLUDED
 
 # include <cstdlib>
 # include <cstdint>
@@ -38,10 +40,6 @@
 # include <map>
 
 # include <Adafruit_GFX.h>
-# include <Fonts/FreeSans9pt7b.h>
-# include <Fonts/FreeSans12pt7b.h>
-# include <Fonts/FreeSans18pt7b.h>
-# include <glcdfont.c>
 
 # if !defined(_ARDUINO_GFX_H_)
 #  if defined(__AVR__)
@@ -149,11 +147,12 @@ static void Ada_charBounds(uint8_t ch, uint8_t* cx, uint8_t* cy,
 # define TWM_CONST(type, name, value) \
     static constexpr PROGMEM type name = value;
 
-namespace twm
+namespace thumby
 {
     /** For now, the only low-level graphics interface supported is Adafruit's. */
-    using IGfxDriver = GFXcanvas16;
+    using IGfxDriver   = GFXcanvas16;
     using GfxDriverPtr = std::shared_ptr<IGfxDriver>;
+    using Font         = GFXfont;
 
     /** Window identifier. */
     using WindowID = uint8_t;
@@ -386,12 +385,9 @@ namespace twm
         virtual void setGfxDriver(const GfxDriverPtr&) = 0;
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
-        virtual void setFont(const GFXfont*) const = 0;
+        virtual void setDefaultFont(const Font*) = 0;
+        virtual const Font* getDefaultFont() const = 0;
         virtual void setTextSizeMultiplier(uint8_t) const = 0;
-        virtual const GFXfont* autoSelectFont() const = 0;
-        virtual const GFXfont* getSmallFont() const = 0;
-        virtual const GFXfont* getMediumFont() const = 0;
-        virtual const GFXfont* getLargeFont() const = 0;
         virtual ScreenSize getScreenSize() const = 0;
         virtual Extent getScaledValue(Extent) const = 0;
         virtual uint8_t getTextSizeMultiplier() const = 0;
@@ -413,8 +409,8 @@ namespace twm
         virtual Coord getButtonCornerRadius() const = 0;
         virtual void drawWindowFrame(const Rect&, bool) const = 0;
         virtual void drawWindowBackground(const Rect&) const = 0;
-        virtual void drawText(const char*, uint8_t,
-            const Rect&, uint8_t, Color) const = 0;
+        virtual void drawText(const char*, uint8_t, const Rect&,
+            uint8_t, Color, const Font*) const = 0;
         virtual void drawButtonFrame(bool, const Rect&) const = 0;
         virtual void drawButtonBackground(bool, const Rect&) const = 0;
         virtual void drawButtonLabel(const char*, bool, const Rect&) const = 0;
@@ -437,9 +433,6 @@ namespace twm
         TWM_CONST(Coord, ScreenThresholdMedium, 480);
         TWM_CONST(Color, ScreensaverColor, 0x0000);
         TWM_CONST(Color, DesktopWindowColor, 0xb59a);
-        TWM_CONST(const GFXfont*, SmallFont, &FreeSans9pt7b);
-        TWM_CONST(const GFXfont*, MediumFont, &FreeSans12pt7b);
-        TWM_CONST(const GFXfont*, LargeFont, &FreeSans18pt7b);
         TWM_CONST(float, SmallScaleFactor, 1.0f);
         TWM_CONST(float, MediumScaleFactor, 2.0f);
         TWM_CONST(float, LargeScaleFactor, 3.0f);
@@ -490,31 +483,14 @@ namespace twm
             _gfx->fillRect(0, 0, _gfx->width(), _gfx->height(), DesktopWindowColor);
         }
 
-        void setFont(const GFXfont* font) const final { _gfx->setFont(font); }
-        void setTextSizeMultiplier(uint8_t mul) const final { _gfx->setTextSize(mul); }
-
-        const GFXfont* autoSelectFont() const final
+        void setDefaultFont(const Font* font) final
         {
-            const GFXfont* font = nullptr;
-            switch (getScreenSize()) {
-                default:
-                case ScreenSize::Small:
-                    font = getSmallFont();
-                break;
-                case ScreenSize::Medium:
-                    font = getMediumFont();
-                break;
-                case ScreenSize::Large:
-                    font = getLargeFont();
-                break;
-            }
-            setFont(font);
-            return font;
+            _defaultFont = font;
+            _gfx->setFont(_defaultFont);
         }
 
-        const GFXfont* getSmallFont() const final { return SmallFont; }
-        const GFXfont* getMediumFont() const final { return MediumFont; }
-        const GFXfont* getLargeFont() const final { return LargeFont; }
+        const Font* getDefaultFont() const final { return _defaultFont; }
+        void setTextSizeMultiplier(uint8_t mul) const final { _gfx->setTextSize(mul); }
 
         ScreenSize getScreenSize() const final
         {
@@ -629,7 +605,7 @@ namespace twm
         }
 
         void drawText(const char* text, uint8_t flags, const Rect& rect,
-            uint8_t textSize, Color textColor) const final
+            uint8_t textSize, Color textColor, const Font* font) const final
         {
             bool xCenter = bitsHigh(flags, DTF_CENTER);
             bool singleLine = bitsHigh(flags, DTF_SINGLE);
@@ -644,6 +620,9 @@ namespace twm
                 ((singleLine && !xCenter) ? 0 : getWindowXPadding());
             const Extent xExtent = rect.right - xPadding;
             const char* cursor = text;
+
+            _gfx->setFont(font);
+
             while (*cursor != '\0') {
                 xAccum = rect.left + xPadding;
                 const char* old_cursor = cursor;
@@ -651,7 +630,7 @@ namespace twm
                 bool clipped = false;
                 while (xAccum <= xExtent && *cursor != '\0') {
                     Ada_charBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
-                        &yOff, textSize, textSize, autoSelectFont());
+                        &yOff, textSize, textSize, font);
                     if (xAccum + xAdv > xExtent) {
                         if (singleLine && bitsHigh(flags, DTF_CLIP)) {
                             clipped = true;
@@ -705,7 +684,7 @@ namespace twm
                 } else {
                     if (clipped && bitsHigh(flags, DTF_ELLIPSIS)) {
                         Ada_charBounds('.', nullptr, nullptr, &xAdv, &yAdv,
-                            &xOff, &yOff, textSize, textSize, autoSelectFont());
+                            &xOff, &yOff, textSize, textSize, font);
                         for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
                             _gfx->drawChar(xAccum, yAccum, '.', textColor,
                                 textColor, textSize);
@@ -743,8 +722,14 @@ namespace twm
 
         void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const final
         {
-            drawText(lbl, DTF_SINGLE | DTF_CENTER, rect, getTextSizeMultiplier(),
-                pressed ? getButtonTextColorPressed() : getButtonTextColor());
+            drawText(
+                lbl,
+                DTF_SINGLE | DTF_CENTER,
+                rect,
+                getTextSizeMultiplier(),
+                pressed ? getButtonTextColorPressed() : getButtonTextColor(),
+                getDefaultFont()
+            );
         }
 
         Extent getProgressBarHeight() const final
@@ -864,11 +849,12 @@ namespace twm
                 rect.top + rect.height()
             );
             drawText(lbl, DTF_SINGLE | DTF_ELLIPSIS, textRect,
-                getTextSizeMultiplier(), getWindowTextColor());
+                getTextSizeMultiplier(), getWindowTextColor(), getDefaultFont());
         }
 
     private:
         GfxDriverPtr _gfx;
+        const Font* _defaultFont = nullptr;
     };
 
     struct PackagedMessage
@@ -934,7 +920,7 @@ namespace twm
         virtual bool onEvent(MsgParam, MsgParam) = 0;
         virtual bool onResize(MsgParam, MsgParam) = 0;
 
-        virtual bool onTapped(Coord /* x */, Coord /* y */) = 0;
+        virtual bool onTapped(Coord, Coord) = 0;
     };
 
     using WindowPtr          = std::shared_ptr<IWindow>;
@@ -1053,14 +1039,14 @@ namespace twm
     public:
         WindowManager() = delete;
 
-        explicit WindowManager(const GfxDriverPtr& gfx, const ThemePtr& theme)
-            : _gfx(gfx), _theme(theme)
+        explicit WindowManager(const GfxDriverPtr& gfx, const ThemePtr& theme,
+            const Font* defaultFont) : _gfx(gfx), _theme(theme)
         {
             TWM_ASSERT(_gfx);
             TWM_ASSERT(_theme);
             if (_theme && _gfx) {
                 _theme->setGfxDriver(_gfx);
-                _theme->autoSelectFont();
+                _theme->setDefaultFont(defaultFont);
             }
             _registry = std::make_shared<WindowContainer>();
             TWM_ASSERT(_registry);
@@ -1287,7 +1273,7 @@ namespace twm
         bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
         {
             switch (msg) {
-                case MSG_CREATE:  return onCreate(p1, p2);
+                case MSG_CREATE: return onCreate(p1, p2);
                 case MSG_DESTROY: return onDestroy(p1, p2);
                 case MSG_DRAW: {
                     auto parent = getParent();
@@ -1297,9 +1283,9 @@ namespace twm
                     }
                     return onDraw(p1, p2);
                 }
-                case MSG_INPUT:   return onInput(p1, p2);
-                case MSG_EVENT:   return onEvent(p1, p2);
-                case MSG_RESIZE:  return onResize(p1, p2);
+                case MSG_INPUT: return onInput(p1, p2);
+                case MSG_EVENT: return onEvent(p1, p2);
+                case MSG_RESIZE: return onResize(p1, p2);
                 default:
                     TWM_ASSERT(false);
                 return false;
@@ -1601,8 +1587,14 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawText(getText().c_str(), DrawTextFlags, rect,
-                    theme->getTextSizeMultiplier(), theme->getWindowTextColor());
+                theme->drawText(
+                    getText().c_str(),
+                    DrawTextFlags,
+                    rect,
+                    theme->getTextSizeMultiplier(),
+                    theme->getWindowTextColor(),
+                    theme->getDefaultFont()
+                );
                 return true;
             }
             return false;
@@ -1624,8 +1616,14 @@ namespace twm
             if (theme) {
                 Rect rect = getRect();
                 theme->drawWindowBackground(rect);
-                theme->drawText(getText().c_str(), DrawTextFlags, rect,
-                    theme->getTextSizeMultiplier(), theme->getWindowTextColor());
+                theme->drawText(
+                    getText().c_str(),
+                    DrawTextFlags,
+                    rect,
+                    theme->getTextSizeMultiplier(),
+                    theme->getWindowTextColor(),
+                    theme->getDefaultFont()
+                );
                 return true;
             }
             return false;
@@ -1814,7 +1812,7 @@ namespace twm
         void setChecked(bool checked)
         {
             if (isChecked() != checked) {
-                _lastCheckedChange = millis();
+                _lastToggle = millis();
                 if (checked) {
                     setState(getState() | STA_CHECKED);
                 } else {
@@ -1842,7 +1840,7 @@ namespace twm
         {
             auto theme = _getTheme();
             if (theme) {
-                if (millis() - _lastCheckedChange >= theme->getCheckBoxCheckDelay()) {
+                if (millis() - _lastToggle >= theme->getCheckBoxCheckDelay()) {
                     setChecked(!isChecked());
                     return true;
                 }
@@ -1851,8 +1849,8 @@ namespace twm
         }
 
     private:
-        u_long _lastCheckedChange = 0UL;
+        u_long _lastToggle = 0UL;
     };
-} // namespace twm
+} // namespace thumby
 
-#endif // !_TWM_H_INCLUDED
+#endif // !_THUMBY_H_INCLUDED

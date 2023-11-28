@@ -10,9 +10,39 @@
 //#define TFT_480_ROUND
 #define TFT_320_RECTANGLE
 
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_720_SQUARE)
+# include <Fonts/FreeSans18pt7b.h>
+# define TWM_DEFAULT_FONT &FreeSans18pt7b
+# define TFT_WIDTH 720
+# define TFT_HEIGHT 720
+# define I2C_TOUCH_ADDR 0x48
+#elif defined(TFT_480_ROUND)
+# include <Fonts/FreeSans12pt7b.h>
+# define TWM_DEFAULT_FONT &FreeSans12pt7b
+# define TFT_WIDTH 480
+# define TFT_HEIGHT 480
+# define I2C_TOUCH_ADDR 0x15
+#elif defined(TFT_320_RECTANGLE)
+# include <Fonts/FreeSans9pt7b.h>
+# define TWM_DEFAULT_FONT &FreeSans9pt7b
+#else
+# error "invalid display selection"
+#endif
+
+#if defined(TFT_320_RECTANGLE)
+# if !defined(ARDUINO_PROS3)
+#  define "only the ProS3 is configured for use with this display"
+# endif
+# define TFT_WIDTH 240
+# define TFT_HEIGHT 320
+# define TS_MINX 0
+# define TS_MINY 0
+# define TS_MAXX TFT_WIDTH
+# define TS_MAXY TFT_HEIGHT
+# define I2C_TOUCH_ADDR 0x38
 /***
- * TFT capacative touch on ProS3. Pins:
+ * Unexpected Maker ProS3 implied.
+ * Pins:
  * sda 8
  * scl 9
  * tcs 12
@@ -27,7 +57,7 @@
 # include <UMS3.h>
 # include <aremmell_um.h>
 using namespace aremmell;
-# else // Implied Qualia RGB666 for now.
+#else // Implied Qualia RGB666 for now.
 # if !defined(ARDUINO)
 #  include <esp32_qualia.h>
 #  define PIN_NS qualia
@@ -36,36 +66,18 @@ using namespace aremmell;
 # endif
 #endif
 
-# if defined(TFT_720_SQUARE)
-#  define TFT_WIDTH 720
-#  define TFT_HEIGHT 720
-#  define I2C_TOUCH_ADDR 0x48
-# elif defined(TFT_480_ROUND)
-#  define TFT_WIDTH 480
-#  define TFT_HEIGHT 480
-#  define I2C_TOUCH_ADDR 0x15
-# elif defined(TFT_320_RECTANGLE)
-#  define TFT_WIDTH 240
-#  define TFT_HEIGHT 320
-#  define TS_MINX 0
-#  define TS_MINY 0
-#  define TS_MAXX TFT_WIDTH
-#  define TS_MAXY TFT_HEIGHT
-#  define I2C_TOUCH_ADDR 0x38
-# endif
-
 // If no touches are registered in this time, paint the screen
 // black as a pseudo-screensaver. In the future, save what was on
 // the screen and restore it after.
 #define TFT_TOUCH_TIMEOUT 60000
 
-using namespace twm;
+using namespace thumby;
 
 // The FT6206 uses hardware I2C (SCL/SDA)
 Adafruit_FT6206 focal_ctp;
 Adafruit_CST8XX cst_ctp;
 
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_320_RECTANGLE)
 Adafruit_ILI9341 display(TFT_CS, TFT_DC);
 UMS3 ums3;
 #else
@@ -100,7 +112,8 @@ Arduino_RGB_Display *display = new Arduino_RGB_Display(
 
 auto wm = std::make_shared<WindowManager>(
   std::make_shared<GFXcanvas16>(TFT_HEIGHT, TFT_WIDTH),
-  std::make_shared<DefaultTheme>()
+  std::make_shared<DefaultTheme>(),
+  TWM_DEFAULT_FONT
 );
 
 class EveryDayNormalButton : public Button
@@ -185,7 +198,7 @@ std::shared_ptr<TestCheckbox> testCheckbox;
 
 void on_fatal_error()
 {
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_320_RECTANGLE)
   aremmell::on_fatal_error(ums3);
 #else
 // TODO: blink an LED or something.
@@ -207,15 +220,15 @@ void setup(void)
 
   delay(500);
 
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_320_RECTANGLE)
   ums3.begin();
   display.begin();
   display.setRotation(3);
   display.setCursor(0, 0);
 #else
-#ifdef GFX_EXTRA_PRE_INIT
+# ifdef GFX_EXTRA_PRE_INIT
   GFX_EXTRA_PRE_INIT();
-#endif
+# endif
   Wire.setClock(1000000);
   if (!display->begin()) {
     Serial.println("RGBDisplay: error!");
@@ -226,7 +239,6 @@ void setup(void)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
-
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
     Serial.print("FT6206: error at 0x");
     Serial.println(I2C_TOUCH_ADDR, HEX);
@@ -271,15 +283,14 @@ void setup(void)
   auto y = scaledValue(50);
   auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
     STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, x, y, 0, 0,
-    "butan");
+    "Button");
   if (!button1) {
     on_fatal_error();
   }
 
-  auto cx = scaledValue(100);
+  auto cx = button1->getRect().width();
   auto cy = scaledValue(30);
-  x = defaultWin->getRect().right - (cx + xPadding);
-  y = scaledValue(50);
+  x = button1->getRect().right + xPadding;
   auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
     x, y, cx, cy, "Label");
   if (!label1) {
@@ -302,7 +313,7 @@ void setup(void)
   cx = scaledValue(130);
   cy = scaledValue(30);
   testCheckbox = wm->createWindow<TestCheckbox>(defaultWin, 8,
-    STY_CHILD | STY_VISIBLE | STY_CHECKBOX, x, y, cx, cy, "Check me");
+    STY_CHILD | STY_VISIBLE | STY_CHECKBOX, x, y, cx, cy, "CheckBox");
   if (!testCheckbox) {
     on_fatal_error();
   }
@@ -350,8 +361,7 @@ bool screensaverOn = false;
 
 void loop()
 {
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
-    // Rotated rectangular display.
+#if defined(TFT_320_RECTANGLE)
     auto mapXCoord = [](Coord x)
     {
       return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
@@ -374,7 +384,7 @@ void loop()
       screensaverOn = false;
     }
     TS_Point pt = focal_ctp.getPoint();
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_320_RECTANGLE)
     auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
@@ -386,7 +396,7 @@ void loop()
       screensaverOn = false;
     }
     CST_TS_Point pt = cst_ctp.getPoint();
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_320_RECTANGLE)
     auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
@@ -408,13 +418,13 @@ void loop()
     testProgressBar->setProgressValue(curProgress);
     wm->update();
   }
-#if defined(ARDUINO_PROS3) && !defined(QUALIA)
+#if defined(TFT_320_RECTANGLE)
   display.drawRGBBitmap(
     0,
     0,
     wm->getGfx()->getBuffer(),
-    wm->getGfx()->width(),
-    wm->getGfx()->height()
+    wm->getScreenWidth(),
+    wm->getScreenHeight()
   );
 #else
   display->draw16bitRGBBitmap(
