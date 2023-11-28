@@ -206,8 +206,8 @@ namespace twm
             y = static_cast<Coord>(yAxis);
         }
 
-        Coord x = 0; /** X-axis value. */
-        Coord y = 0; /** Y-axis value. */
+        Coord x = 0; /**< X-axis value. */
+        Coord y = 0; /**< Y-axis value. */
     };
 
     /** Two points in 2D space (left/top, right/bottom). */
@@ -220,10 +220,10 @@ namespace twm
         {
         }
 
-        Coord left   = 0; /** X-axis value of the left edge. */
-        Coord top    = 0; /** Y-axis value of the top edge. */
-        Coord right  = 0; /** X-axis value of the right edge. */
-        Coord bottom = 0; /** Y-axis value of the bottom edge. */
+        Coord left   = 0; /**< X-axis value of the left edge. */
+        Coord top    = 0; /**< Y-axis value of the top edge. */
+        Coord right  = 0; /**< X-axis value of the right edge. */
+        Coord bottom = 0; /**< Y-axis value of the bottom edge. */
 
         inline Extent width() const noexcept
         {
