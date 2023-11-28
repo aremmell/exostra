@@ -335,8 +335,8 @@ namespace twm
 
     typedef enum
     {
-        STA_ALIVE   = 1 << 0,/**< Active (not yet destroyed). */
-        STA_CHECKED = 1 << 1 /**< Checked/highlighted item. */
+        STA_ALIVE   = 1 << 0, /**< Active (not yet destroyed). */
+        STA_CHECKED = 1 << 1  /**< Checked/highlighted item. */
     } _WindowStateFlags;
 
     typedef enum
@@ -344,7 +344,7 @@ namespace twm
         DTF_CENTER   = 1 << 0, /**< Horizontal align center. */
         DTF_SINGLE   = 1 << 1, /**< Single line of text. */
         DTF_CLIP     = 1 << 2, /**< Text outside the rect will not be drawn. */
-        DTF_ELLIPSIS = 1 << 3 /**< Replace clipped text with '...' */
+        DTF_ELLIPSIS = 1 << 3  /**< Replace clipped text with '...' */
     } _DrawTextFlags;
 
     typedef enum {
