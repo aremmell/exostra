@@ -45,37 +45,37 @@
 # include <glcdfont.c>
 
 # if !defined(_ARDUINO_GFX_H_)
-# if defined(__AVR__)
-#  include <avr/pgmspace.h>
-# elif defined(ESP8266) || defined(ESP32)
-#  include <pgmspace.h>
-# endif
-
-# if !defined(pgm_read_byte)
-#  define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
-# endif
-# if !defined(pgm_read_word)
-#  define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
-# endif
-# if !defined(pgm_read_dword)
-#  define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
-# endif
-
-# if !defined(pgm_read_pointer)
-#  if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
-#   define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
-#  else
-#   define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
+#  if defined(__AVR__)
+#   include <avr/pgmspace.h>
+#  elif defined(ESP8266) || defined(ESP32)
+#   include <pgmspace.h>
 #  endif
-# endif
 
-inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* gfxFont, uint8_t c)
+#  if !defined(pgm_read_byte)
+#   define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
+#  endif
+#  if !defined(pgm_read_word)
+#   define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
+#  endif
+#  if !defined(pgm_read_dword)
+#   define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
+#  endif
+
+#  if !defined(pgm_read_pointer)
+#   if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
+#    define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
+#   else
+#    define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
+#   endif
+#  endif
+
+inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* font, uint8_t c)
 {
-# ifdef __AVR__
-    return &((static_cast<GFXglyph*>(pgm_read_pointer(&gfxFont->glyph)))[c]);
-# else
-    return gfxFont->glyph + c;
-# endif
+#  ifdef __AVR__
+    return &((static_cast<GFXglyph*>(pgm_read_pointer(&font->glyph)))[c]);
+#  else
+    return font->glyph + c;
+#  endif
 }
 # endif // !_ARDUINO_GFX_H_
 
