@@ -165,9 +165,7 @@ namespace twm
 
     /** Reserved window identifiers. */
     TWM_CONST(WindowID, WID_INVALID,  -1);
-    TWM_CONST(WindowID, WID_DESKTOP,   0);
-    TWM_CONST(WindowID, WID_PROMPT,    1);
-    TWM_CONST(WindowID, WID_PROMPTLBL, 2);
+    TWM_CONST(WindowID, WID_PROMPTLBL, 0);
 
     /** Window style. */
     using Style = uint16_t;
