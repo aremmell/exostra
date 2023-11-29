@@ -36,7 +36,13 @@
 # include <queue>
 # include <mutex>
 
+# if defined(TWM_USE_ADAFRUIT_GFX) && __has_include(<Adafruit_GFX.h>)
 # include <Adafruit_GFX.h>
+
+using IGfxDisplay   = Adafruit_SPITFT;
+using IGfxContext1  = GFXcanvas1;
+using IGfxContext8  = GFXcanvas8;
+using IGfxContext16 = GFXcanvas16;
 
 # if !defined(_ARDUINO_GFX_H_)
 #  if defined(__AVR__)
@@ -71,40 +77,26 @@ inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* font, uint8_t c)
     return font->glyph + c;
 #  endif
 }
-# endif // !_ARDUINO_GFX_H_
 
-static void Ada_charBounds(
-    uint8_t ch,
-    uint8_t* cx,
-    uint8_t* cy,
-    uint8_t* xAdv,
-    uint8_t* yAdv,
-    int8_t* xOff,
-    int8_t* yOff,
-    uint8_t textSizeX = 1,
-    uint8_t textSizeY = 1,
-    const GFXfont* font = nullptr
-)
-{
-    if (font != nullptr) {
-        uint8_t first = pgm_read_byte(&font->first);
-        bool inRange = (ch >= first && ch <= pgm_read_byte(&font->last));
-        auto glyph = inRange ? pgm_read_glyph_ptr(font, ch - first) : nullptr;
-        if (cx) { *cx = inRange ? pgm_read_byte(&glyph->width) * textSizeX : 0; }
-        if (cy) { *cy = inRange ? pgm_read_byte(&glyph->height) * textSizeY : 0; }
-        *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) * textSizeX : 0;
-        *yAdv = inRange ? pgm_read_byte(&font->yAdvance) : 0;
-        *xOff = inRange ? pgm_read_byte(&glyph->xOffset) : 0;
-        *yOff = inRange ? pgm_read_byte(&glyph->yOffset) : 0;
-    } else {
-        *cx = textSizeX * 6;
-        *cy = textSizeY * 8;
-        *xAdv = *cx;
-        *yAdv = *cy;
-        *xOff = 0;
-        *yOff = 0;
-    }
-}
+# endif // _ARDUINO_GFX_H_
+# elif defined(TWM_USE_ARDUINO_GFX) && __has_include(<Arduino_GFX_Library.h>)
+# include <Arduino_GFX_Library.h>
+#  if defined(LITTLE_FOOT_PRINT)
+#   error "required Arduino GFX canvas classes unavailable for this MCU"
+#  endif
+#  if defined(ATTINY_CORE)
+#   error "required GFXfont implementation unavailable for this MCU"
+#  endif
+
+using IGfxDisplay   = Arduino_GFX;
+using IGfxContext1  = Arduino_Canvas_Mono;
+using IGfxContext8  = Arduino_Canvas_Indexed;
+using IGfxContext16 = Arduino_Canvas;
+
+# else
+# error "define 'TWM_USE_ADAFRUIT_GFX' or 'TWM_USE_ARDUINO_GFX' and install \
+the appropriate library to select graphics driver support"
+# endif
 
 // TODO: remove me
 # define TWM_COLOR_565
@@ -113,7 +105,7 @@ static void Ada_charBounds(
 //#define TWM_SINGLETHREAD
 
 // Comment out to disable logging.
-//# define TWM_ENABLE_LOGGING
+# define TWM_ENABLE_LOGGING
 
 # if defined(TWM_ENABLE_LOGGING)
     typedef enum
@@ -176,19 +168,20 @@ namespace thumby
     /** Use the smallest type that can contain all possible colors. */
 # if defined(TWM_COLOR_MONOCHROME)
     using Color       = uint8_t;     /**< Color (monochrome). */
-    using IGfxContext = GFXcanvas1;
+    using IGfxContext = IGfxContext1;
 # elif defined(TWM_COLOR_256)
     using Color       = uint8_t;     /**< Color (8-bit). */
-    using IGfxContext = GFXcanvas8;
+    using IGfxContext = IGfxContext8;
 # elif defined(TWM_COLOR_565)
     using Color       = uint16_t;    /**< Color (16-bit 565 RGB) */
-    using IGfxContext = GFXcanvas16;
+    using IGfxContext = IGfxContext16;
 # else
 #  error "color mode is invalid"
 # endif
 
     /** Currently, the only low-level graphics interface supported is Adafruit's. */
     using GfxContextPtr = std::shared_ptr<IGfxContext>;
+    using GfxDisplayPtr = std::shared_ptr<IGfxDisplay>;
     using Font          = GFXfont;
 
     /** Coordinate in 3D space (e.g. X, Y, or Z). */
@@ -296,6 +289,30 @@ namespace thumby
         }
     };
 
+    static void getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy, uint8_t* xAdv,
+        uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
+        uint8_t textSizeY = 1, const GFXfont* font = nullptr)
+    {
+        if (font != nullptr) {
+            uint8_t first = pgm_read_byte(&font->first);
+            bool inRange = (ch >= first && ch <= pgm_read_byte(&font->last));
+            auto glyph = inRange ? pgm_read_glyph_ptr(font, ch - first) : nullptr;
+            if (cx) { *cx = inRange ? pgm_read_byte(&glyph->width) * textSizeX : 0; }
+            if (cy) { *cy = inRange ? pgm_read_byte(&glyph->height) * textSizeY : 0; }
+            *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) * textSizeX : 0;
+            *yAdv = inRange ? pgm_read_byte(&font->yAdvance) : 0;
+            *xOff = inRange ? pgm_read_byte(&glyph->xOffset) : 0;
+            *yOff = inRange ? pgm_read_byte(&glyph->yOffset) : 0;
+        } else {
+            *cx = textSizeX * 6;
+            *cy = textSizeY * 8;
+            *xAdv = *cx;
+            *yAdv = *cy;
+            *xOff = 0;
+            *yOff = 0;
+        }
+    }
+
     template<typename T1, typename T2>
     inline bool bitsHigh(const T1& bitmask, const T2& bits)
     {
@@ -365,17 +382,17 @@ namespace thumby
         Coord y = 0;
     };
 
-    inline MsgParam makeMsgParam(MsgParamWord hiWord, MsgParamWord loWord)
+    static MsgParam makeMsgParam(MsgParamWord hiWord, MsgParamWord loWord)
     {
         return (static_cast<MsgParam>(hiWord) << 32) | (loWord & 0xffffffffU);
     }
 
-    inline MsgParamWord getMsgParamHiWord(MsgParam msgParam)
+    static MsgParamWord getMsgParamHiWord(MsgParam msgParam)
     {
         return ((msgParam >> 32) & 0xffffffffU);
     }
 
-    inline MsgParamWord getMsgParamLoWord(MsgParam msgParam)
+    static MsgParamWord getMsgParamLoWord(MsgParam msgParam)
     {
         return (msgParam & 0xffffffffU);
     }
@@ -636,7 +653,7 @@ namespace thumby
                 std::deque<uint8_t> charXAdvs;
                 bool clipped = false;
                 while (xAccum <= xExtent && *cursor != '\0') {
-                    Ada_charBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
+                    getCharBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
                         &yOff, textSize, textSize, font);
                     if (xAccum + xAdv > xExtent) {
                         if (singleLine && bitsHigh(flags, DTF_CLIP)) {
@@ -679,8 +696,13 @@ namespace thumby
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + xPadding;
                 while (old_cursor < cursor) {
+#if defined(TWM_USE_ADAFRUIT_GFX)
                     _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
                         textColor, textSize);
+#elif defined(TWM_USE_ARDUINO_GFX)
+                    _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
+                        textColor);
+#endif
                     xAccum += charXAdvs[
                         charXAdvs.size() - 2 - ((cursor + rewound) - old_cursor - 1)
                     ];
@@ -690,12 +712,18 @@ namespace thumby
                     yAccum += yAdvMax + yOffMin;
                 } else {
                     if (clipped && bitsHigh(flags, DTF_ELLIPSIS)) {
-                        Ada_charBounds('.', nullptr, nullptr, &xAdv, &yAdv,
+                        getCharBounds('.', nullptr, nullptr, &xAdv, &yAdv,
                             &xOff, &yOff, textSize, textSize, font);
                         for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
+#if defined(TWM_USE_ADAFRUIT_GFX)
                             _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
                                 textColor, textSize);
+#elif defined(TWM_USE_ARDUINO_GFX)
+                            _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
+                                textColor);
+#endif
                             xAccum += xAdv;
+
                         }
                     }
                     break;
@@ -1047,11 +1075,13 @@ namespace thumby
         WindowManager() = delete;
 
         explicit WindowManager(
+            const GfxDisplayPtr& gfxDisplay,
             const GfxContextPtr& gfxContext,
             const ThemePtr& theme,
             const Font* defaultFont
-        ) : _gfxContext(gfxContext), _theme(theme)
+        ) : _gfxDisplay(gfxDisplay), _gfxContext(gfxContext), _theme(theme)
         {
+            TWM_ASSERT(_gfxDisplay);
             TWM_ASSERT(_gfxContext);
             TWM_ASSERT(_theme);
             if (_theme && _gfxContext) {
@@ -1067,6 +1097,19 @@ namespace thumby
             tearDown();
         }
 
+        virtual bool begin(uint8_t rotation)
+        {
+# if defined(TWM_USE_ADAFRUIT_GFX)
+            _gfxDisplay->begin(0);
+            _gfxDisplay->setRotation(rotation);
+            _gfxDisplay->setCursor(0, 0);
+            return true;
+# elif defined(TWM_USE_ARDUINO_GFX)
+            (void)rotation;
+            return _gfxContext->begin();
+# endif
+        }
+
         virtual void tearDown()
         {
             _registry->forEachChild([](const WindowPtr& child)
@@ -1077,6 +1120,7 @@ namespace thumby
             _registry->removeAllChildren();
         }
 
+        GfxDisplayPtr getGfxDisplay() const { return _gfxDisplay; }
         GfxContextPtr getGfxContext() const { return _gfxContext; }
         ThemePtr getTheme() const { return _theme; }
 
@@ -1095,8 +1139,19 @@ namespace thumby
             });
         }
 
+        void renderFrame()
+        {
+            // TODO: implement different calls for different color modes
+# if defined(TWM_USE_ADAFRUIT_GFX)
+            _gfxDisplay->drawRGBBitmap(0, 0, _gfxContext->getBuffer(),
+                _gfxContext->width(), _gfxContext->height());
+# elif defined(TWM_USE_ARDUINO_GFX)
+            _gfxContext->flush();
+# endif
+        }
+
         template<class TWindow>
-        inline std::shared_ptr<TWindow> createWindow(
+        std::shared_ptr<TWindow> createWindow(
             const WindowPtr& parent,
             WindowID id,
             Style style,
@@ -1149,7 +1204,7 @@ namespace thumby
         }
 
         template<class TPrompt>
-        inline std::shared_ptr<TPrompt> createPrompt(
+        std::shared_ptr<TPrompt> createPrompt(
             const WindowPtr& parent,
             WindowID id,
             Style style,
@@ -1183,7 +1238,7 @@ namespace thumby
         }
 
         template<class TBar>
-        inline std::shared_ptr<TBar> createProgressBar(
+        std::shared_ptr<TBar> createProgressBar(
             const WindowPtr& parent,
             WindowID id,
             Style style,
@@ -1222,25 +1277,24 @@ namespace thumby
 
     protected:
         WindowContainerPtr _registry;
+        GfxDisplayPtr _gfxDisplay;
         GfxContextPtr _gfxContext;
         ThemePtr _theme;
     };
 
     using WindowManagerPtr = std::shared_ptr<WindowManager>;
 
-    template<class TTheme>
-    inline WindowManagerPtr createWindowManager(
-        Extent screenWidth,
-        Extent screenHeight,
+    template<class TTheme, class TGfxDisplay>
+    WindowManagerPtr createWindowManager(
+        const std::shared_ptr<TGfxDisplay>& display,
+        const std::shared_ptr<IGfxContext>& context,
+        const std::shared_ptr<TTheme>& theme,
         const Font* defaultFont
     )
     {
+        static_assert(std::is_base_of<IGfxDisplay, TGfxDisplay>::value);
         static_assert(std::is_base_of<ITheme, TTheme>::value);
-        return std::make_shared<WindowManager>(
-            std::make_shared<IGfxContext>(screenWidth, screenHeight),
-            std::make_shared<TTheme>(),
-            defaultFont
-        );
+        return std::make_shared<WindowManager>(display, context, theme, defaultFont);
     }
 
     class Window : public IWindow, public std::enable_shared_from_this<IWindow>
