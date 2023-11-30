@@ -1,14 +1,14 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <Arduino_GFX_Library.h>
-#include <Adafruit_GFX.h>
 #include <Adafruit_FT6206.h>
 #include <Adafruit_CST8XX.h>
+#include <Adafruit_GFX.h>
+#include <Arduino_GFX_Library.h>
 
-#define TFT_720_SQUARE
+//#define TFT_720_SQUARE
 //#define TFT_480_ROUND
-//#define TFT_320_RECTANGLE
+#define TFT_320_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
@@ -16,14 +16,14 @@
 # define TWM_DISPLAY_WIDTH 720
 # define TWM_DISPLAY_HEIGHT 720
 # define I2C_TOUCH_ADDR 0x48
-# define TWM_USE_ARDUINO_GFX
+# define TWM_GFX_ARDUINO
 #elif defined(TFT_480_ROUND)
 # include <Fonts/FreeSans12pt7b.h>
 # define TWM_DEFAULT_FONT &FreeSans12pt7b
 # define TWM_DISPLAY_WIDTH 480
 # define TWM_DISPLAY_HEIGHT 480
 # define I2C_TOUCH_ADDR 0x15
-# define TWM_USE_ARDUINO_GFX
+# define TWM_GFX_ARDUINO
 #elif defined(TFT_320_RECTANGLE)
 # include <Fonts/FreeSans9pt7b.h>
 # define TWM_DEFAULT_FONT &FreeSans9pt7b
@@ -34,35 +34,30 @@
 # define TS_MAXX TWM_DISPLAY_WIDTH
 # define TS_MAXY TWM_DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
-# define TWM_USE_ADAFRUIT_GFX
+# define TWM_GFX_ADAFRUIT
 # include <Adafruit_ILI9341.h>
 #else
 # error "invalid display selection"
 #endif
 
-#include "twm.hh"
+#define TFT_SCREENSAVER_AFTER 60000
 
-// If no touches are registered in this time, paint the screen
-// black as a pseudo-screensaver. In the future, save what was on
-// the screen and restore it after.
-#define TFT_TOUCH_TIMEOUT 60000
+#include "Thumby_WM.h"
+using namespace thumby;
 
-// The FT6206 uses hardware I2C (SCL/SDA)
 Adafruit_FT6206 focal_ctp;
 Adafruit_CST8XX cst_ctp;
 
 #if defined(ARDUINO_PROS3)
-# include <UMS3.h>
-UMS3 ums3;
 /**
- * Unexpected Maker ProS3 implied.
+ * Unexpected Maker ProS3.
  * Pins: sda 8, scl 9, tcs 12, dc 13, rst 14
  */
+# include <UMS3.h>
+UMS3 ums3;
 # define TFT_CS 12
 # define TFT_DC 13
 #endif
-
-using namespace thumby;
 
 #if defined(TFT_320_RECTANGLE)
 # if !defined(ARDUINO_PROS3)
@@ -106,8 +101,8 @@ auto display = std::make_shared<Arduino_RGB_Display>(
   nullptr,
   0
 # elif defined(TFT_480_ROUND) // 2.1" 480x480 round display
-    TL021WVC02_init_operations,
-    sizeof(TL021WVC02_init_operations)
+  TL021WVC02_init_operations,
+  sizeof(TL021WVC02_init_operations)
 # else
 #  error "invalid display selection"
 # endif
@@ -120,12 +115,12 @@ auto wm = createWindowManager(
 );
 #endif
 
-class EveryDayNormalButton : public Button
+class TestButton : public Button
 {
 public:
   using Button::Button;
-  EveryDayNormalButton() = default;
-  virtual ~EveryDayNormalButton() = default;
+  TestButton() = default;
+  virtual ~TestButton() = default;
 
   void setLabel(const WindowPtr& label) { _label = label; }
   void setPrompt(const WindowPtr& prompt) { _prompt = prompt; }
@@ -195,11 +190,6 @@ public:
   virtual ~TestOKPrompt() = default;
 };
 
-std::shared_ptr<TestYesNoPrompt> yesNoPromptWnd;
-std::shared_ptr<TestOKPrompt> okPrompt;
-std::shared_ptr<TestProgressBar> testProgressBar;
-std::shared_ptr<TestCheckbox> testCheckbox;
-
 void on_fatal_error()
 {
 #if defined(ARDUINO_PROS3)
@@ -212,246 +202,221 @@ void on_fatal_error()
     delay(1000);
   }
 #else
-  // TODO: blink an LED or something.
-  Serial.println("fatal error");
+  /// TODO: blink an LED or something.
+  TWM_LOG(TWM_ERROR, "fatal error");
   while (true);
 #endif
 }
+
+std::shared_ptr<TestProgressBar> testProgressBar;
 
 bool touchInitialized = false;
 bool isFocalTouch = false;
 
 void setup(void)
 {
-  try {
-    Serial.begin(115200);
-    while (!Serial) {
-      /// TODO: If you want to run without a serial cable, exit this loop
-      delay(10);
-    }
+  while (!Serial) {
+    /// TODO: If you want to run without a serial cable, exit this loop
+    delay(10);
+  }
 
-    delay(500);
+  delay(500);
 
-    TWM_LOG(TWM_DEBUG, "begin setup");
+  TWM_LOG(TWM_DEBUG, "initializing");
 
-  #if defined(TFT_320_RECTANGLE)
-    ums3.begin();
-  #else
-  # ifdef GFX_EXTRA_PRE_INIT
-    GFX_EXTRA_PRE_INIT();
-  # endif
-    expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
-    expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
-  #endif
-    Wire.setClock(1000000);
-    if (!wm->begin(3)) {
-      Serial.println("WindowManager: error!");
-      on_fatal_error();
-    }
-    Serial.println("WindowManager: OK");
-    wm->getTheme()->drawDesktopBackground();
-    if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
-      Serial.print("FT6206: error at 0x");
-      Serial.println(I2C_TOUCH_ADDR, HEX);
-      if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
-        Serial.print("CST8XX: error at 0x");
-        Serial.println(I2C_TOUCH_ADDR, HEX);
-      } else {
-        touchInitialized = true;
-        isFocalTouch = false;
-        Serial.println("CST8XX: OK");
-      }
+  Wire.setClock(1000000);
+  if (!wm->begin(3)) {
+    TWM_LOG(TWM_ERROR, "WindowManager: error!");
+    on_fatal_error();
+  }
+  TWM_LOG(TWM_DEBUG, "WindowManager: OK");
+  wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
+#if defined(TFT_320_RECTANGLE)
+  ums3.begin();
+#else
+# ifdef GFX_EXTRA_PRE_INIT
+  GFX_EXTRA_PRE_INIT();
+# endif
+  expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
+  expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
+#endif
+  if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
+    TWM_LOG(TWM_ERROR, "FT6206: error at 0x%x", I2C_TOUCH_ADDR);
+    if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
+      TWM_LOG(TWM_ERROR, "CST8XX: error at 0x%x", I2C_TOUCH_ADDR);
     } else {
       touchInitialized = true;
-      isFocalTouch = true;
-      Serial.println("FT6206: OK");
+      isFocalTouch = false;
+      TWM_LOG(TWM_DEBUG, "CST8XX: OK");
     }
-
-    if (!touchInitialized) {
-      on_fatal_error();
-    }
-
-    auto xPadding = wm->getTheme()->getWindowXPadding();
-    auto defaultWin = wm->createWindow<DefaultWindow>(
-      nullptr,
-      2,
-      STY_VISIBLE,
-      xPadding,
-      xPadding,
-      wm->getScreenWidth() - (xPadding * 2),
-      wm->getScreenHeight() - (xPadding * 2)
-    );
-    if (!defaultWin) {
-      on_fatal_error();
-    }
-
-    auto scaledValue = [&](Extent value)
-    {
-      return wm->getTheme()->getScaledValue(value);
-    };
-
-    auto x = xPadding * 2;
-    auto y = scaledValue(50);
-    auto button1 = wm->createWindow<EveryDayNormalButton>(defaultWin, 3,
-      STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON, x, y, 0, 0,
-      "Button");
-    if (!button1) {
-      on_fatal_error();
-    }
-
-    auto cx = button1->getRect().width();
-    auto cy = scaledValue(30);
-    x = button1->getRect().right + xPadding;
-    auto label1 = wm->createWindow<TestLabel>(defaultWin, 4, STY_CHILD | STY_VISIBLE | STY_LABEL,
-      x, y, cx, cy, "Label");
-    if (!label1) {
-      on_fatal_error();
-    }
-    button1->setLabel(label1);
-
-    auto yPadding = wm->getTheme()->getWindowYPadding();
-
-    cy = wm->getTheme()->getProgressBarHeight();
-    testProgressBar = wm->createProgressBar<TestProgressBar>(defaultWin, 5,
-      STY_CHILD | STY_VISIBLE | STY_PROGBAR, xPadding * 2, button1->getRect().bottom + yPadding,
-      defaultWin->getRect().width() - (xPadding * 2), cy, PBR_INDETERMINATE);
-    if (!testProgressBar) {
-      on_fatal_error();
-    }
-
-    x = defaultWin->getRect().left + xPadding;
-    y = testProgressBar->getRect().bottom + yPadding;
-    cx = scaledValue(130);
-    cy = scaledValue(30);
-    testCheckbox = wm->createWindow<TestCheckbox>(defaultWin, 8,
-      STY_CHILD | STY_VISIBLE | STY_CHECKBOX, x, y, cx, cy, "CheckBox");
-    if (!testCheckbox) {
-      on_fatal_error();
-    }
-
-    okPrompt = wm->createPrompt<TestOKPrompt>(
-      nullptr,
-      6,
-      STY_PROMPT,
-      "You did a thing, and now this is on your screen.",
-      {{100, "OK"}},
-      [](WindowID id)
-      {
-        // NOOP.
-      }
-    );
-    if (!okPrompt) {
-      on_fatal_error();
-    }
-
-    yesNoPromptWnd = wm->createPrompt<TestYesNoPrompt>(
-      nullptr,
-      7,
-      STY_PROMPT,
-      "This is a test prompt. Please choose an option.",
-      {{100, "Yes"}, {101, "No"}},
-      [&](WindowID id)
-      {
-        std::string prompt = "You tapped the ";
-        prompt += id == 100 ? "Yes" : "No";
-        prompt += " button.";
-        okPrompt->setText(prompt);
-        okPrompt->show();
-      }
-    );
-    if (!yesNoPromptWnd) {
-      on_fatal_error();
-    }
-    button1->setPrompt(yesNoPromptWnd);
-  } catch (const std::exception& ex) {
-    TWM_LOG(TWM_ERROR, "exception: '%s'", ex.what());
+  } else {
+    touchInitialized = isFocalTouch = true;
+    TWM_LOG(TWM_DEBUG, "FT6206: OK");
   }
-  TWM_LOG(TWM_DEBUG, "setup complete");
+
+  if (!touchInitialized) {
+    on_fatal_error();
+  }
+
+  WindowID id = 1;
+  auto xPadding = wm->getTheme()->getWindowXPadding();
+  auto defaultWin = wm->createWindow<DefaultWindow>(
+    nullptr,
+    id++,
+    STY_VISIBLE,
+    xPadding,
+    xPadding,
+    wm->getScreenWidth() - (xPadding * 2),
+    wm->getScreenHeight() - (xPadding * 2)
+  );
+  if (!defaultWin) {
+    on_fatal_error();
+  }
+
+  auto scaledValue = [&](Extent value)
+  {
+    return wm->getTheme()->getScaledValue(value);
+  };
+
+  auto button1 = wm->createWindow<TestButton>(
+    defaultWin,
+    id++,
+    STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON,
+    xPadding * 2,
+    scaledValue(50),
+    0,
+    0,
+    "Button"
+  );
+  if (!button1) {
+    on_fatal_error();
+  }
+
+  auto label1 = wm->createWindow<TestLabel>(
+    defaultWin,
+    id++,
+    STY_CHILD | STY_VISIBLE | STY_LABEL,
+    button1->getRect().right + xPadding,
+    scaledValue(50),
+    button1->getRect().width(),
+    scaledValue(30),
+    "Label"
+  );
+  if (!label1) {
+    on_fatal_error();
+  }
+  button1->setLabel(label1);
+
+  auto yPadding = wm->getTheme()->getWindowYPadding();
+
+  testProgressBar = wm->createProgressBar<TestProgressBar>(
+    defaultWin,
+    id++,
+    STY_CHILD | STY_VISIBLE | STY_PROGBAR,
+    xPadding * 2,
+    button1->getRect().bottom + yPadding,
+    defaultWin->getRect().width() - (xPadding * 2),
+    wm->getTheme()->getProgressBarHeight(),
+    PBR_INDETERMINATE
+  );
+  if (!testProgressBar) {
+    on_fatal_error();
+  }
+
+  auto testCheckbox = wm->createWindow<TestCheckbox>(
+    defaultWin,
+    id++,
+    STY_CHILD | STY_VISIBLE | STY_CHECKBOX,
+    defaultWin->getRect().left + xPadding,
+    testProgressBar->getRect().bottom + yPadding,
+    scaledValue(130),
+    scaledValue(30),
+    "CheckBox"
+  );
+  if (!testCheckbox) {
+    on_fatal_error();
+  }
+
+  auto okPrompt = wm->createPrompt<TestOKPrompt>(
+    nullptr,
+    id++,
+    STY_PROMPT,
+    "You did a thing, and now this is on your screen.",
+    {{100, "OK"}},
+    [](WindowID id)
+    {
+      // NOOP.
+    }
+  );
+  if (!okPrompt) {
+    on_fatal_error();
+  }
+
+  auto yesNoPromptWnd = wm->createPrompt<TestYesNoPrompt>(
+    nullptr,
+    id++,
+    STY_PROMPT,
+    "This is a test prompt. Please choose an option.",
+    {{100, "Yes"}, {101, "No"}},
+    [&](WindowID id)
+    {
+      std::string prompt = "You tapped the ";
+      prompt += id == 100 ? "Yes" : "No";
+      prompt += " button.";
+      okPrompt->setText(prompt);
+      okPrompt->show();
+    }
+  );
+  if (!yesNoPromptWnd) {
+    on_fatal_error();
+  }
+  button1->setPrompt(yesNoPromptWnd);
 }
 
 float curProgress = 0.0f;
-u_long lastTouch = 0UL;
-bool screensaverOn = false;
-
-#if defined(TWM_RENDER_PERF)
-u_long accumulator = 0UL;
-u_long beginTime = 0UL;
-uint8_t paintCount = 0;
-#endif
 
 void loop()
 {
-  try {
-  #if defined(TFT_320_RECTANGLE)
-      auto mapXCoord = [](Coord x)
-      {
-        return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
-      };
-      auto mapYCoord = [](Coord y)
-      {
-        return map(y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
-      };
-      auto swapCoords = [&](Coord x, Coord y)
-      {
-        auto tmp = y;
-        y = x;
-        x = wm->getScreenWidth() - tmp;
-        return std::make_pair(x, y);
-      };
-  #endif
-    if (isFocalTouch && focal_ctp.touched()) {
-      lastTouch = millis();
-      if (screensaverOn) {
-        screensaverOn = false;
-      }
-      TS_Point pt = focal_ctp.getPoint();
-  #if defined(TFT_320_RECTANGLE)
-      auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
-      pt.x = tmp.first;
-      pt.y = tmp.second;
-  #endif
-      wm->hitTest(pt.x, pt.y);
-    } else if (!isFocalTouch && cst_ctp.touched()) {
-      lastTouch = millis();
-      if (screensaverOn) {
-        screensaverOn = false;
-      }
-      CST_TS_Point pt = cst_ctp.getPoint();
-  #if defined(TFT_320_RECTANGLE)
-      auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
-      pt.x = tmp.first;
-      pt.y = tmp.second;
-  #endif
-      wm->hitTest(pt.x, pt.y);
-    } else {
-      if (!screensaverOn && millis() - lastTouch > TFT_TOUCH_TIMEOUT) {
-        // TODO: refactor
-        wm->getTheme()->drawScreensaver();
-        screensaverOn = true;
-      }
-    }
-    if (!screensaverOn) {
-      if (curProgress < 100.0f) {
-        curProgress += wm->getTheme()->getProgressBarIndeterminateStep();
-      } else {
-        curProgress = 0.0f;
-      }
-      testProgressBar->setProgressValue(curProgress);
-      wm->update();
-    }
-#if defined(TWM_RENDER_PERF)
-    beginTime = millis();
+#if defined(TFT_320_RECTANGLE)
+  auto mapXCoord = [](Coord x)
+  {
+    return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
+  };
+  auto mapYCoord = [](Coord y)
+  {
+    return map(y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
+  };
+  auto swapCoords = [&](Coord x, Coord y)
+  {
+    auto tmp = y;
+    y = x;
+    x = wm->getScreenWidth() - tmp;
+    return std::make_pair(x, y);
+  };
 #endif
-    wm->renderFrame();
-#if defined(TWM_RENDER_PERF)
-    accumulator += (millis() - beginTime);
-    if (++paintCount >= 100) {
-      TWM_LOG(TWM_DEBUG, "avg. render time, last 100 frames: %lums", accumulator / 100);
-      paintCount = 0;
-      accumulator = 0;
-    }
+  if (isFocalTouch && focal_ctp.touched()) {
+    TS_Point pt = focal_ctp.getPoint();
+#if defined(TFT_320_RECTANGLE)
+    auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
+    pt.x = tmp.first;
+    pt.y = tmp.second;
 #endif
-  } catch (const std::exception& ex) {
-    TWM_LOG(TWM_ERROR, "exception: '%s'", ex.what());
+    wm->hitTest(pt.x, pt.y);
+  } else if (!isFocalTouch && cst_ctp.touched()) {
+    CST_TS_Point pt = cst_ctp.getPoint();
+#if defined(TFT_320_RECTANGLE)
+    auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
+    pt.x = tmp.first;
+    pt.y = tmp.second;
+#endif
+    wm->hitTest(pt.x, pt.y);
   }
+  if (curProgress < 100.0f) {
+    curProgress += wm->getTheme()->getProgressBarIndeterminateStep();
+  } else {
+    curProgress = 0.0f;
+  }
+  testProgressBar->setProgressValue(curProgress);
+  wm->update();
+  wm->render();
 }

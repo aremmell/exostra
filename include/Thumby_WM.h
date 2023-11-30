@@ -1,5 +1,5 @@
 /*
- * twm.hh
+ * Thumby_WM.h
  *
  * Thumby Window Manager
  *
@@ -25,9 +25,10 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef _THUMBY_H_INCLUDED
-# define _THUMBY_H_INCLUDED
+#ifndef _THUMBY_WM_H_INCLUDED
+# define _THUMBY_WM_H_INCLUDED
 
+# include <Arduino.h>
 # include <cstdint>
 # include <functional>
 # include <type_traits>
@@ -36,65 +37,63 @@
 # include <queue>
 # include <mutex>
 
-# if defined(TWM_USE_ADAFRUIT_GFX) && __has_include(<Adafruit_GFX.h>)
-# include <Adafruit_GFX.h>
+# if defined(TWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
+#  include <Adafruit_GFX.h>
 
 using IGfxDisplay   = Adafruit_SPITFT;
 using IGfxContext1  = GFXcanvas1;
 using IGfxContext8  = GFXcanvas8;
 using IGfxContext16 = GFXcanvas16;
 
-# if !defined(_ARDUINO_GFX_H_)
-#  if defined(__AVR__)
-#   include <avr/pgmspace.h>
-#  elif defined(ESP8266) || defined(ESP32)
-#   include <pgmspace.h>
-#  endif
-
-#  if !defined(pgm_read_byte)
-#   define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
-#  endif
-#  if !defined(pgm_read_word)
-#   define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
-#  endif
-#  if !defined(pgm_read_dword)
-#   define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
-#  endif
-
-#  if !defined(pgm_read_pointer)
-#   if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
-#    define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
-#   else
-#    define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
+#  if !defined(_ARDUINO_GFX_H_)
+#   if defined(__AVR__)
+#    include <avr/pgmspace.h>
+#   elif defined(ESP8266) || defined(ESP32)
+#    include <pgmspace.h>
 #   endif
-#  endif
+
+#   if !defined(pgm_read_byte)
+#    define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
+#   endif
+#   if !defined(pgm_read_word)
+#    define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
+#   endif
+#   if !defined(pgm_read_dword)
+#    define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
+#   endif
+
+#   if !defined(pgm_read_pointer)
+#    if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
+#     define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
+#    else
+#     define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
+#    endif
+#   endif
 
 inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* font, uint8_t c)
 {
-#  ifdef __AVR__
+#   ifdef __AVR__
     return &((static_cast<GFXglyph*>(pgm_read_pointer(&font->glyph)))[c]);
-#  else
+#   else
     return font->glyph + c;
-#  endif
+#   endif
 }
-
-# endif // _ARDUINO_GFX_H_
-# elif defined(TWM_USE_ARDUINO_GFX) && __has_include(<Arduino_GFX_Library.h>)
-# include <Arduino_GFX_Library.h>
+#  endif // _ARDUINO_GFX_H_
+# elif defined(TWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
+#  include <Arduino_GFX_Library.h>
 #  if defined(LITTLE_FOOT_PRINT)
-#   error "required Arduino GFX canvas classes unavailable for this MCU"
+#   error "required Arduino GFX canvas classes unavailable for this board"
 #  endif
 #  if defined(ATTINY_CORE)
-#   error "required GFXfont implementation unavailable for this MCU"
+#   error "required GFXfont implementation unavailable for this board"
 #  endif
 
 using IGfxDisplay   = Arduino_GFX;
 using IGfxContext1  = Arduino_Canvas_Mono;
 using IGfxContext8  = Arduino_Canvas_Indexed;
 using IGfxContext16 = Arduino_Canvas;
-
 # else
-# error "define 'TWM_USE_ADAFRUIT_GFX' or 'TWM_USE_ARDUINO_GFX' and install \
+#  error "define 'TWM_GFX_ADAFRUIT' or 'TWM_GFX_ARDUINO' and install \
 the appropriate library to select graphics driver support"
 # endif
 
@@ -130,7 +129,7 @@ the appropriate library to select graphics driver support"
         Serial.printf(__FILE__ ":" TWM_STRIFY(__LINE__) "): " fmt "\n" \
             __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
-# define TWM_ASSERT(expr) \
+#  define TWM_ASSERT(expr) \
     do { \
         if (!(expr)) { \
             TWM_LOG(TWM_ERROR, "!!! ASSERT: '" #expr "'"); \
@@ -176,13 +175,17 @@ namespace thumby
     using Color       = uint16_t;    /**< Color (16-bit 565 RGB) */
     using IGfxContext = IGfxContext16;
 # else
-#  error "color mode is invalid"
+#  error "invalid color mode"
 # endif
 
-    /** Currently, the only low-level graphics interface supported is Adafruit's. */
+    /** Graphics context (e.g. canvas). */
     using GfxContextPtr = std::shared_ptr<IGfxContext>;
+
+    /** Physical display. */
     using GfxDisplayPtr = std::shared_ptr<IGfxDisplay>;
-    using Font          = GFXfont;
+
+    /** Font type. */
+    using Font = GFXfont;
 
     /** Coordinate in 3D space (e.g. X, Y, or Z). */
     using Coord = int16_t;
@@ -231,15 +234,8 @@ namespace thumby
             return static_cast<Extent>(bottom - top);
         }
 
-        Point getTopLeft() const noexcept
-        {
-            return { left, top };
-        }
-
-        Point getBottomRight() const noexcept
-        {
-            return { right, bottom };
-        }
+        Point getTopLeft() const noexcept { return { left, top }; }
+        Point getBottomRight() const noexcept { return { right, bottom }; }
 
         void inflate(Extent px) noexcept
         {
@@ -333,7 +329,7 @@ namespace thumby
         MSG_RESIZE  = 6
     } Message;
 
-    typedef enum
+    enum
     {
         STY_VISIBLE   = 1 << 0,
         STY_CHILD     = 1 << 1,
@@ -343,33 +339,35 @@ namespace thumby
         STY_PROMPT    = 1 << 5,
         STY_PROGBAR   = 1 << 6,
         STY_CHECKBOX  = 1 << 7
-    } _WindowStyleFlags;
+    };
 
-    typedef enum
+    enum
     {
         PBR_NORMAL        = 1 << 0,
         PBR_INDETERMINATE = 1 << 1
-    } _ProgressBarStyleFlags;
+    };
 
-    typedef enum
+    enum
     {
         STA_ALIVE   = 1 << 0, /**< Active (not yet destroyed). */
         STA_CHECKED = 1 << 1  /**< Checked/highlighted item. */
-    } _WindowStateFlags;
+    };
+
+    enum
+    {
+        DT_CENTER   = 1 << 0, /**< Horizontal align center. */
+        DT_SINGLE   = 1 << 1, /**< Single line of text. */
+        DT_CLIP     = 1 << 2, /**< Text outside the rect will not be drawn. */
+        DT_ELLIPSIS = 1 << 3  /**< Replace clipped text with '...' */
+    };
 
     typedef enum
     {
-        DTF_CENTER   = 1 << 0, /**< Horizontal align center. */
-        DTF_SINGLE   = 1 << 1, /**< Single line of text. */
-        DTF_CLIP     = 1 << 2, /**< Text outside the rect will not be drawn. */
-        DTF_ELLIPSIS = 1 << 3  /**< Replace clipped text with '...' */
-    } _DrawTextFlags;
-
-    typedef enum {
         EVT_CHILD_TAPPED = 1
     } EventType;
 
-    typedef enum {
+    typedef enum
+    {
         INPUT_NONE = 0,
         INPUT_TAP  = 1
     } InputType;
@@ -504,7 +502,13 @@ namespace thumby
 
         void drawDesktopBackground() const final
         {
-            _gfxContext->fillRect(0, 0, _gfxContext->width(), _gfxContext->height(), DesktopWindowColor);
+            _gfxContext->fillRect(
+                0,
+                0,
+                _gfxContext->width(),
+                _gfxContext->height(),
+                DesktopWindowColor
+            );
         }
 
         void setDefaultFont(const Font* font) final
@@ -631,8 +635,8 @@ namespace thumby
         void drawText(const char* text, uint8_t flags, const Rect& rect,
             uint8_t textSize, Color textColor, const Font* font) const final
         {
-            bool xCenter = bitsHigh(flags, DTF_CENTER);
-            bool singleLine = bitsHigh(flags, DTF_SINGLE);
+            bool xCenter = bitsHigh(flags, DT_CENTER);
+            bool singleLine = bitsHigh(flags, DT_SINGLE);
 
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
@@ -656,11 +660,11 @@ namespace thumby
                     getCharBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
                         &yOff, textSize, textSize, font);
                     if (xAccum + xAdv > xExtent) {
-                        if (singleLine && bitsHigh(flags, DTF_CLIP)) {
+                        if (singleLine && bitsHigh(flags, DT_CLIP)) {
                             clipped = true;
                             break;
                         }
-                        if (singleLine && bitsHigh(flags, DTF_ELLIPSIS)) {
+                        if (singleLine && bitsHigh(flags, DT_ELLIPSIS)) {
                             auto it = charXAdvs.rbegin();
                             if (it != charXAdvs.rend()) {
                                 clipped = true;
@@ -696,13 +700,13 @@ namespace thumby
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + xPadding;
                 while (old_cursor < cursor) {
-#if defined(TWM_USE_ADAFRUIT_GFX)
+# if defined(TWM_GFX_ADAFRUIT)
                     _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
                         textColor, textSize);
-#elif defined(TWM_USE_ARDUINO_GFX)
+# elif defined(TWM_GFX_ARDUINO)
                     _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
                         textColor);
-#endif
+# endif
                     xAccum += charXAdvs[
                         charXAdvs.size() - 2 - ((cursor + rewound) - old_cursor - 1)
                     ];
@@ -711,17 +715,17 @@ namespace thumby
                     if (rewound > 0) { cursor++; }
                     yAccum += yAdvMax + yOffMin;
                 } else {
-                    if (clipped && bitsHigh(flags, DTF_ELLIPSIS)) {
+                    if (clipped && bitsHigh(flags, DT_ELLIPSIS)) {
                         getCharBounds('.', nullptr, nullptr, &xAdv, &yAdv,
                             &xOff, &yOff, textSize, textSize, font);
                         for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
-#if defined(TWM_USE_ADAFRUIT_GFX)
+# if defined(TWM_GFX_ADAFRUIT)
                             _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
                                 textColor, textSize);
-#elif defined(TWM_USE_ARDUINO_GFX)
+# elif defined(TWM_GFX_ARDUINO)
                             _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
                                 textColor);
-#endif
+# endif
                             xAccum += xAdv;
 
                         }
@@ -759,7 +763,7 @@ namespace thumby
         {
             drawText(
                 lbl,
-                DTF_SINGLE | DTF_CENTER,
+                DT_SINGLE | DT_CENTER,
                 rect,
                 getTextSizeMultiplier(),
                 pressed ? getButtonTextColorPressed() : getButtonTextColor(),
@@ -883,7 +887,7 @@ namespace thumby
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
             );
-            drawText(lbl, DTF_SINGLE | DTF_ELLIPSIS, textRect,
+            drawText(lbl, DT_SINGLE | DT_ELLIPSIS, textRect,
                 getTextSizeMultiplier(), getWindowTextColor(), getDefaultFont());
         }
 
@@ -1069,6 +1073,13 @@ namespace thumby
 # endif
     };
 
+    enum
+    {
+        WMS_SSAVER_ENABLED = 1 << 0,
+        WMS_SSAVER_ACTIVE  = 1 << 1,
+        WMS_SSAVER_DRAWN   = 1 << 2
+    };
+
     class WindowManager : public std::enable_shared_from_this<WindowManager>
     {
     public:
@@ -1097,14 +1108,32 @@ namespace thumby
             tearDown();
         }
 
+        void setState(State state) { _state = state; }
+        State getState() const { return _state; }
+
+        void enableScreensaver(u_long activateAfter)
+        {
+            _ssaverActivateAfter = activateAfter;
+            _ssaverEpoch = millis();
+            setState(getState() | WMS_SSAVER_ENABLED);
+            TWM_LOG(TWM_DEBUG, "enabled screensaver (%lums)", activateAfter);
+        }
+
+        void disableScreensaver()
+        {
+            State flags = WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN;
+            setState(getState() & ~flags);
+            TWM_LOG(TWM_DEBUG, "disabled screensaver");
+        }
+
         virtual bool begin(uint8_t rotation)
         {
-# if defined(TWM_USE_ADAFRUIT_GFX)
+# if defined(TWM_GFX_ADAFRUIT)
             _gfxDisplay->begin(0);
             _gfxDisplay->setRotation(rotation);
             _gfxDisplay->setCursor(0, 0);
             return true;
-# elif defined(TWM_USE_ARDUINO_GFX)
+# elif defined(TWM_GFX_ARDUINO)
             (void)rotation;
             return _gfxContext->begin();
 # endif
@@ -1126,29 +1155,6 @@ namespace thumby
 
         Extent getScreenWidth() const { return _gfxContext->width(); }
         Extent getScreenHeight() const { return _gfxContext->height(); }
-
-        virtual void update()
-        {
-            _theme->drawDesktopBackground();
-            _registry->forEachChild([](const WindowPtr& win)
-            {
-                win->processQueue();
-                // TODO: is this window completely covered by another, or off the screen?
-                win->redraw();
-                return true;
-            });
-        }
-
-        void renderFrame()
-        {
-            // TODO: implement different calls for different color modes
-# if defined(TWM_USE_ADAFRUIT_GFX)
-            _gfxDisplay->drawRGBBitmap(0, 0, _gfxContext->getBuffer(),
-                _gfxContext->width(), _gfxContext->height());
-# elif defined(TWM_USE_ARDUINO_GFX)
-            _gfxContext->flush();
-# endif
-        }
 
         template<class TWindow>
         std::shared_ptr<TWindow> createWindow(
@@ -1260,6 +1266,12 @@ namespace thumby
         void hitTest(Coord x, Coord y)
         {
             //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
+            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
+                _ssaverEpoch = millis();
+                if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                    return;
+                }
+            }
             _registry->forEachChildReverse([&](const WindowPtr& child)
             {
                 InputParams params;
@@ -1275,11 +1287,57 @@ namespace thumby
             });
         }
 
+        virtual void update()
+        {
+            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
+                if (millis() - _ssaverEpoch >= _ssaverActivateAfter) {
+                    if (!bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                        setState(getState() | WMS_SSAVER_ACTIVE);
+                        TWM_LOG(TWM_DEBUG, "activated screensaver");
+                    }
+                } else {
+                    if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                        setState(getState() & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
+                        TWM_LOG(TWM_DEBUG, "de-activated screensaver");
+                    }
+                }
+            }
+            if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                if (!bitsHigh(getState(), WMS_SSAVER_DRAWN)) {
+                    _theme->drawScreensaver();
+                    setState(getState() | WMS_SSAVER_DRAWN);
+                }
+            } else {
+                _theme->drawDesktopBackground();
+                _registry->forEachChild([](const WindowPtr& win)
+                {
+                    win->processQueue();
+                    // TODO: is this window completely covered by another, or off the screen?
+                    win->redraw();
+                    return true;
+                });
+            }
+        }
+
+        void render()
+        {
+            /// TODO: implement different calls for different color modes
+# if defined(TWM_GFX_ADAFRUIT)
+            _gfxDisplay->drawRGBBitmap(0, 0, _gfxContext->getBuffer(),
+                _gfxContext->width(), _gfxContext->height());
+# elif defined(TWM_GFX_ARDUINO)
+            _gfxContext->flush();
+# endif
+        }
+
     protected:
         WindowContainerPtr _registry;
         GfxDisplayPtr _gfxDisplay;
         GfxContextPtr _gfxContext;
         ThemePtr _theme;
+        State _state = 0;
+        u_long _ssaverEpoch = 0UL;
+        u_long _ssaverActivateAfter = 0UL;
     };
 
     using WindowManagerPtr = std::shared_ptr<WindowManager>;
@@ -1654,7 +1712,7 @@ namespace thumby
     class Label : public Window
     {
     public:
-        TWM_CONST(uint8_t, DrawTextFlags, DTF_SINGLE | DTF_ELLIPSIS);
+        TWM_CONST(uint8_t, DrawTextFlags, DT_SINGLE | DT_ELLIPSIS);
 
         using Window::Window;
         Label() = default;
@@ -1683,7 +1741,7 @@ namespace thumby
     class MultilineLabel : public Window
     {
     public:
-        TWM_CONST(uint8_t, DrawTextFlags, DTF_CENTER);
+        TWM_CONST(uint8_t, DrawTextFlags, DT_CENTER);
 
         using Window::Window;
         MultilineLabel() = default;
@@ -1932,4 +1990,4 @@ namespace thumby
     };
 } // namespace thumby
 
-#endif // !_THUMBY_H_INCLUDED
+#endif // !_THUMBY_WM_H_INCLUDED
