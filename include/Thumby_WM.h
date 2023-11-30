@@ -1549,17 +1549,19 @@ namespace thumby
         }
 
     protected:
-        /** MSG_CREATE: param1 = nullptr, param2 = nullptr. */
+        /* ====== Begin message handlers ====== */
+
+        /** MSG_CREATE: p1 = 0, p2 = 0. */
         bool onCreate(MsgParam p1, MsgParam p2) override { return true; }
 
-        /** MSG_DESTROY: param1 = nullptr, param2 = nullptr. */
+        /** MSG_DESTROY: p1 = 0, p2 = 0. */
         bool onDestroy(MsgParam p1, MsgParam p2) override
         {
             setState(getState() & ~STA_ALIVE);
             return true;
         }
 
-        /** MSG_DRAW: param1 = nullptr, param2 = nullptr. */
+        /** MSG_DRAW: p1 = 0, p2 = 0. */
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
@@ -1573,7 +1575,7 @@ namespace thumby
             return false;
         }
 
-        /** MSG_INPUT: param1 = (loword: type), param2 = (hiword: x, loword: y).
+        /** MSG_INPUT: p1 = (loword: type), p2 = (hiword: x, loword: y).
          * Returns true if the input event was consumed by this window, false otherwise. */
         bool onInput(MsgParam p1, MsgParam p2) override
         {
@@ -1582,57 +1584,41 @@ namespace thumby
             params.x    = getMsgParamHiWord(p2);
             params.y    = getMsgParamLoWord(p2);
 
-            bool handled = false;
             switch (params.type) {
-                case INPUT_TAP:
-                    handled = onTapped(params.x, params.y);
-                break;
-                case INPUT_NONE:
+                case INPUT_TAP: return onTapped(params.x, params.y);
                 default:
                     TWM_ASSERT(false);
                 break;
             }
-            return handled;
+            return false;
         }
 
-        /** MSG_EVENT: param1 = EventType, param2 = child WindowID. */
+        /** MSG_EVENT: p1 = EventType, p2 = child WindowID. */
         bool onEvent(MsgParam p1, MsgParam p2) override { return true; }
 
-        /** MSG_RESIZE: param1 = nullptr, param2 = nullptr. */
+        /** MSG_RESIZE: p1 = 0, p2 = 0. */
         bool onResize(MsgParam p1, MsgParam p2) override
         {
             TWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
             return false;
         }
 
+        /* ====== End message handlers ====== */
+
         bool onTapped(Coord x, Coord y) override { return false; }
 
-        WindowManagerPtr _getWM() const
-        {
-            TWM_ASSERT(_wm);
-            return _wm;
-        }
+        WindowManagerPtr _getWM() const { return _wm; }
 
         GfxContextPtr _getGfxContext() const
         {
             auto wm = _getWM();
-            if (wm) {
-                auto gfx = wm->getGfxContext();
-                TWM_ASSERT(gfx);
-                return gfx;
-            }
-            return nullptr;
+            return wm ? wm->getGfxContext() : nullptr;
         }
 
         ThemePtr _getTheme() const
         {
             auto wm = _getWM();
-            if (wm) {
-                auto theme = wm->getTheme();
-                TWM_ASSERT(theme);
-                return theme;
-            }
-            return nullptr;
+            return wm ? wm->getTheme() : nullptr;
         }
 
     protected:
@@ -1664,11 +1650,7 @@ namespace thumby
             auto parent = getParent();
             TWM_ASSERT(parent);
             if (parent) {
-                parent->queueMessage(
-                    MSG_EVENT,
-                    EVT_CHILD_TAPPED,
-                    getID()
-                );
+                parent->queueMessage(MSG_EVENT, EVT_CHILD_TAPPED, getID());
             }
             return true;
         }
@@ -1699,7 +1681,7 @@ namespace thumby
                 rect.right = rect.left + max(width, theme->getButtonWidth()) + (theme->getButtonLabelPadding() * 2);
                 rect.bottom = rect.top + theme->getButtonHeight();
                 setRect(rect);
-                // TODO: if not autosize, clip label, perhaps with ellipsis.
+                /// TODO: if not autosize, clip label, perhaps with ellipsis.
                 return true;
             }
             return false;
@@ -1811,7 +1793,7 @@ namespace thumby
             }
         }
 
-        bool onCreate(MsgParam param1, MsgParam param2) override
+        bool onCreate(MsgParam p1, MsgParam p2) override
         {
             auto wm = _getWM();
             if (wm) {
@@ -1881,13 +1863,13 @@ namespace thumby
             return false;
         }
 
-        bool onEvent(MsgParam param1, MsgParam param2) override
+        bool onEvent(MsgParam p1, MsgParam p2) override
         {
-            switch (static_cast<EventType>(param1)) {
+            switch (static_cast<EventType>(p1)) {
                 case EVT_CHILD_TAPPED:
                     hide();
                     if (_callback) {
-                        _callback(static_cast<WindowID>(param2));
+                        _callback(static_cast<WindowID>(p2));
                     }
                 return true;
                 default:
