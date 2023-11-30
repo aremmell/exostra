@@ -391,20 +391,27 @@ to select a color mode"
         };
         virtual void setGfxContext(const GfxContextPtr&) = 0;
         virtual void drawScreensaver() const = 0;
+        virtual Color getScreensaverColor() const = 0;
         virtual void drawDesktopBackground() const = 0;
+        virtual Color getDesktopWindowColor() const = 0;
         virtual void setDefaultFont(const Font*) = 0;
         virtual const Font* getDefaultFont() const = 0;
         virtual void setTextSizeMultiplier(uint8_t) const = 0;
+        virtual uint8_t getDefaultTextSizeMultiplier() const = 0;
         virtual ScreenSize getScreenSize() const = 0;
         virtual Extent getScaledValue(Extent) const = 0;
-        virtual uint8_t getTextSizeMultiplier() const = 0;
+        virtual Extent getXPadding() const = 0;
+        virtual Extent getYPadding() const = 0;
+        virtual Coord getTextYOffset() const = 0;
+
         virtual Extent getWindowFrameThickness() const = 0;
-        virtual Coord getWindowTextYOffset() const = 0;
         virtual Color getWindowTextColor() const = 0;
-        virtual Extent getWindowXPadding() const = 0;
-        virtual Extent getWindowYPadding() const = 0;
-        virtual Extent getButtonWidth() const = 0;
-        virtual Extent getButtonHeight() const = 0;
+        virtual Color getWindowBgColor() const = 0;
+        virtual Color getWindowFrameColor() const = 0;
+        virtual Color getWindowFrameShadowColor() const = 0;
+
+        virtual Extent getDefaultButtonWidth() const = 0;
+        virtual Extent getDefaultButtonHeight() const = 0;
         virtual Color getButtonTextColor() const = 0;
         virtual Color getButtonTextColorPressed() const = 0;
         virtual Color getButtonBgColor() const = 0;
@@ -414,20 +421,33 @@ to select a color mode"
         virtual Extent getButtonLabelPadding() const = 0;
         virtual u_long getButtonTappedDuration() const = 0;
         virtual Coord getButtonCornerRadius() const = 0;
+
         virtual void drawWindowFrame(const Rect&, bool) const = 0;
         virtual void drawWindowBackground(const Rect&) const = 0;
         virtual void drawText(const char*, uint8_t, const Rect&,
             uint8_t, Color, const Font*) const = 0;
+
         virtual void drawButtonFrame(bool, const Rect&) const = 0;
         virtual void drawButtonBackground(bool, const Rect&) const = 0;
         virtual void drawButtonLabel(const char*, bool, const Rect&) const = 0;
-        virtual Extent getProgressBarHeight() const = 0;
+
+        virtual Extent getDefaultProgressBarHeight() const = 0;
+        virtual Color getProgressBarBgColor() const = 0;
+        virtual Color getProgressBarProgressColor() const = 0;
+        virtual float getProgressBarIndeterminateBandWidthFactor() const = 0;
         virtual float getProgressBarIndeterminateStep() const = 0;
+
         virtual void drawProgressBarBackground(const Rect&) const = 0;
         virtual void drawProgressBarProgress(const Rect&, float) const = 0;
         virtual void drawProgressBarIndeterminate(const Rect&, float) const = 0;
+
         virtual Rect getCheckBoxCheckableArea(const Rect&) const = 0;
+        virtual Extent getCheckBoxCheckableAreaPadding() const = 0;
+        virtual Extent getCheckBoxCheckMarkPadding() const = 0;
+        virtual Color getCheckBoxCheckableAreaBgColor() const = 0;
+        virtual Color getCheckBoxCheckMarkColor() const = 0;
         virtual u_long getCheckBoxCheckDelay() const = 0;
+
         virtual void drawCheckBox(const char*, bool, const Rect&) const = 0;
     };
 
@@ -436,44 +456,6 @@ to select a color mode"
     class DefaultTheme : public ITheme
     {
     public:
-        TWM_CONST(Coord, ScreenThresholdSmall, 320);
-        TWM_CONST(Coord, ScreenThresholdMedium, 480);
-        TWM_CONST(Color, ScreensaverColor, 0x0000);
-        TWM_CONST(Color, DesktopWindowColor, 0xb59a);
-        TWM_CONST(float, SmallScaleFactor, 1.0f);
-        TWM_CONST(float, MediumScaleFactor, 2.0f);
-        TWM_CONST(float, LargeScaleFactor, 3.0f);
-        TWM_CONST(float, WindowXPadFactor, 0.07f);
-        TWM_CONST(float, WindowYPadFactor, 0.07f);
-        TWM_CONST(float, ButtonWidthFactor, 0.27f);
-        TWM_CONST(float, ButtonHeightFactor, ButtonWidthFactor * 0.52f);
-        TWM_CONST(float, ProgressBarHeightFactor, 0.12f);
-        TWM_CONST(uint8_t, TextSizeMultiplier, 1);
-        TWM_CONST(Extent, WindowFrameThickness, 1);
-        TWM_CONST(Coord, WindowTextYOffset, 4);
-        TWM_CONST(Color, WindowFrameColor, 0x9cf3);
-        TWM_CONST(Color, WindowFrameShadowColor, 0xb5b6);
-        TWM_CONST(Color, WindowBgColor, 0xdedb);
-        TWM_CONST(Color, WindowTextColor, 0x0000);
-        TWM_CONST(Color, ButtonFrameColor, 0x6b6d);
-        TWM_CONST(Color, ButtonBgColor, 0x8c71);
-        TWM_CONST(Color, ButtonTextColor, 0xffff);
-        TWM_CONST(Extent, ButtonLabelPadding, 10);
-        TWM_CONST(Color, ButtonFrameColorPressed, 0x6b6d);
-        TWM_CONST(Color, ButtonBgColorPressed, 0x738e);
-        TWM_CONST(Color, ButtonTextColorPressed, 0xffff);
-        TWM_CONST(u_long, ButtonTappedDuration, 200);
-        TWM_CONST(Coord, ButtonCornerRadius, 4);
-        TWM_CONST(Color, ProgressBarBackgroundColor, 0xef5d);
-        TWM_CONST(Color, ProgressBarProgressColor, 0x0ce0);
-        TWM_CONST(float, ProgressBarIndeterminateBandWidth, 0.33f);
-        TWM_CONST(float, ProgressBarIndeterminateStep, 1.0f);
-        TWM_CONST(Extent, CheckBoxCheckableAreaPadding, 6);
-        TWM_CONST(Extent, CheckBoxCheckMarkPadding, 4);
-        TWM_CONST(Color, CheckBoxCheckableAreaBgColor, 0xef5d);
-        TWM_CONST(Color, CheckBoxCheckMarkColor, 0x3166);
-        TWM_CONST(u_long, CheckBoxCheckDelay, 200);
-
         void setGfxContext(const GfxContextPtr& gfx) final
         {
             TWM_ASSERT(gfx);
@@ -482,8 +464,10 @@ to select a color mode"
 
         void drawScreensaver() const final
         {
-            _gfxContext->fillScreen(ScreensaverColor);
+            _gfxContext->fillScreen(getScreensaverColor());
         }
+
+        Color getScreensaverColor() const final { return 0x0000; }
 
         void drawDesktopBackground() const final
         {
@@ -492,9 +476,11 @@ to select a color mode"
                 0,
                 _gfxContext->width(),
                 _gfxContext->height(),
-                DesktopWindowColor
+                getDesktopWindowColor()
             );
         }
+
+        Color getDesktopWindowColor() const final { return 0xb59a; }
 
         void setDefaultFont(const Font* font) final
         {
@@ -504,12 +490,13 @@ to select a color mode"
 
         const Font* getDefaultFont() const final { return _defaultFont; }
         void setTextSizeMultiplier(uint8_t mul) const final { _gfxContext->setTextSize(mul); }
+        uint8_t getDefaultTextSizeMultiplier() const final { return 1; }
 
         ScreenSize getScreenSize() const final
         {
-            if (_gfxContext->width() <= ScreenThresholdSmall) {
+            if (_gfxContext->width() <= 320) {
                 return ScreenSize::Small;
-            } else if (_gfxContext->width() <= ScreenThresholdMedium) {
+            } else if (_gfxContext->width() <= 480) {
                 return ScreenSize::Medium;
             } else {
                 return ScreenSize::Large;
@@ -521,68 +508,47 @@ to select a color mode"
             switch (getScreenSize()) {
                 default:
                 case ScreenSize::Small:
-                    return abs(value * SmallScaleFactor);
+                    return abs(value * 1.0f);
                 case ScreenSize::Medium:
-                    return abs(value * MediumScaleFactor);
+                    return abs(value * 2.0f);
                 case ScreenSize::Large:
-                    return abs(value * LargeScaleFactor);
+                    return abs(value * 3.0f);
             }
         }
 
-        uint8_t getTextSizeMultiplier() const final { return TextSizeMultiplier; }
-        Color getWindowTextColor() const final { return WindowTextColor; }
+        Extent getXPadding() const final { return abs(_gfxContext->width() * 0.07f); }
+        Extent getYPadding() const final { return abs(_gfxContext->height() * 0.07f); }
+        Coord getTextYOffset() const final { return getScaledValue(4); }
+        Extent getWindowFrameThickness() const final { return getScaledValue(1); }
+        Color getWindowTextColor() const final { return 0x0000; }
+        Color getWindowBgColor() const final { return 0xdedb; }
+        Color getWindowFrameColor() const final { return 0x9cf3; }
+        Color getWindowFrameShadowColor() const final { return 0xb5b6; }
 
-        Extent getWindowXPadding() const final
-        {
-            return abs(_gfxContext->width() * WindowXPadFactor);
-        }
-
-        Extent getWindowYPadding() const final
-        {
-            return abs(_gfxContext->height() * WindowYPadFactor);
-        }
-
-        Extent getWindowFrameThickness() const final
-        {
-            return getScaledValue(WindowFrameThickness);
-        }
-
-        Coord getWindowTextYOffset() const final
-        {
-            return getScaledValue(WindowTextYOffset);
-        }
-
-        Extent getButtonWidth() const final
-        {
-            return abs(_gfxContext->width() * ButtonWidthFactor);
-        }
-
-        Extent getButtonHeight() const final
-        {
-            return abs(_gfxContext->height() * ButtonHeightFactor);
-        }
+        Extent getDefaultButtonWidth() const final { return abs(_gfxContext->width() * 0.27f); }
+        Extent getDefaultButtonHeight() const final { return abs(getDefaultButtonWidth() * 0.52f); }
+        Color getButtonTextColor() const final { return 0xffff; }
+        Color getButtonTextColorPressed() const final { return 0xffff; }
+        Color getButtonBgColor() const final { return 0x8c71; }
+        Color getButtonBgColorPressed() const final { return 0x738e; }
+        Color getButtonFrameColor() const final { return 0x6b6d; }
+        Color getButtonFrameColorPressed() const final { return 0x6b6d; }
+        Extent getButtonLabelPadding() const final { return getScaledValue(10); }
+        u_long getButtonTappedDuration() const final { return 200; }
 
         Coord getButtonCornerRadius() const final
         {
+            static constexpr Coord radius = 4;
             switch (getScreenSize()) {
                 default:
                 case ScreenSize::Small:
-                    return ButtonCornerRadius;
+                    return radius;
                 case ScreenSize::Medium:
-                    return ButtonCornerRadius + 1;
+                    return radius + 1;
                 case ScreenSize::Large:
-                    return ButtonCornerRadius + 2;
+                    return radius + 2;
             }
         }
-
-        Color getButtonTextColor() const final { return ButtonTextColor; }
-        Color getButtonTextColorPressed() const final { return ButtonTextColorPressed; }
-        Color getButtonBgColor() const final { return ButtonBgColor; }
-        Color getButtonBgColorPressed() const final { return ButtonBgColorPressed; }
-        Color getButtonFrameColor() const final { return ButtonFrameColor; }
-        Color getButtonFrameColorPressed() const final { return ButtonFrameColorPressed; }
-        Extent getButtonLabelPadding() const final { return getScaledValue(ButtonLabelPadding); }
-        u_long getButtonTappedDuration() const final { return ButtonTappedDuration; }
 
         void drawWindowFrame(const Rect& rect, bool drawShadow = true) const final
         {
@@ -590,7 +556,7 @@ to select a color mode"
             auto pixels = getWindowFrameThickness();
             while (pixels-- > 0) {
                 _gfxContext->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
-                    WindowFrameColor);
+                    getWindowFrameColor());
                 tmp.deflate(1);
             }
             if (drawShadow) {
@@ -599,14 +565,14 @@ to select a color mode"
                     rect.bottom,
                     rect.left + (rect.width() - 1),
                     rect.bottom,
-                    WindowFrameShadowColor
+                    getWindowFrameShadowColor()
                 );
                 _gfxContext->drawLine(
                     rect.right,
                     rect.top + 1,
                     rect.right,
                     rect.top + (rect.height() - 1),
-                    WindowFrameShadowColor
+                    getWindowFrameShadowColor()
                 );
             }
         }
@@ -614,7 +580,7 @@ to select a color mode"
         void drawWindowBackground(const Rect& rect) const final
         {
             _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
-                WindowBgColor);
+                getWindowBgColor());
         }
 
         void drawText(const char* text, uint8_t flags, const Rect& rect,
@@ -627,10 +593,10 @@ to select a color mode"
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
             Extent xAccum = 0;
             Extent yAccum =
-                rect.top + (singleLine ? (rect.height() / 2) : getWindowYPadding())
-                    + getWindowTextYOffset();
+                rect.top + (singleLine ? (rect.height() / 2) : getYPadding())
+                    + getTextYOffset();
             const Extent xPadding =
-                ((singleLine && !xCenter) ? 0 : getWindowXPadding());
+                ((singleLine && !xCenter) ? 0 : getXPadding());
             const Extent xExtent = rect.right - xPadding;
             const char* cursor = text;
 
@@ -756,34 +722,39 @@ to select a color mode"
                 lbl,
                 DT_SINGLE | DT_CENTER,
                 rect,
-                getTextSizeMultiplier(),
+                getDefaultTextSizeMultiplier(),
                 pressed ? getButtonTextColorPressed() : getButtonTextColor(),
                 getDefaultFont()
             );
         }
 
-        Extent getProgressBarHeight() const final
+        Extent getDefaultProgressBarHeight() const final
         {
-            return abs(_gfxContext->height() * ProgressBarHeightFactor);
+            return abs(_gfxContext->height() * 0.12f);
         }
+
+        Color getProgressBarBgColor() const final { return 0xef5d; }
+        Color getProgressBarProgressColor() const final { return 0x0ce0; }
+        float getProgressBarIndeterminateBandWidthFactor() const final { return 0.33f; }
 
         float getProgressBarIndeterminateStep() const final
         {
+            static constexpr float step = 1.0f;
             switch (getScreenSize()) {
                 default:
                 case ScreenSize::Small:
-                    return ProgressBarIndeterminateStep;
+                    return step;
                 case ScreenSize::Medium:
-                    return ProgressBarIndeterminateStep * 2;
+                    return step * 2;
                 case ScreenSize::Large:
-                    return ProgressBarIndeterminateStep * 4;
+                    return step * 4;
             }
         }
 
         void drawProgressBarBackground(const Rect& rect) const final
         {
             _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
-                ProgressBarBackgroundColor);
+                getProgressBarBgColor());
         }
 
         void drawProgressBarProgress(const Rect& rect, float percent) const final
@@ -794,7 +765,7 @@ to select a color mode"
             float progressWidth = (barRect.width() * (min(100.0f, percent) / 100.0f));
             barRect.right = barRect.left + abs(progressWidth);
             _gfxContext->fillRect(barRect.left, barRect.top, barRect.width(),
-                barRect.height(), ProgressBarProgressColor);
+                barRect.height(), getProgressBarProgressColor());
         }
 
         void drawProgressBarIndeterminate(const Rect& rect, float counter) const final
@@ -803,7 +774,7 @@ to select a color mode"
             Rect barRect = rect;
             barRect.deflate(getWindowFrameThickness() * 2);
             Extent bandWidth
-                = (barRect.width() * ProgressBarIndeterminateBandWidth);
+                = (barRect.width() * getProgressBarIndeterminateBandWidthFactor());
             Coord offset
                 = (barRect.width() + bandWidth) * (min(100.0f, counter) / 100.0f);
             static Coord reverseOffset = bandWidth;
@@ -830,12 +801,12 @@ to select a color mode"
                 );
             }
             _gfxContext->fillRect(x, barRect.top, width, barRect.height(),
-                ProgressBarProgressColor);
+                getProgressBarProgressColor());
         }
 
         Rect getCheckBoxCheckableArea(const Rect& rect) const final
         {
-            auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
+            auto checkPadding = getScaledValue(getCheckBoxCheckableAreaPadding());
             Rect checkableRect(
                 rect.left,
                 rect.top + checkPadding,
@@ -846,7 +817,11 @@ to select a color mode"
             return checkableRect;
         }
 
-        u_long getCheckBoxCheckDelay() const final { return CheckBoxCheckDelay; }
+        Extent getCheckBoxCheckableAreaPadding() const final { return 6; }
+        Extent getCheckBoxCheckMarkPadding() const final { return 4; }
+        Color getCheckBoxCheckableAreaBgColor() const final { return 0xef5d; }
+        Color getCheckBoxCheckMarkColor() const final { return 0x3166; }
+        u_long getCheckBoxCheckDelay() const final { return 200; }
 
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
@@ -857,29 +832,29 @@ to select a color mode"
                 checkableRect.top,
                 checkableRect.width(),
                 checkableRect.height(),
-                CheckBoxCheckableAreaBgColor
+                getCheckBoxCheckableAreaBgColor()
             );
             drawWindowFrame(checkableRect, false);
             if (checked) {
                 Rect rectCheckMark = checkableRect;
-                rectCheckMark.deflate(getScaledValue(CheckBoxCheckMarkPadding));
+                rectCheckMark.deflate(getScaledValue(getCheckBoxCheckMarkPadding()));
                 _gfxContext->fillRect(
                     rectCheckMark.left,
                     rectCheckMark.top,
                     rectCheckMark.width(),
                     rectCheckMark.height(),
-                    CheckBoxCheckMarkColor
+                    getCheckBoxCheckMarkColor()
                 );
             }
-            auto checkPadding = getScaledValue(CheckBoxCheckableAreaPadding);
+            auto checkPadding = getScaledValue(getCheckBoxCheckableAreaPadding());
             Rect textRect(
                 checkableRect.right + checkPadding,
                 rect.top,
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
             );
-            drawText(lbl, DT_SINGLE | DT_ELLIPSIS, textRect,
-                getTextSizeMultiplier(), getWindowTextColor(), getDefaultFont());
+            drawText(lbl, DT_SINGLE | DT_ELLIPSIS, textRect, getDefaultTextSizeMultiplier(),
+                getWindowTextColor(), getDefaultFont());
         }
 
     private:
@@ -1215,10 +1190,10 @@ to select a color mode"
                 parent,
                 id,
                 style,
-                _theme->getWindowXPadding(),
-                _theme->getWindowYPadding(),
-                getScreenWidth() - (_theme->getWindowXPadding() * 2),
-                getScreenHeight() - (_theme->getWindowYPadding() * 2),
+                _theme->getXPadding(),
+                _theme->getYPadding(),
+                getScreenWidth() - (_theme->getXPadding() * 2),
+                getScreenHeight() - (_theme->getYPadding() * 2),
                 text,
                 [&](const std::shared_ptr<TPrompt>& win)
                 {
@@ -1666,8 +1641,8 @@ to select a color mode"
                 Extent width, height;
                 Rect rect = getRect();
                 gfx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
-                rect.right = rect.left + max(width, theme->getButtonWidth()) + (theme->getButtonLabelPadding() * 2);
-                rect.bottom = rect.top + theme->getButtonHeight();
+                rect.right = rect.left + max(width, theme->getDefaultButtonWidth()) + (theme->getButtonLabelPadding() * 2);
+                rect.bottom = rect.top + theme->getDefaultButtonHeight();
                 setRect(rect);
                 /// TODO: if not autosize, clip label, perhaps with ellipsis.
                 return true;
@@ -1698,7 +1673,7 @@ to select a color mode"
                     getText().c_str(),
                     DrawTextFlags,
                     rect,
-                    theme->getTextSizeMultiplier(),
+                    theme->getDefaultTextSizeMultiplier(),
                     theme->getWindowTextColor(),
                     theme->getDefaultFont()
                 );
@@ -1727,7 +1702,7 @@ to select a color mode"
                     getText().c_str(),
                     DrawTextFlags,
                     rect,
-                    theme->getTextSizeMultiplier(),
+                    theme->getDefaultTextSizeMultiplier(),
                     theme->getWindowTextColor(),
                     theme->getDefaultFont()
                 );
@@ -1792,10 +1767,10 @@ to select a color mode"
                         shared_from_this(),
                         WID_PROMPTLBL,
                         STY_CHILD | STY_VISIBLE | STY_LABEL,
-                        rect.left + theme->getWindowXPadding(),
-                        rect.top + theme->getWindowYPadding(),
-                        rect.right - rect.left - (theme->getWindowXPadding() * 2),
-                        rect.bottom - rect.top - ((theme->getWindowYPadding() * 3) + theme->getButtonHeight()),
+                        rect.left + theme->getXPadding(),
+                        rect.top + theme->getYPadding(),
+                        rect.right - rect.left - (theme->getXPadding() * 2),
+                        rect.bottom - rect.top - ((theme->getYPadding() * 3) + theme->getDefaultButtonHeight()),
                         getText()
                     );
                     if (!_label) {
@@ -1817,8 +1792,8 @@ to select a color mode"
                             return true;
                         }
                         Rect rectBtn = child->getRect();
-                        rectBtn.top = rectLbl.bottom + theme->getWindowYPadding();
-                        rectBtn.bottom = rectBtn.top + theme->getButtonHeight();
+                        rectBtn.top = rectLbl.bottom + theme->getYPadding();
+                        rectBtn.bottom = rectBtn.top + theme->getDefaultButtonHeight();
                         auto width = rectBtn.width();
                         if (first) {
                             first = false;
@@ -1829,7 +1804,7 @@ to select a color mode"
                                 }
                                 break;
                                 case 2: {
-                                    rectBtn.left = rect.left + theme->getWindowXPadding();
+                                    rectBtn.left = rect.left + theme->getXPadding();
                                 }
                                 break;
                                 default:
@@ -1838,7 +1813,7 @@ to select a color mode"
                             }
                             rectBtn.right = rectBtn.left + width;
                         } else {
-                            rectBtn.right = rect.right - theme->getWindowXPadding();
+                            rectBtn.right = rect.right - theme->getXPadding();
                             rectBtn.left = rectBtn.right - width;
                         }
                         child->setRect(rectBtn);

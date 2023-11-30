@@ -6,9 +6,9 @@
 #include <Adafruit_GFX.h>
 #include <Arduino_GFX_Library.h>
 
-#define TFT_720_SQUARE
+//#define TFT_720_SQUARE
 //#define TFT_480_ROUND
-//#define TFT_320_RECTANGLE
+#define TFT_320_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
@@ -260,7 +260,7 @@ void setup(void)
   }
 
   WindowID id = 1;
-  auto xPadding = wm->getTheme()->getWindowXPadding();
+  auto xPadding = wm->getTheme()->getXPadding();
   auto defaultWin = wm->createWindow<DefaultWindow>(
     nullptr,
     id++,
@@ -308,7 +308,7 @@ void setup(void)
   }
   button1->setLabel(label1);
 
-  auto yPadding = wm->getTheme()->getWindowYPadding();
+  auto yPadding = wm->getTheme()->getYPadding();
 
   testProgressBar = wm->createProgressBar<TestProgressBar>(
     defaultWin,
@@ -317,7 +317,7 @@ void setup(void)
     xPadding * 2,
     button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2),
-    wm->getTheme()->getProgressBarHeight(),
+    wm->getTheme()->getDefaultProgressBarHeight(),
     PBR_INDETERMINATE
   );
   if (!testProgressBar) {
