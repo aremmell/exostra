@@ -6,9 +6,9 @@
 #include <Adafruit_GFX.h>
 #include <Arduino_GFX_Library.h>
 
-//#define TFT_720_SQUARE
+#define TFT_720_SQUARE
 //#define TFT_480_ROUND
-#define TFT_320_RECTANGLE
+//#define TFT_320_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
@@ -72,7 +72,7 @@ auto wm = createWindowManager(
 );
 #else
 /** Implied Qualia RGB666 for now. */
-# if defined(PLATFORMIO) // TODO: detect qualia, hopefully remove hack
+# if defined(PLATFORMIO) /// TODO: detect qualia, hopefully remove hack
 #  include <esp32_qualia.h>
 #  define PIN_NS qualia
 # else
@@ -209,6 +209,7 @@ void on_fatal_error()
 }
 
 std::shared_ptr<TestProgressBar> testProgressBar;
+std::shared_ptr<TestOKPrompt> okPrompt;
 
 bool touchInitialized = false;
 bool isFocalTouch = false;
@@ -337,7 +338,7 @@ void setup(void)
     on_fatal_error();
   }
 
-  auto okPrompt = wm->createPrompt<TestOKPrompt>(
+  okPrompt = wm->createPrompt<TestOKPrompt>(
     nullptr,
     id++,
     STY_PROMPT,

@@ -37,86 +37,22 @@
 # include <queue>
 # include <mutex>
 
-# if defined(TWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
-#  include <Adafruit_GFX.h>
-
-using IGfxDisplay   = Adafruit_SPITFT;
-using IGfxContext1  = GFXcanvas1;
-using IGfxContext8  = GFXcanvas8;
-using IGfxContext16 = GFXcanvas16;
-
-#  if !defined(_ARDUINO_GFX_H_)
-#   if defined(__AVR__)
-#    include <avr/pgmspace.h>
-#   elif defined(ESP8266) || defined(ESP32)
-#    include <pgmspace.h>
-#   endif
-
-#   if !defined(pgm_read_byte)
-#    define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
-#   endif
-#   if !defined(pgm_read_word)
-#    define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
-#   endif
-#   if !defined(pgm_read_dword)
-#    define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
-#   endif
-
-#   if !defined(pgm_read_pointer)
-#    if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
-#     define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
-#    else
-#     define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
-#    endif
-#   endif
-
-inline GFXglyph* pgm_read_glyph_ptr(const GFXfont* font, uint8_t c)
-{
-#   ifdef __AVR__
-    return &((static_cast<GFXglyph*>(pgm_read_pointer(&font->glyph)))[c]);
-#   else
-    return font->glyph + c;
-#   endif
-}
-#  endif // _ARDUINO_GFX_H_
-# elif defined(TWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
-#  include <Arduino_GFX_Library.h>
-#  if defined(LITTLE_FOOT_PRINT)
-#   error "required Arduino GFX canvas classes unavailable for this board"
-#  endif
-#  if defined(ATTINY_CORE)
-#   error "required GFXfont implementation unavailable for this board"
-#  endif
-
-using IGfxDisplay   = Arduino_GFX;
-using IGfxContext1  = Arduino_Canvas_Mono;
-using IGfxContext8  = Arduino_Canvas_Indexed;
-using IGfxContext16 = Arduino_Canvas;
-# else
-#  error "define 'TWM_GFX_ADAFRUIT' or 'TWM_GFX_ARDUINO' and install \
-the appropriate library to select graphics driver support"
-# endif
-
 // TODO: remove me
 # define TWM_COLOR_565
 
-// Uncomment to remove mutex locks.
-//#define TWM_SINGLETHREAD
+// Comment out to enable mutexes in multi-threaded environments.
+#define TWM_SINGLETHREAD
 
-// Comment out to disable logging.
+// Uncomment to enable serial logging.
 # define TWM_ENABLE_LOGGING
 
 # if defined(TWM_ENABLE_LOGGING)
-    typedef enum
+    enum
     {
         TWM_ERROR = 1,
         TWM_WARN  = 2,
         TWM_DEBUG = 3
-    } _LoggingLevels;
-
-#  define _TWM_STRIFY(val) #val
-#  define TWM_STRIFY(val) _TWM_STRIFY(val)
-
+    };
 #  define TWM_LOG(lvl, fmt, ...) \
     do { \
         char prefix = '\0'; \
@@ -125,9 +61,8 @@ the appropriate library to select graphics driver support"
             case TWM_WARN: prefix  = 'W'; break; \
             case TWM_DEBUG: prefix = 'D'; break; \
         } \
-        Serial.printf("[%c] (", prefix); \
-        Serial.printf(__FILE__ ":" TWM_STRIFY(__LINE__) "): " fmt "\n" \
-            __VA_OPT__(,) __VA_ARGS__); \
+        Serial.printf("[%c] (%s:%d): ", prefix, basename(__FILE__), __LINE__); \
+        Serial.printf(fmt "\n" __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
 #  define TWM_ASSERT(expr) \
     do { \
@@ -143,6 +78,54 @@ the appropriate library to select graphics driver support"
 # define TWM_CONST(type, name, value) \
     static constexpr PROGMEM type name = value
 
+# if defined(TWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
+#  include <Adafruit_GFX.h>
+#  if __has_include(<Adafruit_SPITFT.h>)
+#   define TWM_DISP_TYPE Adafruit_SPITFT
+#  else
+#   define TWM_DISP_TYPE Adafruit_GFX
+#  endif
+#  define TWM_CTX1_TYPE  GFXcanvas1
+#  define TWM_CTX8_TYPE  GFXcanvas8
+#  define TWM_CTX16_TYPE GFXcanvas16
+#   if defined(__AVR__)
+#    include <avr/pgmspace.h>
+#   elif defined(ESP8266) || defined(ESP32)
+#    include <pgmspace.h>
+#   endif
+#   if !defined(pgm_read_byte)
+#    define pgm_read_byte(addr) (*(reinterpret_cast<const uint8_t*>(addr)))
+#   endif
+#   if !defined(pgm_read_word)
+#    define pgm_read_word(addr) (*(reinterpret_cast<const uint16_t*>(addr)))
+#   endif
+#   if !defined(pgm_read_dword)
+#    define pgm_read_dword(addr) (*(reinterpret_cast<const uint32_t*>(addr)))
+#   endif
+#   if !defined(pgm_read_pointer)
+#    if !defined(__INT_MAX__) || (__INT_MAX__ > 0xffff)
+#     define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_dword(addr)))
+#    else
+#     define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
+#    endif
+#   endif
+# elif defined(TWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
+#  include <Arduino_GFX_Library.h>
+#  if defined(LITTLE_FOOT_PRINT)
+#   error "required Arduino GFX canvas classes unavailable for this board"
+#  endif
+#  if defined(ATTINY_CORE)
+#   error "required GFXfont implementation unavailable for this board"
+#  endif
+#  define TWM_DISP_TYPE  Arduino_GFX
+#  define TWM_CTX1_TYPE  Arduino_Canvas_Mono
+#  define TWM_CTX8_TYPE  Arduino_Canvas_Indexed
+#  define TWM_CTX16_TYPE Arduino_Canvas
+# else
+#  error "define TWM_GFX_ADAFRUIT or TWM_GFX_ARDUINO, and install the relevant \
+library in order to select a low-level graphics driver"
+# endif
+
 namespace thumby
 {
     /** Window identifier. */
@@ -152,10 +135,10 @@ namespace thumby
     TWM_CONST(WindowID, WID_INVALID,  -1);
     TWM_CONST(WindowID, WID_PROMPTLBL, 0);
 
-    /** Window style. */
+    /** Window style bitmask. */
     using Style = uint16_t;
 
-    /** Window state. */
+    /** State bitmask. */
     using State = uint16_t;
 
     /** Window message parameter type. */
@@ -164,24 +147,27 @@ namespace thumby
     /** Window message parameter component type. */
     using MsgParamWord = uint32_t;
 
-    /** Use the smallest type that can contain all possible colors. */
+    /** Physical display driver. */
+    using IGfxDisplay = TWM_DISP_TYPE;
+
 # if defined(TWM_COLOR_MONOCHROME)
-    using Color       = uint8_t;     /**< Color (monochrome). */
-    using IGfxContext = IGfxContext1;
+    using Color       = uint8_t;       /**< Color (monochrome). */
+    using IGfxContext = TWM_CTX1_TYPE; /**< Graphics context (monochrome). */
 # elif defined(TWM_COLOR_256)
-    using Color       = uint8_t;     /**< Color (8-bit). */
-    using IGfxContext = IGfxContext8;
+    using Color       = uint8_t;       /**< Color (8-bit). */
+    using IGfxContext = TWM_CTX8_TYPE; /**< Graphics context (8-bit). */
 # elif defined(TWM_COLOR_565)
-    using Color       = uint16_t;    /**< Color (16-bit 565 RGB) */
-    using IGfxContext = IGfxContext16;
+    using Color       = uint16_t;       /**< Color type (16-bit 565 RGB). */
+    using IGfxContext = TWM_CTX16_TYPE; /**< Graphics context (16-bit 565 RGB). */
 # else
-#  error "invalid color mode"
+#  error "define TWM_COLOR_565, TWM_COLOR_256, or TWM_COLOR_MONOCHROME in order \
+to select a color mode"
 # endif
 
-    /** Graphics context (e.g. canvas). */
+    /** Pointer to graphics context (e.g. canvas/buffer). */
     using GfxContextPtr = std::shared_ptr<IGfxContext>;
 
-    /** Physical display. */
+    /** Pointer to physical display driver. */
     using GfxDisplayPtr = std::shared_ptr<IGfxDisplay>;
 
     /** Font type. */
@@ -285,28 +271,28 @@ namespace thumby
         }
     };
 
-    static void getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy, uint8_t* xAdv,
-        uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSizeX = 1,
-        uint8_t textSizeY = 1, const GFXfont* font = nullptr)
+    inline GFXglyph* getGlyphAtOffset(const GFXfont* font, uint8_t off)
     {
-        if (font != nullptr) {
-            uint8_t first = pgm_read_byte(&font->first);
-            bool inRange = (ch >= first && ch <= pgm_read_byte(&font->last));
-            auto glyph = inRange ? pgm_read_glyph_ptr(font, ch - first) : nullptr;
-            if (cx) { *cx = inRange ? pgm_read_byte(&glyph->width) * textSizeX : 0; }
-            if (cy) { *cy = inRange ? pgm_read_byte(&glyph->height) * textSizeY : 0; }
-            *xAdv = inRange ? pgm_read_byte(&glyph->xAdvance) * textSizeX : 0;
-            *yAdv = inRange ? pgm_read_byte(&font->yAdvance) : 0;
-            *xOff = inRange ? pgm_read_byte(&glyph->xOffset) : 0;
-            *yOff = inRange ? pgm_read_byte(&glyph->yOffset) : 0;
-        } else {
-            *cx = textSizeX * 6;
-            *cy = textSizeY * 8;
-            *xAdv = *cx;
-            *yAdv = *cy;
-            *xOff = 0;
-            *yOff = 0;
-        }
+#   ifdef __AVR__
+        return &((static_cast<GFXglyph*>(pgm_read_pointer(&font->glyph)))[off]);
+#   else
+        return font->glyph + off;
+#   endif
+    }
+
+    static void getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy, uint8_t* xAdv,
+        uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSize = 1,
+        const GFXfont* font = nullptr)
+    {
+        uint8_t first = font ? pgm_read_byte(&font->first) : 0;
+        bool okCh = font ? ch >= first && ch <= pgm_read_byte(&font->last) : false;
+        auto glyph = okCh ? getGlyphAtOffset(font, ch - first) : nullptr;
+        if (cx) { *cx = textSize * (font ? (okCh ? pgm_read_byte(&glyph->width) : 0) : 6); }
+        if (cy) { *cy = textSize * (font ? (okCh ? pgm_read_byte(&glyph->height) : 0) : 8); }
+        if (xAdv) { *xAdv = textSize * (okCh ? pgm_read_byte(&glyph->xAdvance) : 6); }
+        if (yAdv) { *yAdv = okCh ? pgm_read_byte(&font->yAdvance) : textSize * 8; }
+        if (xOff) { *xOff = okCh ? pgm_read_byte(&glyph->xOffset) : 0; }
+        if (yOff) { *yOff = okCh ? pgm_read_byte(&glyph->yOffset) : 0; }
     }
 
     template<typename T1, typename T2>
@@ -366,31 +352,30 @@ namespace thumby
         EVT_CHILD_TAPPED = 1
     } EventType;
 
-    typedef enum
+    enum
     {
-        INPUT_NONE = 0,
-        INPUT_TAP  = 1
-    } InputType;
+        INPUT_TAP = 1
+    };
 
     struct InputParams
     {
         WindowID handledBy = WID_INVALID;
-        InputType type = INPUT_NONE;
+        int type;
         Coord x = 0;
         Coord y = 0;
     };
 
-    static MsgParam makeMsgParam(MsgParamWord hiWord, MsgParamWord loWord)
+    static MsgParam makeMsgParam(const MsgParamWord& hiWord, const MsgParamWord& loWord)
     {
         return (static_cast<MsgParam>(hiWord) << 32) | (loWord & 0xffffffffU);
     }
 
-    static MsgParamWord getMsgParamHiWord(MsgParam msgParam)
+    static MsgParamWord getMsgParamHiWord(const MsgParam& msgParam)
     {
         return ((msgParam >> 32) & 0xffffffffU);
     }
 
-    static MsgParamWord getMsgParamLoWord(MsgParam msgParam)
+    static MsgParamWord getMsgParamLoWord(const MsgParam& msgParam)
     {
         return (msgParam & 0xffffffffU);
     }
@@ -657,8 +642,9 @@ namespace thumby
                 std::deque<uint8_t> charXAdvs;
                 bool clipped = false;
                 while (xAccum <= xExtent && *cursor != '\0') {
+                    /// TODO: handle \n and \r
                     getCharBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
-                        &yOff, textSize, textSize, font);
+                        &yOff, textSize, font);
                     if (xAccum + xAdv > xExtent) {
                         if (singleLine && bitsHigh(flags, DT_CLIP)) {
                             clipped = true;
@@ -700,13 +686,16 @@ namespace thumby
                     ? rect.left + (rect.width() / 2) - (drawnWidth / 2)
                     : rect.left + xPadding;
                 while (old_cursor < cursor) {
+                    _gfxContext->drawChar(
+                        xAccum,
+                        yAccum,
+                        *old_cursor++,
+                        textColor,
+                        textColor
 # if defined(TWM_GFX_ADAFRUIT)
-                    _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
-                        textColor, textSize);
-# elif defined(TWM_GFX_ARDUINO)
-                    _gfxContext->drawChar(xAccum, yAccum, *old_cursor++, textColor,
-                        textColor);
+                        , textSize
 # endif
+                    );
                     xAccum += charXAdvs[
                         charXAdvs.size() - 2 - ((cursor + rewound) - old_cursor - 1)
                     ];
@@ -717,17 +706,19 @@ namespace thumby
                 } else {
                     if (clipped && bitsHigh(flags, DT_ELLIPSIS)) {
                         getCharBounds('.', nullptr, nullptr, &xAdv, &yAdv,
-                            &xOff, &yOff, textSize, textSize, font);
+                            &xOff, &yOff, textSize, font);
                         for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
+                            _gfxContext->drawChar(
+                                xAccum,
+                                yAccum,
+                                '.',
+                                textColor,
+                                textColor
 # if defined(TWM_GFX_ADAFRUIT)
-                            _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
-                                textColor, textSize);
-# elif defined(TWM_GFX_ARDUINO)
-                            _gfxContext->drawChar(xAccum, yAccum, '.', textColor,
-                                textColor);
+                                , textSize
 # endif
+                            );
                             xAccum += xAdv;
-
                         }
                     }
                     break;
@@ -1439,10 +1430,7 @@ namespace thumby
             pm.p1 = p1;
             pm.p2 = p2;
             _queue.push(pm);
-            if (pm.msg == MSG_INPUT) {
-                return getMsgParamLoWord(pm.p1) == INPUT_TAP;
-            }
-            return false;
+            return msg == MSG_INPUT && getMsgParamLoWord(p1) == INPUT_TAP;
         }
 
         bool processQueue() override
@@ -1580,7 +1568,7 @@ namespace thumby
         bool onInput(MsgParam p1, MsgParam p2) override
         {
             InputParams params;
-            params.type = static_cast<InputType>(getMsgParamLoWord(p1));
+            params.type = getMsgParamLoWord(p1);
             params.x    = getMsgParamHiWord(p2);
             params.y    = getMsgParamLoWord(p2);
 
