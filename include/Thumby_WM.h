@@ -142,10 +142,10 @@ namespace thumby
     using State = uint16_t;
 
     /** Window message parameter type. */
-    using MsgParam = uint64_t;
+    using MsgParam = uint32_t;
 
     /** Window message parameter component type. */
-    using MsgParamWord = uint32_t;
+    using MsgParamWord = uint16_t;
 
     /** Physical display driver. */
     using IGfxDisplay = TWM_DISP_TYPE;
@@ -367,17 +367,17 @@ to select a color mode"
 
     static MsgParam makeMsgParam(const MsgParamWord& hiWord, const MsgParamWord& loWord)
     {
-        return (static_cast<MsgParam>(hiWord) << 32) | (loWord & 0xffffffffU);
+        return (static_cast<MsgParam>(hiWord) << 16) | (loWord & 0xffffU);
     }
 
     static MsgParamWord getMsgParamHiWord(const MsgParam& msgParam)
     {
-        return ((msgParam >> 32) & 0xffffffffU);
+        return ((msgParam >> 16) & 0xffffU);
     }
 
     static MsgParamWord getMsgParamLoWord(const MsgParam& msgParam)
     {
-        return (msgParam & 0xffffffffU);
+        return (msgParam & 0xffffU);
     }
 
     class ITheme
