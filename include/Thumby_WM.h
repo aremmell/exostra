@@ -586,15 +586,22 @@ to select a color mode"
         void drawText(const char* text, uint8_t flags, const Rect& rect,
             uint8_t textSize, Color textColor, const Font* font) const final
         {
-            bool xCenter = bitsHigh(flags, DT_CENTER);
-            bool singleLine = bitsHigh(flags, DT_SINGLE);
+            const bool xCenter = bitsHigh(flags, DT_CENTER);
+            const bool singleLine = bitsHigh(flags, DT_SINGLE);
 
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
             Extent xAccum = 0;
-            Extent yAccum =
-                rect.top + (singleLine ? (rect.height() / 2) : getYPadding())
-                    + getTextYOffset();
+            Extent yAccum;
+            if (singleLine) {
+                int16_t x, y = rect.top + (rect.height() / 2);
+                uint16_t w, h;
+                _gfxContext->getTextBounds(text, rect.left, y, &x, &y, &w, &h);
+                yAccum = rect.top + (rect.height() / 2) + (h / 2) - 1;
+            } else {
+                yAccum = rect.top + getYPadding();
+            }
+
             const Extent xPadding =
                 ((singleLine && !xCenter) ? 0 : getXPadding());
             const Extent xExtent = rect.right - xPadding;
