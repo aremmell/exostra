@@ -81,13 +81,14 @@
 # if defined(TWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
 #  include <Adafruit_GFX.h>
 #  if __has_include(<Adafruit_SPITFT.h>)
-#   define TWM_DISP_TYPE Adafruit_SPITFT
+#   include <Adafruit_SPITFT.h>
+    using IGfxDisplay = Adafruit_SPITFT;
 #  else
-#   define TWM_DISP_TYPE Adafruit_GFX
+    using IGfxDisplay = Adafruit_GFX;
 #  endif
-#  define TWM_CTX1_TYPE  GFXcanvas1
-#  define TWM_CTX8_TYPE  GFXcanvas8
-#  define TWM_CTX16_TYPE GFXcanvas16
+    using IGfxContext1  = GFXcanvas1;
+    using IGfxContext8  = GFXcanvas8;
+    using IGfxContext16 = GFXcanvas16;
 #   if defined(__AVR__)
 #    include <avr/pgmspace.h>
 #   elif defined(ESP8266) || defined(ESP32)
@@ -115,12 +116,12 @@
 #   error "required Arduino GFX canvas classes unavailable due to LITTLE_FOOT_PRINT"
 #  endif
 #  if defined(ATTINY_CORE)
-#   error "required GFXfont implementation unavailable for this board"
+#   error "required GFXfont implementation unavailable due to ATTINY_CORE"
 #  endif
-#  define TWM_DISP_TYPE  Arduino_GFX
-#  define TWM_CTX1_TYPE  Arduino_Canvas_Mono
-#  define TWM_CTX8_TYPE  Arduino_Canvas_Indexed
-#  define TWM_CTX16_TYPE Arduino_Canvas
+    using IGfxDisplay   = Arduino_GFX;
+    using IGfxContext1  = Arduino_Canvas_Mono;
+    using IGfxContext8  = Arduino_Canvas_Indexed;
+    using IGfxContext16 = Arduino_Canvas;
 # else
 #  error "define TWM_GFX_ADAFRUIT or TWM_GFX_ARDUINO, and install the relevant \
 library in order to select a low-level graphics driver"
@@ -131,9 +132,8 @@ namespace thumby
     /** Window identifier. */
     using WindowID = uint8_t;
 
-    /** Reserved window identifiers. */
-    TWM_CONST(WindowID, WID_INVALID,  -1);
-    TWM_CONST(WindowID, WID_PROMPTLBL, 0);
+    /** Represents an invalid window identifier. */
+    TWM_CONST(WindowID, WID_INVALID, 0);
 
     /** Window style bitmask. */
     using Style = uint16_t;
@@ -148,17 +148,20 @@ namespace thumby
     using MsgParamWord = uint16_t;
 
     /** Physical display driver. */
-    using IGfxDisplay = TWM_DISP_TYPE;
+    using GfxDisplay = IGfxDisplay;
+
+    /** Pointer to physical display driver. */
+    using GfxDisplayPtr = std::shared_ptr<GfxDisplay>;
 
 # if defined(TWM_COLOR_MONO)
-    using Color       = uint8_t;       /**< Color (monochrome). */
-    using IGfxContext = TWM_CTX1_TYPE; /**< Graphics context (monochrome). */
+    using Color      = uint8_t;       /**< Color (monochrome). */
+    using GfxContext = IGfxContext1;  /**< Graphics context (monochrome). */
 # elif defined(TWM_COLOR_256)
-    using Color       = uint8_t;       /**< Color (8-bit). */
-    using IGfxContext = TWM_CTX8_TYPE; /**< Graphics context (8-bit). */
+    using Color      = uint8_t;       /**< Color (8-bit). */
+    using GfxContext = IGfxContext8;  /**< Graphics context (8-bit). */
 # elif defined(TWM_COLOR_565)
-    using Color       = uint16_t;       /**< Color type (16-bit 565 RGB). */
-    using IGfxContext = TWM_CTX16_TYPE; /**< Graphics context (16-bit 565 RGB). */
+    using Color      = uint16_t;      /**< Color type (16-bit 565 RGB). */
+    using GfxContext = IGfxContext16; /**< Graphics context (16-bit 565 RGB). */
 # elif defined(TWM_COLOR_RBB)
 #  error "24-bit RGB mode is not yet implemented"
 # else
@@ -166,11 +169,8 @@ namespace thumby
 to select a color mode"
 # endif
 
-    /** Pointer to graphics context (e.g. canvas/buffer). */
-    using GfxContextPtr = std::shared_ptr<IGfxContext>;
-
-    /** Pointer to physical display driver. */
-    using GfxDisplayPtr = std::shared_ptr<IGfxDisplay>;
+    /** Pointer to graphics context (e.g. canvas/frame buffer). */
+    using GfxContextPtr = std::shared_ptr<GfxContext>;
 
     /** Font type. */
     using Font = GFXfont;
@@ -237,6 +237,8 @@ to select a color mode"
 
         void deflate(Extent px) noexcept
         {
+            TWM_ASSERT(px < width());
+            TWM_ASSERT(px < height());
             left   += px;
             top    += px;
             right  -= px;
@@ -245,41 +247,31 @@ to select a color mode"
 
         bool overlapsRect(const Rect& other) const noexcept
         {
-            if ((left >= other.left && left <= other.right) ||
-                (right <= other.right && right >= other.left)) {
-                if ((top < other.top && top + height() >= other.top) ||
-                    (bottom > other.bottom && bottom - height() <= other.bottom) ||
-                    (top >= other.top && bottom <= other.bottom)) {
-                    return true;
-                }
-            }
-            if ((top >= other.top && top <= other.bottom) ||
-                (bottom <= other.bottom && bottom >= other.top)) {
-                if ((left < other.left && left + width() >= other.left) ||
-                    (right > other.right && right - width() <= other.right) ||
-                    (left >= other.left && right <= other.right)) {
-                    return true;
-                }
-            }
-            return false;
+            return other.pointWithin(left, top) ||
+                   other.pointWithin(right, top) ||
+                   other.pointWithin(left, bottom) ||
+                   other.pointWithin(right, bottom);
+        }
+
+        bool outsideRect(const Rect& other) const noexcept
+        {
+            return !other.pointWithin(left, top) &&
+                   !other.pointWithin(right, top) &&
+                   !other.pointWithin(left, bottom) &&
+                   !other.pointWithin(right, bottom);
         }
 
         bool withinRect(const Rect& other) const noexcept
         {
-            if (left >= other.left && right <= other.right &&
-                top >= other.top && bottom <= other.bottom) {
-                return true;
-            }
-            return false;
+            return other.pointWithin(left, top) &&
+                   other.pointWithin(right, top) &&
+                   other.pointWithin(left, bottom) &&
+                   other.pointWithin(right, bottom);
         }
 
         bool pointWithin(Coord x, Coord y) const noexcept
         {
-            if (x >= left && x <= left + width() &&
-                y >= top  && y <= top + height()) {
-                return true;
-            }
-            return false;
+            return x >= left && x <= right && y >= top && y <= bottom;
         }
     };
 
@@ -329,14 +321,18 @@ to select a color mode"
 
     enum
     {
-        STY_VISIBLE   = 1 << 0,
-        STY_CHILD     = 1 << 1,
-        STY_AUTOSIZE  = 1 << 2,
-        STY_BUTTON    = 1 << 3,
-        STY_LABEL     = 1 << 4,
-        STY_PROMPT    = 1 << 5,
-        STY_PROGBAR   = 1 << 6,
-        STY_CHECKBOX  = 1 << 7
+        STY_VISIBLE    =  1 << 0,
+        STY_CHILD      =  1 << 1,
+        STY_FRAME      =  1 << 2,
+        STY_SHADOW     =  1 << 3,
+        STY_TOPLEVEL   = (1 << 4) | STY_FRAME | STY_SHADOW,
+        STY_AUTOSIZE   =  1 << 5,
+        STY_FULLSCREEN =  1 << 6,
+        STY_BUTTON     =  1 << 7,
+        STY_LABEL      =  1 << 8,
+        STY_PROMPT     =  (1 << 9) | STY_TOPLEVEL,
+        STY_PROGBAR    =  1 << 10,
+        STY_CHECKBOX   =  1 << 11
     };
 
     enum
@@ -364,15 +360,15 @@ to select a color mode"
         EVT_CHILD_TAPPED = 1
     } EventType;
 
-    enum
+    typedef enum
     {
         INPUT_TAP = 1
-    };
+    } InputType;
 
     struct InputParams
     {
         WindowID handledBy = WID_INVALID;
-        int type = 0;
+        InputType type = InputType(0);
         Coord x = 0;
         Coord y = 0;
     };
@@ -392,60 +388,85 @@ to select a color mode"
         return (msgParam & 0xffffU);
     }
 
+    typedef enum
+    {
+        COLOR_SCREENSAVER = 1,
+        COLOR_DESKTOP,
+
+        COLOR_PROMPT_BG,
+        COLOR_PROMPT_FRAME,
+        COLOR_PROMPT_SHADOW,
+
+        COLOR_WINDOW_TEXT,
+        COLOR_WINDOW_BG,
+        COLOR_WINDOW_FRAME,
+        COLOR_WINDOW_SHADOW,
+
+        COLOR_BUTTON_TEXT,
+        COLOR_BUTTON_TEXT_PRESSED,
+        COLOR_BUTTON_BG,
+        COLOR_BUTTON_BG_PRESSED,
+        COLOR_BUTTON_FRAME,
+        COLOR_BUTTON_FRAME_PRESSED,
+
+        COLOR_PROGRESS_BG,
+        COLOR_PROGRESS_FILL,
+
+        COLOR_CHECKBOX_CHECK_BG,
+        COLOR_CHECKBOX_CHECK_FRAME,
+        COLOR_CHECKBOX_CHECK
+    } ColorID;
+
     class ITheme
     {
     public:
-        enum ScreenSize
+        enum DisplaySize
         {
             Small = 0,
             Medium,
             Large
         };
         virtual void setGfxContext(const GfxContextPtr&) = 0;
+
+        virtual Color getColor(ColorID) const = 0;
+
         virtual void drawScreensaver() const = 0;
-        virtual Color getScreensaverColor() const = 0;
         virtual void drawDesktopBackground() const = 0;
-        virtual Color getDesktopWindowColor() const = 0;
+
+        virtual Extent getMaximumPromptWidth() const = 0;
+        virtual Extent getMaximumPromptHeight() const = 0;
+
         virtual void setDefaultFont(const Font*) = 0;
         virtual const Font* getDefaultFont() const = 0;
-        virtual void setTextSizeMultiplier(uint8_t) const = 0;
-        virtual uint8_t getDefaultTextSizeMultiplier() const = 0;
-        virtual ScreenSize getScreenSize() const = 0;
+        virtual void setTextSize(uint8_t) const = 0;
+        virtual uint8_t getDefaultTextSize() const = 0;
+
+        virtual DisplaySize getDisplaySize() const = 0;
         virtual Extent getScaledValue(Extent) const = 0;
+        virtual Coord getCornerRadius(Style) const = 0;
         virtual Extent getXPadding() const = 0;
         virtual Extent getYPadding() const = 0;
-        virtual Coord getTextYOffset() const = 0;
 
         virtual Extent getWindowFrameThickness() const = 0;
-        virtual Color getWindowTextColor() const = 0;
-        virtual Color getWindowBgColor() const = 0;
-        virtual Color getWindowFrameColor() const = 0;
-        virtual Color getWindowFrameShadowColor() const = 0;
 
         virtual Extent getDefaultButtonWidth() const = 0;
         virtual Extent getDefaultButtonHeight() const = 0;
-        virtual Color getButtonTextColor() const = 0;
-        virtual Color getButtonTextColorPressed() const = 0;
-        virtual Color getButtonBgColor() const = 0;
-        virtual Color getButtonBgColorPressed() const = 0;
-        virtual Color getButtonFrameColor() const = 0;
-        virtual Color getButtonFrameColorPressed() const = 0;
         virtual Extent getButtonLabelPadding() const = 0;
         virtual u_long getButtonTappedDuration() const = 0;
-        virtual Coord getButtonCornerRadius() const = 0;
 
-        virtual void drawWindowFrame(const Rect&, bool) const = 0;
-        virtual void drawWindowBackground(const Rect&) const = 0;
+        virtual void drawWindowFrame(const Rect&, Coord, Color) const = 0;
+        virtual void drawWindowShadow(const Rect&, Coord, Color) const = 0;
+        virtual void drawWindowBackground(const Rect&, Coord, Color) const = 0;
         virtual void drawText(const char*, uint8_t, const Rect&,
             uint8_t, Color, const Font*) const = 0;
 
-        virtual void drawButtonFrame(bool, const Rect&) const = 0;
-        virtual void drawButtonBackground(bool, const Rect&) const = 0;
-        virtual void drawButtonLabel(const char*, bool, const Rect&) const = 0;
+        virtual void drawWindowFrame(const Rect&, Coord, ColorID) const = 0;
+        virtual void drawWindowShadow(const Rect&, Coord, ColorID) const = 0;
+        virtual void drawWindowBackground(const Rect&, Coord, ColorID) const = 0;
+        virtual void drawText(const char*, uint8_t, const Rect&,
+            uint8_t, ColorID, const Font*) const = 0;
 
         virtual Extent getDefaultProgressBarHeight() const = 0;
-        virtual Color getProgressBarBgColor() const = 0;
-        virtual Color getProgressBarProgressColor() const = 0;
         virtual float getProgressBarIndeterminateBandWidthFactor() const = 0;
         virtual float getProgressBarIndeterminateStep() const = 0;
 
@@ -456,8 +477,6 @@ to select a color mode"
         virtual Rect getCheckBoxCheckableArea(const Rect&) const = 0;
         virtual Extent getCheckBoxCheckableAreaPadding() const = 0;
         virtual Extent getCheckBoxCheckMarkPadding() const = 0;
-        virtual Color getCheckBoxCheckableAreaBgColor() const = 0;
-        virtual Color getCheckBoxCheckMarkColor() const = 0;
         virtual u_long getCheckBoxCheckDelay() const = 0;
 
         virtual void drawCheckBox(const char*, bool, const Rect&) const = 0;
@@ -468,31 +487,67 @@ to select a color mode"
     class DefaultTheme : public ITheme
     {
     public:
+        DefaultTheme()
+        {
+            //_fillPalette();
+        }
+
         void setGfxContext(const GfxContextPtr& gfx) final
         {
             TWM_ASSERT(gfx);
             _gfxContext = gfx;
         }
 
-        void drawScreensaver() const final
+        Color getColor(ColorID colorID) const final
         {
-            _gfxContext->fillScreen(getScreensaverColor());
+            switch (colorID) {
+                case COLOR_SCREENSAVER: return 0x0000;
+                case COLOR_DESKTOP: return 0xb59a;
+
+                case COLOR_PROMPT_BG: return 0xef5c;
+                case COLOR_PROMPT_FRAME: return 0x9cf3;
+                case COLOR_PROMPT_SHADOW: return 0xb5b6;
+
+                case COLOR_WINDOW_TEXT: return 0x0000;
+                case COLOR_WINDOW_BG: return 0xdedb;
+                case COLOR_WINDOW_FRAME: return 0x9cf3;
+                case COLOR_WINDOW_SHADOW: return 0xb5b6;
+
+                case COLOR_BUTTON_TEXT: return 0xffff;
+                case COLOR_BUTTON_TEXT_PRESSED: return 0xffff;
+                case COLOR_BUTTON_BG: return 0x8c71;
+                case COLOR_BUTTON_BG_PRESSED: return 0x738e;
+                case COLOR_BUTTON_FRAME: return 0x6b6d;
+                case COLOR_BUTTON_FRAME_PRESSED: return 0x6b6d;
+
+                case COLOR_PROGRESS_BG: return 0xef5d;
+                case COLOR_PROGRESS_FILL: return 0x0ce0;
+
+                case COLOR_CHECKBOX_CHECK_BG: return 0xef5d;
+                case COLOR_CHECKBOX_CHECK: return 0x3166;
+                default: return Color(0);
+            }
         }
 
-        Color getScreensaverColor() const final { return 0x0000; }
+        void drawScreensaver() const final
+        {
+            _gfxContext->fillScreen(getColor(COLOR_SCREENSAVER));
+        }
 
         void drawDesktopBackground() const final
         {
-            _gfxContext->fillRect(
-                0,
-                0,
-                _gfxContext->width(),
-                _gfxContext->height(),
-                getDesktopWindowColor()
-            );
+            _gfxContext->fillScreen(getColor(COLOR_DESKTOP));
         }
 
-        Color getDesktopWindowColor() const final { return 0xb59a; }
+        Extent getMaximumPromptWidth() const final
+        {
+            return abs(_gfxContext->width() * 0.90f);
+        }
+
+        Extent getMaximumPromptHeight() const final
+        {
+            return abs(_gfxContext->height() * 0.90f);
+        }
 
         void setDefaultFont(const Font* font) final
         {
@@ -501,98 +556,93 @@ to select a color mode"
         }
 
         const Font* getDefaultFont() const final { return _defaultFont; }
-        void setTextSizeMultiplier(uint8_t mul) const final { _gfxContext->setTextSize(mul); }
-        uint8_t getDefaultTextSizeMultiplier() const final { return 1; }
+        void setTextSize(uint8_t size) const final { _gfxContext->setTextSize(size); }
+        uint8_t getDefaultTextSize() const final { return 1; }
 
-        ScreenSize getScreenSize() const final
+        DisplaySize getDisplaySize() const final
         {
             if (_gfxContext->width() <= 320) {
-                return ScreenSize::Small;
+                return DisplaySize::Small;
             } else if (_gfxContext->width() <= 480) {
-                return ScreenSize::Medium;
+                return DisplaySize::Medium;
             } else {
-                return ScreenSize::Large;
+                return DisplaySize::Large;
             }
         }
 
         Extent getScaledValue(Extent value) const final
         {
-            switch (getScreenSize()) {
+            switch (getDisplaySize()) {
                 default:
-                case ScreenSize::Small:
+                case DisplaySize::Small:
                     return abs(value * 1.0f);
-                case ScreenSize::Medium:
+                case DisplaySize::Medium:
                     return abs(value * 2.0f);
-                case ScreenSize::Large:
+                case DisplaySize::Large:
                     return abs(value * 3.0f);
             }
         }
 
+        Coord getCornerRadius(Style windowStyle) const final
+        {
+            Coord radius = 0;
+            if (bitsHigh(windowStyle, STY_BUTTON)) {
+                radius = 4;
+            } else if (bitsHigh(windowStyle, STY_PROMPT)) {
+                radius = 4;
+            }
+            return getScaledValue(radius);
+        }
+
         Extent getXPadding() const final { return abs(_gfxContext->width() * 0.07f); }
         Extent getYPadding() const final { return abs(_gfxContext->height() * 0.07f); }
-        Coord getTextYOffset() const final { return getScaledValue(4); }
-        Extent getWindowFrameThickness() const final { return getScaledValue(1); }
-        Color getWindowTextColor() const final { return 0x0000; }
-        Color getWindowBgColor() const final { return 0xdedb; }
-        Color getWindowFrameColor() const final { return 0x9cf3; }
-        Color getWindowFrameShadowColor() const final { return 0xb5b6; }
+        Extent getWindowFrameThickness() const final { return 1; }
 
-        Extent getDefaultButtonWidth() const final { return abs(_gfxContext->width() * 0.27f); }
+        Extent getDefaultButtonWidth() const final { return abs(_gfxContext->width() * 0.23f); }
         Extent getDefaultButtonHeight() const final { return abs(getDefaultButtonWidth() * 0.52f); }
-        Color getButtonTextColor() const final { return 0xffff; }
-        Color getButtonTextColorPressed() const final { return 0xffff; }
-        Color getButtonBgColor() const final { return 0x8c71; }
-        Color getButtonBgColorPressed() const final { return 0x738e; }
-        Color getButtonFrameColor() const final { return 0x6b6d; }
-        Color getButtonFrameColorPressed() const final { return 0x6b6d; }
         Extent getButtonLabelPadding() const final { return getScaledValue(10); }
         u_long getButtonTappedDuration() const final { return 200; }
 
-        Coord getButtonCornerRadius() const final
+        void drawWindowFrame(const Rect& rect, Coord radius, Color color) const final
         {
-            static constexpr Coord radius = 4;
-            switch (getScreenSize()) {
-                default:
-                case ScreenSize::Small:
-                    return radius;
-                case ScreenSize::Medium:
-                    return radius + 1;
-                case ScreenSize::Large:
-                    return radius + 2;
-            }
-        }
-
-        void drawWindowFrame(const Rect& rect, bool drawShadow = true) const final
-        {
-            Rect tmp = rect;
+            auto tmp = rect;
             auto pixels = getWindowFrameThickness();
             while (pixels-- > 0) {
-                _gfxContext->drawRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
-                    getWindowFrameColor());
+                _gfxContext->drawRoundRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
+                    radius, color);
                 tmp.deflate(1);
-            }
-            if (drawShadow) {
-                _gfxContext->drawLine(
-                    rect.left + 1,
-                    rect.bottom,
-                    rect.left + (rect.width() - 1),
-                    rect.bottom,
-                    getWindowFrameShadowColor()
-                );
-                _gfxContext->drawLine(
-                    rect.right,
-                    rect.top + 1,
-                    rect.right,
-                    rect.top + (rect.height() - 1),
-                    getWindowFrameShadowColor()
-                );
             }
         }
 
-        void drawWindowBackground(const Rect& rect) const final
+        void drawWindowShadow(const Rect& rect, Coord radius, Color color) const final
         {
-            _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
-                getWindowBgColor());
+            const auto thickness = getWindowFrameThickness();
+            _gfxContext->drawLine(
+                rect.left + radius + thickness,
+                rect.bottom,
+                rect.left + (rect.width() - (radius + (thickness * 2))),
+                rect.bottom,
+                color
+            );
+            _gfxContext->drawLine(
+                rect.right,
+                rect.top + radius + thickness,
+                rect.right,
+                rect.top + (rect.height() - (radius + (thickness * 2))),
+                color
+            );
+        }
+
+        void drawWindowBackground(const Rect& rect, Coord radius, Color color) const final
+        {
+            _gfxContext->fillRoundRect(
+                rect.left,
+                rect.top,
+                rect.width(),
+                rect.height(),
+                radius,
+                color
+            );
         }
 
         void drawText(const char* text, uint8_t flags, const Rect& rect,
@@ -712,40 +762,25 @@ to select a color mode"
             }
         }
 
-        void drawButtonFrame(bool pressed, const Rect& rect) const final
+        void drawWindowFrame(const Rect& rect, Coord radius, ColorID colorID) const final
         {
-            _gfxContext->drawRoundRect(
-                rect.left,
-                rect.top,
-                rect.width(),
-                rect.height(),
-                getButtonCornerRadius(),
-                pressed ? getButtonFrameColorPressed() : getButtonFrameColor()
-            );
+            drawWindowFrame(rect, radius, getColor(colorID));
         }
 
-        void drawButtonBackground(bool pressed, const Rect& rect) const final
+        void drawWindowShadow(const Rect& rect, Coord radius, ColorID colorID) const final
         {
-            _gfxContext->fillRoundRect(
-                rect.left,
-                rect.top,
-                rect.width(),
-                rect.height(),
-                getButtonCornerRadius(),
-                pressed ? getButtonBgColorPressed() : getButtonBgColor()
-            );
+            drawWindowShadow(rect, radius, getColor(colorID));
         }
 
-        void drawButtonLabel(const char* lbl, bool pressed, const Rect& rect) const final
+        void drawWindowBackground(const Rect& rect, Coord radius, ColorID colorID) const final
         {
-            drawText(
-                lbl,
-                DT_SINGLE | DT_CENTER,
-                rect,
-                getDefaultTextSizeMultiplier(),
-                pressed ? getButtonTextColorPressed() : getButtonTextColor(),
-                getDefaultFont()
-            );
+            drawWindowBackground(rect, radius, getColor(colorID));
+        }
+
+        void drawText(const char* text, uint8_t flags, const Rect& rect, uint8_t textSize,
+            ColorID colorID, const Font* font) const final
+        {
+            drawText(text, flags, rect, textSize, getColor(colorID), font);
         }
 
         Extent getDefaultProgressBarHeight() const final
@@ -753,28 +788,23 @@ to select a color mode"
             return abs(_gfxContext->height() * 0.12f);
         }
 
-        Color getProgressBarBgColor() const final { return 0xef5d; }
-        Color getProgressBarProgressColor() const final { return 0x0ce0; }
         float getProgressBarIndeterminateBandWidthFactor() const final { return 0.33f; }
 
         float getProgressBarIndeterminateStep() const final
         {
             static constexpr float step = 1.0f;
-            switch (getScreenSize()) {
+            switch (getDisplaySize()) {
                 default:
-                case ScreenSize::Small:
-                    return step;
-                case ScreenSize::Medium:
-                    return step * 2;
-                case ScreenSize::Large:
-                    return step * 4;
+                case DisplaySize::Small:  return step;
+                case DisplaySize::Medium: return step * 2;
+                case DisplaySize::Large:  return step * 4;
             }
         }
 
         void drawProgressBarBackground(const Rect& rect) const final
         {
             _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
-                getProgressBarBgColor());
+                getColor(COLOR_PROGRESS_BG));
         }
 
         void drawProgressBarProgress(const Rect& rect, float percent) const final
@@ -785,7 +815,7 @@ to select a color mode"
             float progressWidth = (barRect.width() * (min(100.0f, percent) / 100.0f));
             barRect.right = barRect.left + abs(progressWidth);
             _gfxContext->fillRect(barRect.left, barRect.top, barRect.width(),
-                barRect.height(), getProgressBarProgressColor());
+                barRect.height(), getColor(COLOR_PROGRESS_FILL));
         }
 
         void drawProgressBarIndeterminate(const Rect& rect, float counter) const final
@@ -821,7 +851,7 @@ to select a color mode"
                 );
             }
             _gfxContext->fillRect(x, barRect.top, width, barRect.height(),
-                getProgressBarProgressColor());
+                getColor(COLOR_PROGRESS_FILL));
         }
 
         Rect getCheckBoxCheckableArea(const Rect& rect) const final
@@ -839,22 +869,20 @@ to select a color mode"
 
         Extent getCheckBoxCheckableAreaPadding() const final { return 6; }
         Extent getCheckBoxCheckMarkPadding() const final { return 4; }
-        Color getCheckBoxCheckableAreaBgColor() const final { return 0xef5d; }
-        Color getCheckBoxCheckMarkColor() const final { return 0x3166; }
         u_long getCheckBoxCheckDelay() const final { return 200; }
 
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
-            drawWindowBackground(rect);
+            drawWindowBackground(rect, 0, COLOR_WINDOW_BG);
             Rect checkableRect = getCheckBoxCheckableArea(rect);
             _gfxContext->fillRect(
                 checkableRect.left,
                 checkableRect.top,
                 checkableRect.width(),
                 checkableRect.height(),
-                getCheckBoxCheckableAreaBgColor()
+                getColor(COLOR_CHECKBOX_CHECK_BG)
             );
-            drawWindowFrame(checkableRect, false);
+            drawWindowFrame(checkableRect, 0, getColor(COLOR_CHECKBOX_CHECK_FRAME));
             if (checked) {
                 Rect rectCheckMark = checkableRect;
                 rectCheckMark.deflate(getScaledValue(getCheckBoxCheckMarkPadding()));
@@ -863,7 +891,7 @@ to select a color mode"
                     rectCheckMark.top,
                     rectCheckMark.width(),
                     rectCheckMark.height(),
-                    getCheckBoxCheckMarkColor()
+                    getColor(COLOR_CHECKBOX_CHECK)
                 );
             }
             auto checkPadding = getScaledValue(getCheckBoxCheckableAreaPadding());
@@ -873,8 +901,8 @@ to select a color mode"
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
             );
-            drawText(lbl, DT_SINGLE | DT_ELLIPSIS, textRect, getDefaultTextSizeMultiplier(),
-                getWindowTextColor(), getDefaultFont());
+            drawText(lbl, DT_SINGLE | DT_ELLIPSIS, textRect, getDefaultTextSize(),
+                getColor(COLOR_WINDOW_TEXT), getDefaultFont());
         }
 
     private:
@@ -925,17 +953,31 @@ to select a color mode"
         virtual std::string getText() const = 0;
         virtual void setText(const std::string&) = 0;
 
+        virtual ColorID getBGColorID() const noexcept = 0;
+        virtual void setBgColorID(ColorID) noexcept = 0;
+        virtual ColorID getTextColorID() const noexcept = 0;
+        virtual void setTextColorID(ColorID) noexcept = 0;
+        virtual ColorID getFrameColorID() const noexcept = 0;
+        virtual void setFrameColorID(ColorID) noexcept = 0;
+        virtual ColorID getShadowColorID() const noexcept = 0;
+        virtual void setShadowColorID(ColorID) noexcept = 0;
+
+        virtual Coord getCornerRadius() const noexcept = 0;
+        virtual void setCornerRadius(Coord) noexcept = 0;
+
         virtual bool routeMessage(Message, MsgParam, MsgParam) = 0;
         virtual bool queueMessage(Message, MsgParam, MsgParam) = 0;
         virtual bool processQueue() = 0;
+        virtual bool processInput(InputParams*) = 0;
 
         virtual bool redraw() = 0;
         virtual bool hide() noexcept = 0;
         virtual bool show() noexcept = 0;
         virtual bool isVisible() const noexcept = 0;
-        virtual bool processInput(InputParams*) = 0;
-        virtual bool destroy() = 0;
         virtual bool isAlive() const noexcept = 0;
+        virtual bool isDrawable() const noexcept = 0;
+
+        virtual bool destroy() = 0;
 
     protected:
         virtual bool onCreate(MsgParam, MsgParam) = 0;
@@ -1082,6 +1124,8 @@ to select a color mode"
             TWM_ASSERT(_gfxContext);
             TWM_ASSERT(_theme);
             if (_theme && _gfxContext) {
+                _displayWidth  = _gfxContext->width();
+                _displayHeight = _gfxContext->height();
                 _theme->setGfxContext(_gfxContext);
                 _theme->setDefaultFont(defaultFont);
             }
@@ -1094,10 +1138,10 @@ to select a color mode"
             tearDown();
         }
 
-        void setState(State state) { _state = state; }
-        State getState() const { return _state; }
+        void setState(State state) noexcept { _state = state; }
+        State getState() const noexcept { return _state; }
 
-        void enableScreensaver(u_long activateAfter)
+        void enableScreensaver(u_long activateAfter) noexcept
         {
             _ssaverActivateAfter = activateAfter;
             _ssaverEpoch = millis();
@@ -1105,25 +1149,11 @@ to select a color mode"
             TWM_LOG(TWM_DEBUG, "enabled screensaver (%lums)", activateAfter);
         }
 
-        void disableScreensaver()
+        void disableScreensaver() noexcept
         {
             State flags = WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN;
             setState(getState() & ~flags);
             TWM_LOG(TWM_DEBUG, "disabled screensaver");
-        }
-
-        virtual bool begin(uint8_t rotation)
-        {
-            bool began = true;
-# if defined(TWM_GFX_ADAFRUIT)
-            _gfxDisplay->begin(0);
-# elif defined(TWM_GFX_ARDUINO)
-            began &= _gfxDisplay->begin();
-            began &= _gfxContext->begin();
-# endif
-            _gfxDisplay->setRotation(rotation);
-            _gfxDisplay->setCursor(0, 0);
-            return began;
         }
 
         virtual void tearDown()
@@ -1140,8 +1170,8 @@ to select a color mode"
         GfxContextPtr getGfxContext() const { return _gfxContext; }
         ThemePtr getTheme() const { return _theme; }
 
-        Extent getScreenWidth() const { return _gfxContext->width(); }
-        Extent getScreenHeight() const { return _gfxContext->height(); }
+        Extent getDisplayWidth() const noexcept { return _displayWidth; }
+        Extent getDisplayHeight() const noexcept { return _displayHeight; }
 
         template<class TWindow>
         std::shared_ptr<TWindow> createWindow(
@@ -1156,24 +1186,36 @@ to select a color mode"
             const std::function<bool(const std::shared_ptr<TWindow>&)>& preCreateHook = nullptr
         )
         {
-            Rect rect(x, y, x + width, y + height);
-            std::shared_ptr<TWindow> win(
-                std::make_shared<TWindow>(shared_from_this(), parent, id, style, rect, text)
-            );
-            if (!win) {
-                TWM_LOG(TWM_ERROR, "OOM");
+            if (id == WID_INVALID) {
+                TWM_LOG(TWM_ERROR, "%hhu is a reserved window ID", WID_INVALID);
                 return nullptr;
             }
+            if (bitsHigh(style, STY_FULLSCREEN)) {
+                x = 0;
+                y = 0;
+                width = getDisplayWidth();
+                height = getDisplayHeight();
+            }
+            Rect rect(x, y, x + width, y + height);
+            std::shared_ptr<TWindow> win(
+                std::make_shared<TWindow>(
+                    shared_from_this(), parent, id, style, rect, text
+                )
+            );
             if (bitsHigh(style, STY_CHILD) && !parent) {
-                TWM_LOG(TWM_ERROR, "STY_CHILD w/ null parent");
+                TWM_LOG(TWM_ERROR, "STY_CHILD && null parent");
+                return nullptr;
+            }
+            if (bitsHigh(style, STY_TOPLEVEL) && parent) {
+                TWM_LOG(TWM_ERROR, "STY_TOPLEVEL && parent");
                 return nullptr;
             }
             if (preCreateHook && !preCreateHook(win)) {
-                TWM_LOG(TWM_ERROR, "pre-create hook false");
+                TWM_LOG(TWM_ERROR, "pre-create hook failed");
                 return nullptr;
             }
             if (!win->routeMessage(MSG_CREATE)) {
-                TWM_LOG(TWM_ERROR, "MSG_CREATE false");
+                TWM_LOG(TWM_ERROR, "MSG_CREATE = false");
                 return nullptr;
             }
             bool dupe = false;
@@ -1183,7 +1225,8 @@ to select a color mode"
                 dupe = !_registry->addChild(win);
             }
             if (dupe) {
-                TWM_LOG(TWM_ERROR, "dupe %hhu", id);
+                TWM_LOG(TWM_ERROR, "duplicate window ID %hhu (parent: %hhu)",
+                    id, parent ? parent->getID() : WID_INVALID);
                 return nullptr;
             }
             win->setState(win->getState() | STA_ALIVE);
@@ -1207,14 +1250,18 @@ to select a color mode"
         )
         {
             TWM_ASSERT(bitsHigh(style, STY_PROMPT));
+            Extent width = min(_theme->getMaximumPromptWidth(),
+                static_cast<Extent>(getDisplayWidth() - (_theme->getXPadding() * 2)));
+            Extent height = min(_theme->getMaximumPromptHeight(),
+                static_cast<Extent>(getDisplayHeight() - (_theme->getYPadding() * 2)));
             auto prompt = createWindow<TPrompt>(
                 parent,
                 id,
                 style,
-                _theme->getXPadding(),
-                _theme->getYPadding(),
-                getScreenWidth() - (_theme->getXPadding() * 2),
-                getScreenHeight() - (_theme->getYPadding() * 2),
+                (getDisplayWidth() / 2) - (width / 2),
+                (getDisplayHeight() / 2) - (height / 2),
+                width,
+                height,
                 text,
                 [&](const std::shared_ptr<TPrompt>& win)
                 {
@@ -1242,8 +1289,9 @@ to select a color mode"
             Style pbarStyle
         )
         {
-            TWM_ASSERT(bitsHigh(style, STY_PROGBAR));
-            auto pbar = createWindow<TBar>(parent, id, style, x, y, width, height);
+            auto pbar = createWindow<TBar>(
+                parent, id, style, x, y, width, height
+            );
             if (pbar) {
                 pbar->setProgressBarStyle(pbarStyle);
             }
@@ -1295,15 +1343,53 @@ to select a color mode"
                     setState(getState() | WMS_SSAVER_DRAWN);
                 }
             } else {
+                auto displayRect = Rect(0, 0, getDisplayWidth(), getDisplayHeight());
                 _theme->drawDesktopBackground();
-                _registry->forEachChild([](const WindowPtr& win)
+                _registry->forEachChild([=](const WindowPtr& win)
                 {
-                    win->processQueue();
-                    // TODO: is this window completely covered by another, or off the screen?
+                    while (win->processQueue());
+                    if (!win->isDrawable()) {
+                        return true;
+                    }
+                    auto windowRect = win->getRect();
+                    bool covered = false;
+                    _registry->forEachChildReverse([&](const WindowPtr& other)
+                    {
+                        if (other == win) {
+                            return false;
+                        }
+                        if (!other->isDrawable()) {
+                            return true;
+                        }
+                        auto otherRect = other->getRect();
+                        if (windowRect.withinRect(otherRect)) {
+                            covered = true;
+                            return false;
+                        }
+                        return true;
+                    });
+                    if (covered) {
+                        return true;
+                    }
+                    if (windowRect.outsideRect(displayRect)) {
+                        return true;
+                    }
                     win->redraw();
                     return true;
                 });
             }
+        }
+
+        bool begin()
+        {
+            bool success = true;
+# if defined(TWM_GFX_ADAFRUIT)
+            _gfxDisplay->begin(0);
+# elif defined(TWM_GFX_ARDUINO)
+            success &= _gfxDisplay->begin();
+            success &= _gfxContext->begin(GFX_SKIP_OUTPUT_BEGIN);
+# endif
+            return success;
         }
 
         void render()
@@ -1311,7 +1397,7 @@ to select a color mode"
             /// TODO: implement different calls for different color modes
 # if defined(TWM_GFX_ADAFRUIT)
             _gfxDisplay->drawRGBBitmap(0, 0, _gfxContext->getBuffer(),
-                _gfxContext->width(), _gfxContext->height());
+                getDisplayWidth(), getDisplayHeight());
 # elif defined(TWM_GFX_ARDUINO)
             _gfxContext->flush();
 # endif
@@ -1323,6 +1409,8 @@ to select a color mode"
         GfxContextPtr _gfxContext;
         ThemePtr _theme;
         State _state = 0;
+        Extent _displayWidth = 0;
+        Extent _displayHeight = 0;
         u_long _ssaverEpoch = 0UL;
         u_long _ssaverActivateAfter = 0UL;
     };
@@ -1332,12 +1420,12 @@ to select a color mode"
     template<class TTheme, class TGfxDisplay>
     WindowManagerPtr createWindowManager(
         const std::shared_ptr<TGfxDisplay>& display,
-        const std::shared_ptr<IGfxContext>& context,
+        const std::shared_ptr<GfxContext>& context,
         const std::shared_ptr<TTheme>& theme,
         const Font* defaultFont
     )
     {
-        static_assert(std::is_base_of<IGfxDisplay, TGfxDisplay>::value);
+        static_assert(std::is_base_of<GfxDisplay, TGfxDisplay>::value);
         static_assert(std::is_base_of<ITheme, TTheme>::value);
         return std::make_shared<WindowManager>(display, context, theme, defaultFont);
     }
@@ -1394,6 +1482,20 @@ to select a color mode"
         std::string getText() const override { return _text; }
         void setText(const std::string& text) override { _text = text; }
 
+        ColorID getBGColorID() const noexcept override { return _bgColorID; }
+        void setBgColorID(ColorID colorID) noexcept override { _bgColorID = colorID; }
+        ColorID getTextColorID() const noexcept override { return _textColorID; }
+        void setTextColorID(ColorID colorID) noexcept override { _textColorID = colorID; }
+
+        ColorID getFrameColorID() const noexcept override { return _frameColorID; }
+        void setFrameColorID(ColorID colorID) noexcept override { _frameColorID = colorID; }
+
+        ColorID getShadowColorID() const noexcept override { return _shadowColorID; }
+        void setShadowColorID(ColorID colorID) noexcept override { _shadowColorID = colorID; }
+
+        Coord getCornerRadius() const noexcept override { return _cornerRadius; }
+        void setCornerRadius(Coord radius) noexcept override { _cornerRadius = radius; }
+
         bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
         {
             switch (msg) {
@@ -1401,8 +1503,7 @@ to select a color mode"
                 case MSG_DESTROY: return onDestroy(p1, p2);
                 case MSG_DRAW: {
                     auto parent = getParent();
-                    if (!isVisible() || !isAlive() ||
-                        (parent && (!parent->isVisible() || !parent->isAlive()))) {
+                    if (!isDrawable() || (parent && !parent->isDrawable())) {
                         return false;
                     }
                     return onDraw(p1, p2);
@@ -1447,9 +1548,40 @@ to select a color mode"
             return !_queue.empty();
         }
 
+        bool processInput(InputParams* params) override
+        {
+            if (!isDrawable()) {
+                return false;
+            }
+            Rect rect = getRect();
+            if (!rect.pointWithin(params->x, params->y)) {
+                return false;
+            }
+            bool handled = false;
+            forEachChildReverse([&](const WindowPtr& child)
+            {
+                handled = child->processInput(params);
+                if (handled) {
+                    return false;
+                }
+                return true;
+            });
+            if (!handled) {
+                handled = queueMessage(
+                    MSG_INPUT,
+                    makeMsgParam(0, params->type),
+                    makeMsgParam(params->x, params->y)
+                );
+                if (handled) {
+                    params->handledBy = getID();
+                }
+            }
+            return handled;
+        }
+
         bool redraw() override
         {
-            if (!isVisible() || !isAlive()) {
+            if (!isDrawable()) {
                 return false;
             }
             bool redrawn = routeMessage(MSG_DRAW);
@@ -1484,35 +1616,14 @@ to select a color mode"
             return bitsHigh(getStyle(), STY_VISIBLE);
         }
 
-        bool processInput(InputParams* params) override
+        bool isAlive() const noexcept override
         {
-            if (!isVisible() || !isAlive()) {
-                return false;
-            }
-            Rect rect = getRect();
-            if (!rect.pointWithin(params->x, params->y)) {
-                return false;
-            }
-            bool handled = false;
-            forEachChildReverse([&](const WindowPtr& child)
-            {
-                handled = child->processInput(params);
-                if (handled) {
-                    return false;
-                }
-                return true;
-            });
-            if (!handled) {
-                handled = queueMessage(
-                    MSG_INPUT,
-                    makeMsgParam(0, params->type),
-                    makeMsgParam(params->x, params->y)
-                );
-                if (handled) {
-                    params->handledBy = getID();
-                }
-            }
-            return handled;
+            return bitsHigh(getState(), STA_ALIVE);
+        }
+
+        bool isDrawable() const noexcept override
+        {
+            return isVisible() && isAlive();
         }
 
         bool destroy() override
@@ -1527,47 +1638,47 @@ to select a color mode"
             return destroyed;
         }
 
-        bool isAlive() const noexcept override
-        {
-            return bitsHigh(getState(), STA_ALIVE);
-        }
-
     protected:
-        /* ====== Begin message handlers ====== */
+        // ====== Begin message handlers ======
 
-        /** MSG_CREATE: p1 = 0, p2 = 0. */
+        // MSG_CREATE: p1 = 0, p2 = 0.
         bool onCreate(MsgParam p1, MsgParam p2) override { return true; }
 
-        /** MSG_DESTROY: p1 = 0, p2 = 0. */
+        // MSG_DESTROY: p1 = 0, p2 = 0.
         bool onDestroy(MsgParam p1, MsgParam p2) override
         {
             setState(getState() & ~STA_ALIVE);
             return true;
         }
 
-        /** MSG_DRAW: p1 = 0, p2 = 0. */
+        // MSG_DRAW: p1 = 0, p2 = 0.
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
             if (theme) {
-                Rect rect = getRect();
-                TWM_ASSERT(rect.width() > 0 && rect.height() > 0);
-                theme->drawWindowBackground(rect);
-                theme->drawWindowFrame(rect, true);
+                auto rect   = getRect();
+                auto style  = getStyle();
+                auto radius = theme->getCornerRadius(style);
+                theme->drawWindowBackground(rect, radius, getBGColorID());
+                if (bitsHigh(style, STY_FRAME)) {
+                    theme->drawWindowFrame(rect, radius, getFrameColorID());
+                }
+                if (bitsHigh(style, STY_SHADOW)) {
+                    theme->drawWindowShadow(rect, radius, getShadowColorID());
+                }
                 return true;
             }
             return false;
         }
 
-        /** MSG_INPUT: p1 = (loword: type), p2 = (hiword: x, loword: y).
-         * Returns true if the input event was consumed by this window, false otherwise. */
+        // MSG_INPUT: p1 = (loword: type), p2 = (hiword: x, loword: y).
+        // Returns true if the input event was consumed by this window, false otherwise.
         bool onInput(MsgParam p1, MsgParam p2) override
         {
             InputParams params;
-            params.type = getMsgParamLoWord(p1);
+            params.type = static_cast<InputType>(getMsgParamLoWord(p1));
             params.x    = getMsgParamHiWord(p2);
             params.y    = getMsgParamLoWord(p2);
-
             switch (params.type) {
                 case INPUT_TAP: return onTapped(params.x, params.y);
                 default:
@@ -1577,17 +1688,17 @@ to select a color mode"
             return false;
         }
 
-        /** MSG_EVENT: p1 = EventType, p2 = child WindowID. */
+        // MSG_EVENT: p1 = EventType, p2 = child WindowID.
         bool onEvent(MsgParam p1, MsgParam p2) override { return true; }
 
-        /** MSG_RESIZE: p1 = 0, p2 = 0. */
+        // MSG_RESIZE: p1 = 0, p2 = 0.
         bool onResize(MsgParam p1, MsgParam p2) override
         {
             TWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
             return false;
         }
 
-        /* ====== End message handlers ====== */
+        // ====== End message handlers ======
 
         bool onTapped(Coord x, Coord y) override { return false; }
 
@@ -1615,16 +1726,20 @@ to select a color mode"
         WindowPtr _parent;
         Rect _rect;
         Style _style = 0;
-        WindowID _id = 0;
+        WindowID _id = WID_INVALID;
         State _state = 0;
         std::string _text;
+        ColorID _bgColorID     = COLOR_WINDOW_BG;
+        ColorID _textColorID   = COLOR_WINDOW_TEXT;
+        ColorID _frameColorID  = COLOR_WINDOW_FRAME;
+        ColorID _shadowColorID = COLOR_WINDOW_SHADOW;
+        Coord _cornerRadius    = 0;
     };
 
     class Button : public Window
     {
     public:
         using Window::Window;
-        Button() = default;
         virtual ~Button() = default;
 
         bool onTapped(Coord x, Coord y) override
@@ -1644,10 +1759,20 @@ to select a color mode"
             auto theme = _getTheme();
             if (theme) {
                 bool pressed = (millis() - _lastTapped < theme->getButtonTappedDuration());
-                Rect rect = getRect();
-                theme->drawButtonBackground(pressed, rect);
-                theme->drawButtonFrame(pressed, rect);
-                theme->drawButtonLabel(getText().c_str(), pressed, rect);
+                auto rect = getRect();
+                auto radius = theme->getCornerRadius(getStyle());
+                theme->drawWindowBackground(rect, radius,
+                    pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG);
+                theme->drawWindowFrame(rect, radius,
+                    pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME);
+                theme->drawText(
+                    getText().c_str(),
+                    DT_SINGLE | DT_CENTER,
+                    rect,
+                    theme->getDefaultTextSize(),
+                    pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT,
+                    theme->getDefaultFont()
+                );
                 return true;
             }
             return false;
@@ -1678,8 +1803,6 @@ to select a color mode"
     class Label : public Window
     {
     public:
-        TWM_CONST(uint8_t, DrawTextFlags, DT_SINGLE | DT_ELLIPSIS);
-
         using Window::Window;
         Label() = default;
         virtual ~Label() = default;
@@ -1689,13 +1812,13 @@ to select a color mode"
             auto theme = _getTheme();
             if (theme) {
                 Rect rect = getRect();
-                theme->drawWindowBackground(rect);
+                theme->drawWindowBackground(rect, getCornerRadius(), getBGColorID());
                 theme->drawText(
                     getText().c_str(),
-                    DrawTextFlags,
+                    DT_SINGLE | DT_ELLIPSIS,
                     rect,
-                    theme->getDefaultTextSizeMultiplier(),
-                    theme->getWindowTextColor(),
+                    theme->getDefaultTextSize(),
+                    getTextColorID(),
                     theme->getDefaultFont()
                 );
                 return true;
@@ -1707,8 +1830,6 @@ to select a color mode"
     class MultilineLabel : public Window
     {
     public:
-        TWM_CONST(uint8_t, DrawTextFlags, DT_CENTER);
-
         using Window::Window;
         MultilineLabel() = default;
         virtual ~MultilineLabel() = default;
@@ -1718,13 +1839,13 @@ to select a color mode"
             auto theme = _getTheme();
             if (theme) {
                 Rect rect = getRect();
-                theme->drawWindowBackground(rect);
+                theme->drawWindowBackground(rect, getCornerRadius(), getBGColorID());
                 theme->drawText(
                     getText().c_str(),
-                    DrawTextFlags,
+                    DT_CENTER,
                     rect,
-                    theme->getDefaultTextSizeMultiplier(),
-                    theme->getWindowTextColor(),
+                    theme->getDefaultTextSize(),
+                    getTextColorID(),
                     theme->getDefaultFont()
                 );
                 return true;
@@ -1736,6 +1857,8 @@ to select a color mode"
     class Prompt : public Window
     {
     public:
+        TWM_CONST(WindowID, LabelID, 1);
+
         using ButtonInfo     = std::pair<WindowID, std::string>;
         using ResultCallback = std::function<void(WindowID)>;
 
@@ -1783,21 +1906,28 @@ to select a color mode"
             if (wm) {
                 auto theme = _getTheme();
                 if (theme) {
+                    setBgColorID(COLOR_PROMPT_BG);
+                    setFrameColorID(COLOR_PROMPT_FRAME);
+                    setShadowColorID(COLOR_PROMPT_SHADOW);
                     Rect rect = getRect();
                     _label = wm->createWindow<MultilineLabel>(
                         shared_from_this(),
-                        WID_PROMPTLBL,
+                        LabelID,
                         STY_CHILD | STY_VISIBLE | STY_LABEL,
                         rect.left + theme->getXPadding(),
                         rect.top + theme->getYPadding(),
-                        rect.right - rect.left - (theme->getXPadding() * 2),
-                        rect.bottom - rect.top - ((theme->getYPadding() * 3) + theme->getDefaultButtonHeight()),
+                        rect.width() - (theme->getXPadding() * 2),
+                        rect.height() - ((theme->getYPadding() * 3) + theme->getDefaultButtonHeight()),
                         getText()
                     );
                     if (!_label) {
                         return false;
                     }
-                    Rect rectLbl = _label->getRect();
+                    _label->setBgColorID(COLOR_PROMPT_BG);
+                    auto rectLbl = _label->getRect();
+                    /// TODO: refactor this. prompts should have styles, such as
+                    // PROMPT_1BUTTON and PROMPT_2BUTTON. they should then take
+                    // the appropriate button metadata in their constructor
                     bool first = true;
                     uint8_t numButtons = 0;
                     forEachChild([&](const WindowPtr& child)
@@ -1888,7 +2018,7 @@ to select a color mode"
             if (theme) {
                 Rect rect = getRect();
                 theme->drawProgressBarBackground(rect);
-                theme->drawWindowFrame(rect, false);
+                theme->drawWindowFrame(rect, getCornerRadius(), getFrameColorID());
                 if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
                     theme->drawProgressBarProgress(rect, getProgressValue());
                     return true;

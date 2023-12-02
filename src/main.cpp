@@ -6,44 +6,48 @@
 #include <Adafruit_GFX.h>
 #include <Arduino_GFX_Library.h>
 
-//#define TFT_720_SQUARE
+#define TFT_720_SQUARE
 //#define TFT_480_ROUND
-#define TFT_320_RECTANGLE
+//#define TFT_320_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
-# define TWM_DEFAULT_FONT &FreeSans18pt7b
-# define TWM_DISPLAY_WIDTH 720
-# define TWM_DISPLAY_HEIGHT 720
+# define DEFAULT_FONT &FreeSans18pt7b
+# define DISPLAY_WIDTH 720
+# define DISPLAY_HEIGHT 720
+# define TFT_ROTATION 0
 # define I2C_TOUCH_ADDR 0x48
+//# define TWM_GFX_ADAFRUIT
 # define TWM_GFX_ARDUINO
 #elif defined(TFT_480_ROUND)
 # include <Fonts/FreeSans12pt7b.h>
-# define TWM_DEFAULT_FONT &FreeSans12pt7b
-# define TWM_DISPLAY_WIDTH 480
-# define TWM_DISPLAY_HEIGHT 480
+# define DEFAULT_FONT &FreeSans12pt7b
+# define DISPLAY_WIDTH 480
+# define DISPLAY_HEIGHT 480
+# define TFT_ROTATION 0
 # define I2C_TOUCH_ADDR 0x15
+//# define TWM_GFX_ADAFRUIT
 # define TWM_GFX_ARDUINO
 #elif defined(TFT_320_RECTANGLE)
 # include <Fonts/FreeSans9pt7b.h>
-# define TWM_DEFAULT_FONT &FreeSans9pt7b
-# define TWM_DISPLAY_WIDTH 240
-# define TWM_DISPLAY_HEIGHT 320
-# define TWM_DISPLAY_ROTATION 3
+# define DEFAULT_FONT &FreeSans9pt7b
+# define DISPLAY_WIDTH 240
+# define DISPLAY_HEIGHT 320
+# define TFT_ROTATION 3
 # define TS_MINX 0
 # define TS_MINY 0
-# define TS_MAXX TWM_DISPLAY_WIDTH
-# define TS_MAXY TWM_DISPLAY_HEIGHT
+# define TS_MAXX DISPLAY_WIDTH
+# define TS_MAXY DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
 # define TWM_GFX_ADAFRUIT
 # include <Adafruit_ILI9341.h>
-/*# define TWM_GFX_ARDUINO
-# include <display/Arduino_ILI9341.h>*/
+/* # define TWM_GFX_ARDUINO
+# include <display/Arduino_ILI9341.h> */
 #else
 # error "invalid display selection"
 #endif
 
-#define TFT_SCREENSAVER_AFTER 60000
+#define TFT_SCREENSAVER_AFTER 5 * 60 * 1000
 
 #include "Thumby_WM.h"
 using namespace thumby;
@@ -52,38 +56,35 @@ Adafruit_FT6206 focal_ctp;
 Adafruit_CST8XX cst_ctp;
 
 #if defined(ARDUINO_PROS3)
-/**
- * Unexpected Maker ProS3.
- * Pins: sda 8, scl 9, tcs 12, dc 13, rst 14
- */
+// Unexpected Maker ProS3.
 # include <UMS3.h>
 UMS3 ums3;
-# define TFT_DC 13
-# define TFT_CS 12
-# define TFT_SCK 36
-# define TFT_MOSI 35
-# define TFT_MISO 37
+# define PIN_DC   13
+# define PIN_CS   12
+# define PIN_SCK  36
+# define PIN_MOSI 35
+# define PIN_MISO 37
 #endif
 
 #if defined(TFT_320_RECTANGLE)
 # if !defined(ARDUINO_PROS3)
-#  error "only the ProS3 is configured for use with this display"
+#  error "only the UM ProS3 is configured for use with this display"
 # endif
 
 #if defined(TWM_GFX_ADAFRUIT)
-auto display = std::make_shared<Adafruit_ILI9341>(TFT_CS, TFT_DC);
-auto context = std::make_shared<IGfxContext>(TWM_DISPLAY_HEIGHT, TWM_DISPLAY_WIDTH);
+auto display = std::make_shared<Adafruit_ILI9341>(PIN_CS, PIN_DC);
+auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH);
 #elif defined(TWM_GFX_ARDUINO)
-Arduino_ESP32SPI bus(TFT_DC, TFT_CS, TFT_SCK, TFT_MOSI, TFT_MISO);
+Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
 auto display = std::make_shared<Arduino_ILI9341>(&bus);
-auto context = std::make_shared<IGfxContext>(TWM_DISPLAY_HEIGHT, TWM_DISPLAY_WIDTH, display.get());
+auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH, display.get());
 #endif
 
 auto wm = createWindowManager(
     display,
     context,
     std::make_shared<DefaultTheme>(),
-    TWM_DEFAULT_FONT
+    DEFAULT_FONT
 );
 #else
 /** Implied Qualia RGB666 for now. */
@@ -93,10 +94,10 @@ auto wm = createWindowManager(
 # else
 #  define PIN_NS
 # endif
-Arduino_XCA9554SWSPI *expander = new Arduino_XCA9554SWSPI(
+Arduino_XCA9554SWSPI* expander = new Arduino_XCA9554SWSPI(
     PIN_NS::PCA_TFT_RESET, PIN_NS::PCA_TFT_CS, PIN_NS::PCA_TFT_SCK, PIN_NS::PCA_TFT_MOSI, &Wire, 0x3F
 );
-Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
+Arduino_ESP32RGBPanel* rgbpanel = new Arduino_ESP32RGBPanel(
     PIN_NS::TFT_DE, PIN_NS::TFT_VSYNC, PIN_NS::TFT_HSYNC, PIN_NS::TFT_PCLK,
     PIN_NS::TFT_R1, PIN_NS::TFT_R2, PIN_NS::TFT_R3, PIN_NS::TFT_R4, PIN_NS::TFT_R5,
     PIN_NS::TFT_G0, PIN_NS::TFT_G1, PIN_NS::TFT_G2, PIN_NS::TFT_G3, PIN_NS::TFT_G4, PIN_NS::TFT_G5,
@@ -105,28 +106,25 @@ Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
     1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
 );
 auto display = std::make_shared<Arduino_RGB_Display>(
-  TWM_DISPLAY_WIDTH,
-  TWM_DISPLAY_HEIGHT,
-  rgbpanel,
-  0,
-  true,
-  expander,
-  GFX_NOT_DEFINED,
+  DISPLAY_WIDTH, DISPLAY_HEIGHT, rgbpanel, 0, true, expander, GFX_NOT_DEFINED,
 # if defined(TFT_720_SQUARE) // 4.0" 720x720 square display
-  nullptr,
-  0
+  nullptr, 0
 # elif defined(TFT_480_ROUND) // 2.1" 480x480 round display
-  TL021WVC02_init_operations,
-  sizeof(TL021WVC02_init_operations)
+  TL021WVC02_init_operations, sizeof(TL021WVC02_init_operations)
 # else
 #  error "invalid display selection"
 # endif
 );
+auto context = std::make_shared<GfxContext>(DISPLAY_WIDTH, DISPLAY_HEIGHT
+#if defined(TWM_GFX_ARDUINO)
+  , display.get()
+#endif
+);
 auto wm = createWindowManager(
     display,
-    std::make_shared<IGfxContext>(TWM_DISPLAY_WIDTH, TWM_DISPLAY_HEIGHT, display.get()),
+    context,
     std::make_shared<DefaultTheme>(),
-    TWM_DEFAULT_FONT
+    DEFAULT_FONT
 );
 #endif
 
@@ -137,15 +135,11 @@ public:
   TestButton() = default;
   virtual ~TestButton() = default;
 
-  void setLabel(const WindowPtr& label) { _label = label; }
   void setPrompt(const WindowPtr& prompt) { _prompt = prompt; }
 
   bool onTapped(Coord x, Coord y) override
   {
     Button::onTapped(x, y);
-    if (_label) {
-      _label->setText("Tapped!");
-    }
     if (_prompt) {
       _prompt->show();
     }
@@ -153,7 +147,6 @@ public:
   }
 
 private:
-  WindowPtr _label;
   WindowPtr _prompt;
 };
 
@@ -237,7 +230,6 @@ void setup(void)
   }
 
   delay(500);
-
   TWM_LOG(TWM_DEBUG, "initializing");
 
 #if defined(TFT_320_RECTANGLE)
@@ -246,15 +238,16 @@ void setup(void)
 # endif
   ums3.begin();
 #endif
-
   Wire.setClock(1000000);
-  if (!wm->begin(TWM_DISPLAY_ROTATION)) {
-    TWM_LOG(TWM_ERROR, "WindowManager: error!");
+  if (!wm->begin()) {
+    TWM_LOG(TWM_ERROR, "WindowManager: error");
     on_fatal_error();
   }
   TWM_LOG(TWM_DEBUG, "WindowManager: OK");
   wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
-  #if !defined(TFT_320_RECTANGLE)
+  display->setRotation(TFT_ROTATION);
+  display->setCursor(0, 0);
+#if !defined(TFT_320_RECTANGLE)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
@@ -271,37 +264,33 @@ void setup(void)
     touchInitialized = isFocalTouch = true;
     TWM_LOG(TWM_DEBUG, "FT6206: OK");
   }
-
   if (!touchInitialized) {
     on_fatal_error();
   }
 
   WindowID id = 1;
-  auto xPadding = wm->getTheme()->getXPadding();
+  auto theme = wm->getTheme();
+  auto xPadding = theme->getXPadding();
   auto defaultWin = wm->createWindow<DefaultWindow>(
     nullptr,
     id++,
-    STY_VISIBLE,
+    STY_VISIBLE | STY_TOPLEVEL,
+    /* 0, 0, 0, 0 */
     xPadding,
     xPadding,
-    wm->getScreenWidth() - (xPadding * 2),
-    wm->getScreenHeight() - (xPadding * 2)
+    wm->getDisplayWidth() - (xPadding * 2),
+    wm->getDisplayHeight() - (xPadding * 2)
   );
   if (!defaultWin) {
     on_fatal_error();
   }
 
-  auto scaledValue = [&](Extent value)
-  {
-    return wm->getTheme()->getScaledValue(value);
-  };
-
   auto button1 = wm->createWindow<TestButton>(
     defaultWin,
     id++,
-    STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON,
-    xPadding * 2,
-    scaledValue(50),
+    STY_BUTTON | STY_CHILD | STY_VISIBLE | STY_AUTOSIZE,
+    defaultWin->getRect().left + xPadding,
+    theme->getScaledValue(50),
     0,
     0,
     "Button"
@@ -313,25 +302,23 @@ void setup(void)
   auto label1 = wm->createWindow<TestLabel>(
     defaultWin,
     id++,
-    STY_CHILD | STY_VISIBLE | STY_LABEL,
+    STY_LABEL | STY_CHILD | STY_VISIBLE,
     button1->getRect().right + xPadding,
-    scaledValue(50),
+    theme->getScaledValue(50),
     button1->getRect().width(),
-    scaledValue(30),
+    theme->getDefaultButtonHeight(),
     "Label"
   );
   if (!label1) {
     on_fatal_error();
   }
-  button1->setLabel(label1);
 
   auto yPadding = wm->getTheme()->getYPadding();
-
   testProgressBar = wm->createProgressBar<TestProgressBar>(
     defaultWin,
     id++,
-    STY_CHILD | STY_VISIBLE | STY_PROGBAR,
-    xPadding * 2,
+    STY_PROGBAR | STY_CHILD | STY_VISIBLE,
+    defaultWin->getRect().left + xPadding,
     button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2),
     wm->getTheme()->getDefaultProgressBarHeight(),
@@ -344,11 +331,11 @@ void setup(void)
   auto testCheckbox = wm->createWindow<TestCheckbox>(
     defaultWin,
     id++,
-    STY_CHILD | STY_VISIBLE | STY_CHECKBOX,
+    STY_CHECKBOX | STY_CHILD | STY_VISIBLE,
     defaultWin->getRect().left + xPadding,
     testProgressBar->getRect().bottom + yPadding,
-    scaledValue(130),
-    scaledValue(30),
+    theme->getScaledValue(130),
+    theme->getScaledValue(30),
     "CheckBox"
   );
   if (!testCheckbox) {
@@ -391,31 +378,36 @@ void setup(void)
   button1->setPrompt(yesNoPromptWnd);
 }
 
+#if defined(TFT_320_RECTANGLE)
+long mapXCoord(Coord x) noexcept
+{
+  return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
+}
+long mapYCoord(Coord y) noexcept
+{
+  return map(y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
+}
+std::pair<Coord, Coord> swapCoords(Coord x, Coord y)
+{
+  auto tmp = y;
+  y = x;
+  x = wm->getDisplayWidth() - tmp;
+  return std::make_pair(x, y);
+}
+#endif
+
 float curProgress = 0.0f;
+float progressStep = wm->getTheme()->getProgressBarIndeterminateStep();
+uint8_t frameCounter = 0;
+u_long accumulator = 0UL;
 
 void loop()
 {
-#if defined(TFT_320_RECTANGLE)
-  auto mapXCoord = [](Coord x)
-  {
-    return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
-  };
-  auto mapYCoord = [](Coord y)
-  {
-    return map(y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
-  };
-  auto swapCoords = [&](Coord x, Coord y)
-  {
-    auto tmp = y;
-    y = x;
-    x = wm->getScreenWidth() - tmp;
-    return std::make_pair(x, y);
-  };
-#endif
+  u_long before = micros();
   if (isFocalTouch && focal_ctp.touched()) {
     TS_Point pt = focal_ctp.getPoint();
 #if defined(TFT_320_RECTANGLE)
-    auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
+    const auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
 #endif
@@ -423,18 +415,25 @@ void loop()
   } else if (!isFocalTouch && cst_ctp.touched()) {
     CST_TS_Point pt = cst_ctp.getPoint();
 #if defined(TFT_320_RECTANGLE)
-    auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
+    const auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
 #endif
     wm->hitTest(pt.x, pt.y);
   }
   if (curProgress < 100.0f) {
-    curProgress += wm->getTheme()->getProgressBarIndeterminateStep();
+    curProgress += progressStep;
   } else {
     curProgress = 0.0f;
   }
   testProgressBar->setProgressValue(curProgress);
   wm->update();
   wm->render();
+  if (++frameCounter == 100) {
+    TWM_LOG(TWM_DEBUG, "avg. loop time: %luμs", accumulator / 100);
+    frameCounter = 0;
+    accumulator = 0UL;
+  }
+  accumulator += micros() - before;
+  delay(1);
 }
