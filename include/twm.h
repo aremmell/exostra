@@ -41,7 +41,7 @@
 # define TWM_COLOR_565
 
 // Comment out to enable mutexes in multi-threaded environments.
-#define TWM_SINGLETHREAD
+# define TWM_SINGLETHREAD
 
 // Enables serial logging (increases compiled binary size substantially!).
 # define TWM_ENABLE_LOGGING
@@ -541,12 +541,12 @@ to select a color mode"
 
         Extent getMaximumPromptWidth() const final
         {
-            return abs(_gfxContext->width() * 0.90f);
+            return abs(_gfxContext->width() * 0.75f);
         }
 
         Extent getMaximumPromptHeight() const final
         {
-            return abs(_gfxContext->height() * 0.90f);
+            return abs(_gfxContext->height() * 0.75f);
         }
 
         void setDefaultFont(const Font* font) final
@@ -594,11 +594,15 @@ to select a color mode"
             return getScaledValue(radius);
         }
 
-        Extent getXPadding() const final { return abs(_gfxContext->width() * 0.07f); }
-        Extent getYPadding() const final { return abs(_gfxContext->height() * 0.07f); }
+        Extent getXPadding() const final { return abs(_gfxContext->width() * 0.05f); }
+        Extent getYPadding() const final { return abs(_gfxContext->height() * 0.05f); }
         Extent getWindowFrameThickness() const final { return 1; }
 
-        Extent getDefaultButtonWidth() const final { return abs(_gfxContext->width() * 0.23f); }
+        Extent getDefaultButtonWidth() const final
+        {
+          return max(abs(_gfxContext->width() * 0.19f), 60.0f);
+        }
+
         Extent getDefaultButtonHeight() const final { return abs(getDefaultButtonWidth() * 0.52f); }
         Extent getButtonLabelPadding() const final { return getScaledValue(10); }
         u_long getButtonTappedDuration() const final { return 200; }
@@ -912,9 +916,9 @@ to select a color mode"
 
     struct PackagedMessage
     {
-        Message msg = MSG_NONE;
-        MsgParam p1 = 0;
-        MsgParam p2 = 0;
+        Message msg   = MSG_NONE;
+        MsgParam p1   = 0;
+        MsgParam p2   = 0;
     };
 
     using PackagedMessageQueue = std::queue<PackagedMessage>;
@@ -1502,8 +1506,7 @@ to select a color mode"
                 case MSG_CREATE: return onCreate(p1, p2);
                 case MSG_DESTROY: return onDestroy(p1, p2);
                 case MSG_DRAW: {
-                    auto parent = getParent();
-                    if (!isDrawable() || (parent && !parent->isDrawable())) {
+                    if (!isDrawable()) {
                         return false;
                     }
                     return onDraw(p1, p2);
@@ -1523,9 +1526,9 @@ to select a color mode"
             ScopeLock lock(_queueMtx);
 # endif
             PackagedMessage pm;
-            pm.msg = msg;
-            pm.p1 = p1;
-            pm.p2 = p2;
+            pm.msg    = msg;
+            pm.p1     = p1;
+            pm.p2     = p2;
             _queue.push(pm);
             return msg == MSG_INPUT && getMsgParamLoWord(p1) == INPUT_TAP;
         }
@@ -1623,7 +1626,9 @@ to select a color mode"
 
         bool isDrawable() const noexcept override
         {
-            return isVisible() && isAlive();
+            auto parent = getParent();
+            return isVisible() && isAlive() &&
+                (!parent || (parent && parent->isDrawable()));
         }
 
         bool destroy() override
@@ -1747,7 +1752,6 @@ to select a color mode"
             _lastTapped = millis();
             routeMessage(MSG_DRAW);
             auto parent = getParent();
-            TWM_ASSERT(parent);
             if (parent) {
                 parent->queueMessage(MSG_EVENT, EVT_CHILD_TAPPED, getID());
             }

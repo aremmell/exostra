@@ -49,7 +49,7 @@
 
 #define TFT_SCREENSAVER_AFTER 5 * 60 * 1000
 
-#include "Thumby_WM.h"
+#include "twm.h"
 using namespace thumby;
 
 Adafruit_FT6206 focal_ctp;
@@ -87,23 +87,25 @@ auto wm = createWindowManager(
     DEFAULT_FONT
 );
 #else
-/** Implied Qualia RGB666 for now. */
+// Implied Qualia RGB666 for now.
 # if defined(PLATFORMIO) /// TODO: detect qualia, hopefully remove hack
 #  include <esp32_qualia.h>
 #  define PIN_NS qualia
 # else
 #  define PIN_NS
 # endif
-Arduino_XCA9554SWSPI* expander = new Arduino_XCA9554SWSPI(
+auto expander = new Arduino_XCA9554SWSPI(
     PIN_NS::PCA_TFT_RESET, PIN_NS::PCA_TFT_CS, PIN_NS::PCA_TFT_SCK, PIN_NS::PCA_TFT_MOSI, &Wire, 0x3F
 );
-Arduino_ESP32RGBPanel* rgbpanel = new Arduino_ESP32RGBPanel(
+auto rgbpanel = new Arduino_ESP32RGBPanel(
     PIN_NS::TFT_DE, PIN_NS::TFT_VSYNC, PIN_NS::TFT_HSYNC, PIN_NS::TFT_PCLK,
     PIN_NS::TFT_R1, PIN_NS::TFT_R2, PIN_NS::TFT_R3, PIN_NS::TFT_R4, PIN_NS::TFT_R5,
     PIN_NS::TFT_G0, PIN_NS::TFT_G1, PIN_NS::TFT_G2, PIN_NS::TFT_G3, PIN_NS::TFT_G4, PIN_NS::TFT_G5,
     PIN_NS::TFT_B1, PIN_NS::TFT_B2, PIN_NS::TFT_B3, PIN_NS::TFT_B4, PIN_NS::TFT_B5,
-    1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
-    1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
+    //1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
+    //1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
+    1 /* hync_polarity */, 46 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
+    1 /* vsync_polarity */, 50 /* vsync_front_porch */, 16 /* vsync_pulse_width */, 16 /* vsync_back_porch */
 );
 auto display = std::make_shared<Arduino_RGB_Display>(
   DISPLAY_WIDTH, DISPLAY_HEIGHT, rgbpanel, 0, true, expander, GFX_NOT_DEFINED,

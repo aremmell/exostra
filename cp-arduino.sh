@@ -5,12 +5,12 @@ _TARGET_DIR="/Users/ryan/Documents/Arduino/twm/main"
 
 declare -a _src_files=(
 	"${_SOURCE_DIR}/src/main.cpp"
-	"${_SOURCE_DIR}/include/Thumby_WM.h"
+	"${_SOURCE_DIR}/include/twm.h"
 )
 
 declare -a _tgt_files=(
 	"${_TARGET_DIR}/main.ino"
-	"${_TARGET_DIR}/Thumby_WM.h"
+	"${_TARGET_DIR}/twm.h"
 )
 
 _result=true
