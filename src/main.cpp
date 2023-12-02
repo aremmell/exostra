@@ -29,6 +29,7 @@
 # define TWM_DEFAULT_FONT &FreeSans9pt7b
 # define TWM_DISPLAY_WIDTH 240
 # define TWM_DISPLAY_HEIGHT 320
+# define TWM_DISPLAY_ROTATION 3
 # define TS_MINX 0
 # define TS_MINY 0
 # define TS_MAXX TWM_DISPLAY_WIDTH
@@ -36,6 +37,8 @@
 # define I2C_TOUCH_ADDR 0x38
 # define TWM_GFX_ADAFRUIT
 # include <Adafruit_ILI9341.h>
+/*# define TWM_GFX_ARDUINO
+# include <display/Arduino_ILI9341.h>*/
 #else
 # error "invalid display selection"
 #endif
@@ -55,8 +58,11 @@ Adafruit_CST8XX cst_ctp;
  */
 # include <UMS3.h>
 UMS3 ums3;
-# define TFT_CS 12
 # define TFT_DC 13
+# define TFT_CS 12
+# define TFT_SCK 36
+# define TFT_MOSI 35
+# define TFT_MISO 37
 #endif
 
 #if defined(TFT_320_RECTANGLE)
@@ -64,9 +70,18 @@ UMS3 ums3;
 #  error "only the ProS3 is configured for use with this display"
 # endif
 
+#if defined(TWM_GFX_ADAFRUIT)
+auto display = std::make_shared<Adafruit_ILI9341>(TFT_CS, TFT_DC);
+auto context = std::make_shared<IGfxContext>(TWM_DISPLAY_HEIGHT, TWM_DISPLAY_WIDTH);
+#elif defined(TWM_GFX_ARDUINO)
+Arduino_ESP32SPI bus(TFT_DC, TFT_CS, TFT_SCK, TFT_MOSI, TFT_MISO);
+auto display = std::make_shared<Arduino_ILI9341>(&bus);
+auto context = std::make_shared<IGfxContext>(TWM_DISPLAY_HEIGHT, TWM_DISPLAY_WIDTH, display.get());
+#endif
+
 auto wm = createWindowManager(
-    std::make_shared<Adafruit_ILI9341>(TFT_CS, TFT_DC),
-    std::make_shared<IGfxContext>(TWM_DISPLAY_HEIGHT, TWM_DISPLAY_WIDTH),
+    display,
+    context,
     std::make_shared<DefaultTheme>(),
     TWM_DEFAULT_FONT
 );
@@ -225,19 +240,21 @@ void setup(void)
 
   TWM_LOG(TWM_DEBUG, "initializing");
 
+#if defined(TFT_320_RECTANGLE)
+# if defined(TWM_GFX_ARDUINO)
+  bus.begin();
+# endif
+  ums3.begin();
+#endif
+
   Wire.setClock(1000000);
-  if (!wm->begin(3)) {
+  if (!wm->begin(TWM_DISPLAY_ROTATION)) {
     TWM_LOG(TWM_ERROR, "WindowManager: error!");
     on_fatal_error();
   }
   TWM_LOG(TWM_DEBUG, "WindowManager: OK");
   wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
-#if defined(TFT_320_RECTANGLE)
-  ums3.begin();
-#else
-# ifdef GFX_EXTRA_PRE_INIT
-  GFX_EXTRA_PRE_INIT();
-# endif
+  #if !defined(TFT_320_RECTANGLE)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif

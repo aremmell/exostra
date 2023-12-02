@@ -43,7 +43,7 @@
 // Comment out to enable mutexes in multi-threaded environments.
 #define TWM_SINGLETHREAD
 
-// Uncomment to enable serial logging.
+// Enables serial logging (increases compiled binary size substantially!).
 # define TWM_ENABLE_LOGGING
 
 # if defined(TWM_ENABLE_LOGGING)
@@ -58,7 +58,7 @@
         char prefix = '\0'; \
         switch(lvl) { \
             case TWM_ERROR: prefix = 'E'; break; \
-            case TWM_WARN: prefix  = 'W'; break; \
+            case TWM_WARN:  prefix = 'W'; break; \
             case TWM_DEBUG: prefix = 'D'; break; \
         } \
         Serial.printf("[%c] (%s:%d): ", prefix, basename(__FILE__), __LINE__); \
@@ -112,7 +112,7 @@
 # elif defined(TWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
 #  include <Arduino_GFX_Library.h>
 #  if defined(LITTLE_FOOT_PRINT)
-#   error "required Arduino GFX canvas classes unavailable for this board"
+#   error "required Arduino GFX canvas classes unavailable due to LITTLE_FOOT_PRINT"
 #  endif
 #  if defined(ATTINY_CORE)
 #   error "required GFXfont implementation unavailable for this board"
@@ -150,7 +150,7 @@ namespace thumby
     /** Physical display driver. */
     using IGfxDisplay = TWM_DISP_TYPE;
 
-# if defined(TWM_COLOR_MONOCHROME)
+# if defined(TWM_COLOR_MONO)
     using Color       = uint8_t;       /**< Color (monochrome). */
     using IGfxContext = TWM_CTX1_TYPE; /**< Graphics context (monochrome). */
 # elif defined(TWM_COLOR_256)
@@ -159,8 +159,10 @@ namespace thumby
 # elif defined(TWM_COLOR_565)
     using Color       = uint16_t;       /**< Color type (16-bit 565 RGB). */
     using IGfxContext = TWM_CTX16_TYPE; /**< Graphics context (16-bit 565 RGB). */
+# elif defined(TWM_COLOR_RBB)
+#  error "24-bit RGB mode is not yet implemented"
 # else
-#  error "define TWM_COLOR_565, TWM_COLOR_256, or TWM_COLOR_MONOCHROME in order \
+#  error "define TWM_COLOR_565, TWM_COLOR_256, or TWM_COLOR_MONO in order \
 to select a color mode"
 # endif
 
@@ -182,6 +184,8 @@ to select a color mode"
     /** Point in 2D space. */
     struct Point
     {
+        Point() = default;
+
         template<typename T1, typename T2>
         Point(T1 xAxis, T2 yAxis)
         {
@@ -198,7 +202,7 @@ to select a color mode"
     {
         Rect() = default;
 
-        Rect(Coord l, Coord t, Extent r, Extent b)
+        explicit Rect(Coord l, Coord t, Extent r, Extent b)
             : left(l), top(t), right(r), bottom(b)
         {
         }
@@ -239,7 +243,7 @@ to select a color mode"
             bottom -= px;
         }
 
-        bool overlaps(const Rect& other) const noexcept
+        bool overlapsRect(const Rect& other) const noexcept
         {
             if ((left >= other.left && left <= other.right) ||
                 (right <= other.right && right >= other.left)) {
@@ -257,11 +261,19 @@ to select a color mode"
                     return true;
                 }
             }
-
             return false;
         }
 
-        bool isPointWithin(Coord x, Coord y) const noexcept
+        bool withinRect(const Rect& other) const noexcept
+        {
+            if (left >= other.left && right <= other.right &&
+                top >= other.top && bottom <= other.bottom) {
+                return true;
+            }
+            return false;
+        }
+
+        bool pointWithin(Coord x, Coord y) const noexcept
         {
             if (x >= left && x <= left + width() &&
                 y >= top  && y <= top + height()) {
@@ -282,7 +294,7 @@ to select a color mode"
 
     static void getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy, uint8_t* xAdv,
         uint8_t* yAdv, int8_t* xOff, int8_t* yOff, uint8_t textSize = 1,
-        const GFXfont* font = nullptr)
+        const GFXfont* font = nullptr) noexcept
     {
         uint8_t first = font ? pgm_read_byte(&font->first) : 0;
         bool okCh = font ? ch >= first && ch <= pgm_read_byte(&font->last) : false;
@@ -296,7 +308,7 @@ to select a color mode"
     }
 
     template<typename T1, typename T2>
-    inline bool bitsHigh(const T1& bitmask, const T2& bits)
+    inline bool bitsHigh(const T1& bitmask, const T2& bits) noexcept
     {
         return (bitmask & bits) == bits;
     }
@@ -360,7 +372,7 @@ to select a color mode"
     struct InputParams
     {
         WindowID handledBy = WID_INVALID;
-        int type;
+        int type = 0;
         Coord x = 0;
         Coord y = 0;
     };
@@ -586,6 +598,9 @@ to select a color mode"
         void drawText(const char* text, uint8_t flags, const Rect& rect,
             uint8_t textSize, Color textColor, const Font* font) const final
         {
+            _gfxContext->setTextSize(textSize);
+            _gfxContext->setFont(font);
+
             const bool xCenter = bitsHigh(flags, DT_CENTER);
             const bool singleLine = bitsHigh(flags, DT_SINGLE);
 
@@ -606,8 +621,6 @@ to select a color mode"
                 ((singleLine && !xCenter) ? 0 : getXPadding());
             const Extent xExtent = rect.right - xPadding;
             const char* cursor = text;
-
-            _gfxContext->setFont(font);
 
             while (*cursor != '\0') {
                 xAccum = rect.left + xPadding;
@@ -1101,15 +1114,16 @@ to select a color mode"
 
         virtual bool begin(uint8_t rotation)
         {
+            bool began = true;
 # if defined(TWM_GFX_ADAFRUIT)
             _gfxDisplay->begin(0);
+# elif defined(TWM_GFX_ARDUINO)
+            began &= _gfxDisplay->begin();
+            began &= _gfxContext->begin();
+# endif
             _gfxDisplay->setRotation(rotation);
             _gfxDisplay->setCursor(0, 0);
-            return true;
-# elif defined(TWM_GFX_ARDUINO)
-            (void)rotation;
-            return _gfxContext->begin();
-# endif
+            return began;
         }
 
         virtual void tearDown()
@@ -1476,7 +1490,7 @@ to select a color mode"
                 return false;
             }
             Rect rect = getRect();
-            if (!rect.isPointWithin(params->x, params->y)) {
+            if (!rect.pointWithin(params->x, params->y)) {
                 return false;
             }
             bool handled = false;
