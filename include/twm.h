@@ -1,5 +1,5 @@
 /*
- * Thumby_WM.h
+ * twm.h
  *
  * Thumby Window Manager
  *
@@ -40,13 +40,16 @@
 // TODO: remove me
 # define TWM_COLOR_565
 
-// Comment out to enable mutexes in multi-threaded environments.
+// Disables mutex locks for multi-threaded environments.
 # define TWM_SINGLETHREAD
 
 // Enables serial logging (increases compiled binary size substantially!).
 # define TWM_ENABLE_LOGGING
 
-# if defined(TWM_ENABLE_LOGGING)
+// Enables internal diagnostics; implies TWM_ENABLE_LOGGING.
+# define TWM_DIAGNOSTICS
+
+# if defined(TWM_ENABLE_LOGGING) || defined(TWM_DIAGNOSTICS)
     enum
     {
         TWM_ERROR = 1,
@@ -460,12 +463,6 @@ to select a color mode"
         virtual void drawText(const char*, uint8_t, const Rect&,
             uint8_t, Color, const Font*) const = 0;
 
-        virtual void drawWindowFrame(const Rect&, Coord, ColorID) const = 0;
-        virtual void drawWindowShadow(const Rect&, Coord, ColorID) const = 0;
-        virtual void drawWindowBackground(const Rect&, Coord, ColorID) const = 0;
-        virtual void drawText(const char*, uint8_t, const Rect&,
-            uint8_t, ColorID, const Font*) const = 0;
-
         virtual Extent getDefaultProgressBarHeight() const = 0;
         virtual float getProgressBarIndeterminateBandWidthFactor() const = 0;
         virtual float getProgressBarIndeterminateStep() const = 0;
@@ -474,6 +471,7 @@ to select a color mode"
         virtual void drawProgressBarProgress(const Rect&, float) const = 0;
         virtual void drawProgressBarIndeterminate(const Rect&, float) const = 0;
 
+        virtual Extent getDefaultCheckBoxHeight() const = 0;
         virtual Rect getCheckBoxCheckableArea(const Rect&) const = 0;
         virtual Extent getCheckBoxCheckableAreaPadding() const = 0;
         virtual Extent getCheckBoxCheckMarkPadding() const = 0;
@@ -487,10 +485,7 @@ to select a color mode"
     class DefaultTheme : public ITheme
     {
     public:
-        DefaultTheme()
-        {
-            //_fillPalette();
-        }
+        DefaultTheme() = default;
 
         void setGfxContext(const GfxContextPtr& gfx) final
         {
@@ -525,6 +520,7 @@ to select a color mode"
 
                 case COLOR_CHECKBOX_CHECK_BG: return 0xef5d;
                 case COLOR_CHECKBOX_CHECK: return 0x3166;
+                case COLOR_CHECKBOX_CHECK_FRAME: return 0x9cf3;
                 default: return Color(0);
             }
         }
@@ -600,12 +596,12 @@ to select a color mode"
 
         Extent getDefaultButtonWidth() const final
         {
-          return max(abs(_gfxContext->width() * 0.19f), 60.0f);
+          return abs(max(_gfxContext->width() * 0.19f, 60.0f));
         }
 
         Extent getDefaultButtonHeight() const final { return abs(getDefaultButtonWidth() * 0.52f); }
         Extent getButtonLabelPadding() const final { return getScaledValue(10); }
-        u_long getButtonTappedDuration() const final { return 200; }
+        u_long getButtonTappedDuration() const final { return 200UL; }
 
         void drawWindowFrame(const Rect& rect, Coord radius, Color color) const final
         {
@@ -766,30 +762,9 @@ to select a color mode"
             }
         }
 
-        void drawWindowFrame(const Rect& rect, Coord radius, ColorID colorID) const final
-        {
-            drawWindowFrame(rect, radius, getColor(colorID));
-        }
-
-        void drawWindowShadow(const Rect& rect, Coord radius, ColorID colorID) const final
-        {
-            drawWindowShadow(rect, radius, getColor(colorID));
-        }
-
-        void drawWindowBackground(const Rect& rect, Coord radius, ColorID colorID) const final
-        {
-            drawWindowBackground(rect, radius, getColor(colorID));
-        }
-
-        void drawText(const char* text, uint8_t flags, const Rect& rect, uint8_t textSize,
-            ColorID colorID, const Font* font) const final
-        {
-            drawText(text, flags, rect, textSize, getColor(colorID), font);
-        }
-
         Extent getDefaultProgressBarHeight() const final
         {
-            return abs(_gfxContext->height() * 0.12f);
+            return abs(_gfxContext->height() * 0.10f);
         }
 
         float getProgressBarIndeterminateBandWidthFactor() const final { return 0.33f; }
@@ -858,6 +833,11 @@ to select a color mode"
                 getColor(COLOR_PROGRESS_FILL));
         }
 
+        Extent getDefaultCheckBoxHeight() const final
+        {
+            return abs(_gfxContext->height() * 0.10f);
+        }
+
         Rect getCheckBoxCheckableArea(const Rect& rect) const final
         {
             auto checkPadding = getScaledValue(getCheckBoxCheckableAreaPadding());
@@ -871,14 +851,14 @@ to select a color mode"
             return checkableRect;
         }
 
-        Extent getCheckBoxCheckableAreaPadding() const final { return 6; }
-        Extent getCheckBoxCheckMarkPadding() const final { return 4; }
-        u_long getCheckBoxCheckDelay() const final { return 200; }
+        Extent getCheckBoxCheckableAreaPadding() const final { return 2; }
+        Extent getCheckBoxCheckMarkPadding() const final { return 2; }
+        u_long getCheckBoxCheckDelay() const final { return 200UL; }
 
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
-            drawWindowBackground(rect, 0, COLOR_WINDOW_BG);
-            Rect checkableRect = getCheckBoxCheckableArea(rect);
+            drawWindowBackground(rect, 0, getColor(COLOR_WINDOW_BG));
+            auto checkableRect = getCheckBoxCheckableArea(rect);
             _gfxContext->fillRect(
                 checkableRect.left,
                 checkableRect.top,
@@ -888,8 +868,9 @@ to select a color mode"
             );
             drawWindowFrame(checkableRect, 0, getColor(COLOR_CHECKBOX_CHECK_FRAME));
             if (checked) {
-                Rect rectCheckMark = checkableRect;
-                rectCheckMark.deflate(getScaledValue(getCheckBoxCheckMarkPadding()));
+                auto rectCheckMark = checkableRect;
+                auto checkMarkPadding = getScaledValue(getCheckBoxCheckMarkPadding());
+                rectCheckMark.deflate(checkMarkPadding);
                 _gfxContext->fillRect(
                     rectCheckMark.left,
                     rectCheckMark.top,
@@ -957,14 +938,14 @@ to select a color mode"
         virtual std::string getText() const = 0;
         virtual void setText(const std::string&) = 0;
 
-        virtual ColorID getBGColorID() const noexcept = 0;
-        virtual void setBgColorID(ColorID) noexcept = 0;
-        virtual ColorID getTextColorID() const noexcept = 0;
-        virtual void setTextColorID(ColorID) noexcept = 0;
-        virtual ColorID getFrameColorID() const noexcept = 0;
-        virtual void setFrameColorID(ColorID) noexcept = 0;
-        virtual ColorID getShadowColorID() const noexcept = 0;
-        virtual void setShadowColorID(ColorID) noexcept = 0;
+        virtual Color getBgColor() const noexcept = 0;
+        virtual void setBgColor(Color) noexcept = 0;
+        virtual Color getTextColor() const noexcept = 0;
+        virtual void setTextColor(Color) noexcept = 0;
+        virtual Color getFrameColor() const noexcept = 0;
+        virtual void setFrameColor(Color) noexcept = 0;
+        virtual Color getShadowColor() const noexcept = 0;
+        virtual void setShadowColor(Color) noexcept = 0;
 
         virtual Coord getCornerRadius() const noexcept = 0;
         virtual void setCornerRadius(Coord) noexcept = 0;
@@ -1222,12 +1203,7 @@ to select a color mode"
                 TWM_LOG(TWM_ERROR, "MSG_CREATE = false");
                 return nullptr;
             }
-            bool dupe = false;
-            if (parent) {
-                dupe = !parent->addChild(win);
-            } else {
-                dupe = !_registry->addChild(win);
-            }
+            bool dupe = parent ? !parent->addChild(win) : !_registry->addChild(win);
             if (dupe) {
                 TWM_LOG(TWM_ERROR, "duplicate window ID %hhu (parent: %hhu)",
                     id, parent ? parent->getID() : WID_INVALID);
@@ -1237,9 +1213,7 @@ to select a color mode"
             if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
                 win->routeMessage(MSG_RESIZE);
             }
-            if (win->isVisible() && (!parent || parent->isVisible())) {
-                win->redraw();
-            }
+            win->redraw();
             return win;
         }
 
@@ -1304,10 +1278,10 @@ to select a color mode"
 
         void hitTest(Coord x, Coord y)
         {
-            //TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd...", x, y);
-            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
+            auto state = getState();
+            if (bitsHigh(state, WMS_SSAVER_ENABLED)) {
                 _ssaverEpoch = millis();
-                if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
                     return;
                 }
             }
@@ -1328,23 +1302,29 @@ to select a color mode"
 
         virtual void update()
         {
-            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
+#if defined(TWM_DIAGNOSTICS)
+            static uint8_t invocationCount = 0;
+            auto beginTime = micros();
+#endif
+            auto state = getState();
+            if (bitsHigh(state, WMS_SSAVER_ENABLED)) {
                 if (millis() - _ssaverEpoch >= _ssaverActivateAfter) {
-                    if (!bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
-                        setState(getState() | WMS_SSAVER_ACTIVE);
+                    if (!bitsHigh(state, WMS_SSAVER_ACTIVE)) {
+                        setState(state | WMS_SSAVER_ACTIVE);
                         TWM_LOG(TWM_DEBUG, "activated screensaver");
                     }
                 } else {
-                    if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
-                        setState(getState() & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
+                    if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
+                        setState(state & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
                         TWM_LOG(TWM_DEBUG, "de-activated screensaver");
                     }
                 }
             }
-            if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
-                if (!bitsHigh(getState(), WMS_SSAVER_DRAWN)) {
+            state = getState();
+            if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
+                if (!bitsHigh(state, WMS_SSAVER_DRAWN)) {
                     _theme->drawScreensaver();
-                    setState(getState() | WMS_SSAVER_DRAWN);
+                    setState(state | WMS_SSAVER_DRAWN);
                 }
             } else {
                 auto displayRect = Rect(0, 0, getDisplayWidth(), getDisplayHeight());
@@ -1382,15 +1362,25 @@ to select a color mode"
                     return true;
                 });
             }
+#if defined(TWM_DIAGNOSTICS)
+            if (++invocationCount == _sampleFrames) {
+                invocationCount = 0;
+                _renderAvg   = _renderAccum / _sampleFrames;
+                _renderAccum = 0UL;
+                return;
+            }
+            _renderAccum += micros() - beginTime;
+#endif
         }
 
-        bool begin()
+        template<typename... TDisplayArgs>
+        inline bool begin(TDisplayArgs&&... args)
         {
             bool success = true;
 # if defined(TWM_GFX_ADAFRUIT)
-            _gfxDisplay->begin(0);
+            _gfxDisplay->begin(args...);
 # elif defined(TWM_GFX_ARDUINO)
-            success &= _gfxDisplay->begin();
+            success &= _gfxDisplay->begin(args...);
             success &= _gfxContext->begin(GFX_SKIP_OUTPUT_BEGIN);
 # endif
             return success;
@@ -1398,6 +1388,10 @@ to select a color mode"
 
         void render()
         {
+#if defined(TWM_DIAGNOSTICS)
+            static uint8_t invocationCount = 0;
+            auto beginTime = micros();
+#endif
             /// TODO: implement different calls for different color modes
 # if defined(TWM_GFX_ADAFRUIT)
             _gfxDisplay->drawRGBBitmap(0, 0, _gfxContext->getBuffer(),
@@ -1405,6 +1399,17 @@ to select a color mode"
 # elif defined(TWM_GFX_ARDUINO)
             _gfxContext->flush();
 # endif
+#if defined(TWM_DIAGNOSTICS)
+            if (++invocationCount == _sampleFrames) {
+                invocationCount = 0;
+                _copyFrameAvg   = _copyFrameAccum / _sampleFrames;
+                _copyFrameAccum = 0UL;
+                TWM_LOG(TWM_DEBUG, "avg. times: render = %luμs, copy = %luμs,"
+                    " total = %luμs", _renderAvg, _copyFrameAvg, (_renderAvg + _copyFrameAvg));
+                return;
+            }
+            _copyFrameAccum += micros() - beginTime;
+#endif
         }
 
     protected:
@@ -1417,6 +1422,13 @@ to select a color mode"
         Extent _displayHeight = 0;
         u_long _ssaverEpoch = 0UL;
         u_long _ssaverActivateAfter = 0UL;
+#if defined(TWM_DIAGNOSTICS)
+        u_long _renderAvg      = 0UL;
+        u_long _copyFrameAvg   = 0UL;
+        u_long _renderAccum    = 0UL;
+        u_long _copyFrameAccum = 0UL;
+        static constexpr uint8_t _sampleFrames = 100;
+#endif
     };
 
     using WindowManagerPtr = std::shared_ptr<WindowManager>;
@@ -1448,6 +1460,13 @@ to select a color mode"
             const std::string& text
         ) : _wm(wm), _parent(parent), _rect(rect), _style(style), _id(id), _text(text)
         {
+            auto theme = _getTheme();
+            if (theme) {
+                _bgColor     = theme->getColor(COLOR_WINDOW_BG);
+                _textColor   = theme->getColor(COLOR_WINDOW_TEXT);
+                _frameColor  = theme->getColor(COLOR_WINDOW_FRAME);
+                _shadowColor = theme->getColor(COLOR_WINDOW_SHADOW);
+            }
         }
 
         virtual ~Window() = default;
@@ -1486,16 +1505,16 @@ to select a color mode"
         std::string getText() const override { return _text; }
         void setText(const std::string& text) override { _text = text; }
 
-        ColorID getBGColorID() const noexcept override { return _bgColorID; }
-        void setBgColorID(ColorID colorID) noexcept override { _bgColorID = colorID; }
-        ColorID getTextColorID() const noexcept override { return _textColorID; }
-        void setTextColorID(ColorID colorID) noexcept override { _textColorID = colorID; }
+        Color getBgColor() const noexcept override { return _bgColor; }
+        void setBgColor(Color Color) noexcept override { _bgColor = Color; }
+        Color getTextColor() const noexcept override { return _textColor; }
+        void setTextColor(Color Color) noexcept override { _textColor = Color; }
 
-        ColorID getFrameColorID() const noexcept override { return _frameColorID; }
-        void setFrameColorID(ColorID colorID) noexcept override { _frameColorID = colorID; }
+        Color getFrameColor() const noexcept override { return _frameColor; }
+        void setFrameColor(Color Color) noexcept override { _frameColor = Color; }
 
-        ColorID getShadowColorID() const noexcept override { return _shadowColorID; }
-        void setShadowColorID(ColorID colorID) noexcept override { _shadowColorID = colorID; }
+        Color getShadowColor() const noexcept override { return _shadowColor; }
+        void setShadowColor(Color Color) noexcept override { _shadowColor = Color; }
 
         Coord getCornerRadius() const noexcept override { return _cornerRadius; }
         void setCornerRadius(Coord radius) noexcept override { _cornerRadius = radius; }
@@ -1664,12 +1683,12 @@ to select a color mode"
                 auto rect   = getRect();
                 auto style  = getStyle();
                 auto radius = theme->getCornerRadius(style);
-                theme->drawWindowBackground(rect, radius, getBGColorID());
+                theme->drawWindowBackground(rect, radius, getBgColor());
                 if (bitsHigh(style, STY_FRAME)) {
-                    theme->drawWindowFrame(rect, radius, getFrameColorID());
+                    theme->drawWindowFrame(rect, radius, getFrameColor());
                 }
                 if (bitsHigh(style, STY_SHADOW)) {
-                    theme->drawWindowShadow(rect, radius, getShadowColorID());
+                    theme->drawWindowShadow(rect, radius, getShadowColor());
                 }
                 return true;
             }
@@ -1734,11 +1753,11 @@ to select a color mode"
         WindowID _id = WID_INVALID;
         State _state = 0;
         std::string _text;
-        ColorID _bgColorID     = COLOR_WINDOW_BG;
-        ColorID _textColorID   = COLOR_WINDOW_TEXT;
-        ColorID _frameColorID  = COLOR_WINDOW_FRAME;
-        ColorID _shadowColorID = COLOR_WINDOW_SHADOW;
-        Coord _cornerRadius    = 0;
+        Color _bgColor      = 0;
+        Color _textColor    = 0;
+        Color _frameColor   = 0;
+        Color _shadowColor  = 0;
+        Coord _cornerRadius = 0;
     };
 
     class Button : public Window
@@ -1766,15 +1785,15 @@ to select a color mode"
                 auto rect = getRect();
                 auto radius = theme->getCornerRadius(getStyle());
                 theme->drawWindowBackground(rect, radius,
-                    pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG);
+                    theme->getColor(pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG));
                 theme->drawWindowFrame(rect, radius,
-                    pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME);
+                    theme->getColor(pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME));
                 theme->drawText(
                     getText().c_str(),
                     DT_SINGLE | DT_CENTER,
                     rect,
                     theme->getDefaultTextSize(),
-                    pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT,
+                    theme->getColor(pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT),
                     theme->getDefaultFont()
                 );
                 return true;
@@ -1816,13 +1835,13 @@ to select a color mode"
             auto theme = _getTheme();
             if (theme) {
                 Rect rect = getRect();
-                theme->drawWindowBackground(rect, getCornerRadius(), getBGColorID());
+                theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
                 theme->drawText(
                     getText().c_str(),
                     DT_SINGLE | DT_ELLIPSIS,
                     rect,
                     theme->getDefaultTextSize(),
-                    getTextColorID(),
+                    getTextColor(),
                     theme->getDefaultFont()
                 );
                 return true;
@@ -1843,13 +1862,13 @@ to select a color mode"
             auto theme = _getTheme();
             if (theme) {
                 Rect rect = getRect();
-                theme->drawWindowBackground(rect, getCornerRadius(), getBGColorID());
+                theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
                 theme->drawText(
                     getText().c_str(),
                     DT_CENTER,
                     rect,
                     theme->getDefaultTextSize(),
-                    getTextColorID(),
+                    getTextColor(),
                     theme->getDefaultFont()
                 );
                 return true;
@@ -1910,9 +1929,9 @@ to select a color mode"
             if (wm) {
                 auto theme = _getTheme();
                 if (theme) {
-                    setBgColorID(COLOR_PROMPT_BG);
-                    setFrameColorID(COLOR_PROMPT_FRAME);
-                    setShadowColorID(COLOR_PROMPT_SHADOW);
+                    setBgColor(theme->getColor(COLOR_PROMPT_BG));
+                    setFrameColor(theme->getColor(COLOR_PROMPT_FRAME));
+                    setShadowColor(theme->getColor(COLOR_PROMPT_SHADOW));
                     Rect rect = getRect();
                     _label = wm->createWindow<MultilineLabel>(
                         shared_from_this(),
@@ -1927,7 +1946,7 @@ to select a color mode"
                     if (!_label) {
                         return false;
                     }
-                    _label->setBgColorID(COLOR_PROMPT_BG);
+                    _label->setBgColor(theme->getColor(COLOR_PROMPT_BG));
                     auto rectLbl = _label->getRect();
                     /// TODO: refactor this. prompts should have styles, such as
                     // PROMPT_1BUTTON and PROMPT_2BUTTON. they should then take
@@ -2022,7 +2041,7 @@ to select a color mode"
             if (theme) {
                 Rect rect = getRect();
                 theme->drawProgressBarBackground(rect);
-                theme->drawWindowFrame(rect, getCornerRadius(), getFrameColorID());
+                theme->drawWindowFrame(rect, getCornerRadius(), getFrameColor());
                 if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
                     theme->drawProgressBarProgress(rect, getProgressValue());
                     return true;

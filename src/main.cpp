@@ -6,9 +6,10 @@
 #include <Adafruit_GFX.h>
 #include <Arduino_GFX_Library.h>
 
-#define TFT_720_SQUARE
+//#define TFT_720_SQUARE
 //#define TFT_480_ROUND
 //#define TFT_320_RECTANGLE
+#define TFT_480_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
@@ -40,9 +41,25 @@
 # define TS_MAXY DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
 # define TWM_GFX_ADAFRUIT
+# define RECTANGULAR_DISPLAY
 # include <Adafruit_ILI9341.h>
 /* # define TWM_GFX_ARDUINO
 # include <display/Arduino_ILI9341.h> */
+#elif defined(TFT_480_RECTANGLE)
+# include <Fonts/FreeSans12pt7b.h>
+# define DEFAULT_FONT &FreeSans12pt7b
+# define DISPLAY_WIDTH 320
+# define DISPLAY_HEIGHT 480
+# define TFT_ROTATION 3
+# define TS_MINX 0
+# define TS_MINY 0
+# define TS_MAXX DISPLAY_WIDTH
+# define TS_MAXY DISPLAY_HEIGHT
+# define I2C_TOUCH_ADDR 0x38
+# define TWM_GFX_ADAFRUIT
+# define RECTANGULAR_DISPLAY
+# include <Adafruit_HX8357.h>
+# include <Adafruit_FT5336.h>
 #else
 # error "invalid display selection"
 #endif
@@ -52,8 +69,12 @@
 #include "twm.h"
 using namespace thumby;
 
+#if defined(TFT_480_RECTANGLE)
+Adafruit_FT5336 ctp;
+#else
 Adafruit_FT6206 focal_ctp;
 Adafruit_CST8XX cst_ctp;
+#endif
 
 #if defined(ARDUINO_PROS3)
 // Unexpected Maker ProS3.
@@ -61,18 +82,22 @@ Adafruit_CST8XX cst_ctp;
 UMS3 ums3;
 # define PIN_DC   13
 # define PIN_CS   12
+# define PIN_RST  14
 # define PIN_SCK  36
 # define PIN_MOSI 35
 # define PIN_MISO 37
 #endif
 
-#if defined(TFT_320_RECTANGLE)
+#if defined(RECTANGULAR_DISPLAY)
 # if !defined(ARDUINO_PROS3)
 #  error "only the UM ProS3 is configured for use with this display"
 # endif
-
 #if defined(TWM_GFX_ADAFRUIT)
+# if defined(TFT_320_RECTANGLE)
 auto display = std::make_shared<Adafruit_ILI9341>(PIN_CS, PIN_DC);
+# elif defined(TFT_480_RECTANGLE)
+auto display = std::make_shared<Adafruit_HX8357>(PIN_CS, PIN_DC);
+# endif
 auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH);
 #elif defined(TWM_GFX_ARDUINO)
 Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
@@ -234,25 +259,27 @@ void setup(void)
   delay(500);
   TWM_LOG(TWM_DEBUG, "initializing");
 
-#if defined(TFT_320_RECTANGLE)
+#if defined(RECTANGULAR_DISPLAY)
 # if defined(TWM_GFX_ARDUINO)
   bus.begin();
 # endif
   ums3.begin();
 #endif
   Wire.setClock(1000000);
-  if (!wm->begin()) {
+  if (!wm->begin(0)) {
     TWM_LOG(TWM_ERROR, "WindowManager: error");
     on_fatal_error();
   }
   TWM_LOG(TWM_DEBUG, "WindowManager: OK");
   wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
+  wm->getTheme()->drawScreensaver();
   display->setRotation(TFT_ROTATION);
   display->setCursor(0, 0);
-#if !defined(TFT_320_RECTANGLE)
+#if !defined(RECTANGULAR_DISPLAY)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
+#if !defined(TFT_480_RECTANGLE)
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
     TWM_LOG(TWM_ERROR, "FT6206: error at 0x%x", I2C_TOUCH_ADDR);
     if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
@@ -266,6 +293,14 @@ void setup(void)
     touchInitialized = isFocalTouch = true;
     TWM_LOG(TWM_DEBUG, "FT6206: OK");
   }
+#elif defined(TFT_480_RECTANGLE)
+  touchInitialized = ctp.begin(I2C_TOUCH_ADDR);
+  if (!touchInitialized) {
+    TWM_LOG(TWM_ERROR, "FT5336: error at 0x%x", I2C_TOUCH_ADDR);
+  } else {
+    TWM_LOG(TWM_DEBUG, "FT5336: OK");
+  }
+#endif
   if (!touchInitialized) {
     on_fatal_error();
   }
@@ -273,11 +308,11 @@ void setup(void)
   WindowID id = 1;
   auto theme = wm->getTheme();
   auto xPadding = theme->getXPadding();
+  auto yPadding = theme->getYPadding();
   auto defaultWin = wm->createWindow<DefaultWindow>(
     nullptr,
     id++,
     STY_VISIBLE | STY_TOPLEVEL,
-    /* 0, 0, 0, 0 */
     xPadding,
     xPadding,
     wm->getDisplayWidth() - (xPadding * 2),
@@ -292,7 +327,7 @@ void setup(void)
     id++,
     STY_BUTTON | STY_CHILD | STY_VISIBLE | STY_AUTOSIZE,
     defaultWin->getRect().left + xPadding,
-    theme->getScaledValue(50),
+    defaultWin->getRect().top + yPadding,
     0,
     0,
     "Button"
@@ -306,7 +341,7 @@ void setup(void)
     id++,
     STY_LABEL | STY_CHILD | STY_VISIBLE,
     button1->getRect().right + xPadding,
-    theme->getScaledValue(50),
+    button1->getRect().top,
     button1->getRect().width(),
     theme->getDefaultButtonHeight(),
     "Label"
@@ -315,7 +350,6 @@ void setup(void)
     on_fatal_error();
   }
 
-  auto yPadding = wm->getTheme()->getYPadding();
   testProgressBar = wm->createProgressBar<TestProgressBar>(
     defaultWin,
     id++,
@@ -337,7 +371,7 @@ void setup(void)
     defaultWin->getRect().left + xPadding,
     testProgressBar->getRect().bottom + yPadding,
     theme->getScaledValue(130),
-    theme->getScaledValue(30),
+    theme->getDefaultCheckBoxHeight(),
     "CheckBox"
   );
   if (!testCheckbox) {
@@ -378,9 +412,11 @@ void setup(void)
     on_fatal_error();
   }
   button1->setPrompt(yesNoPromptWnd);
+  wm->getTheme()->drawScreensaver();
+  TWM_LOG(TWM_DEBUG, "setup completed");
 }
 
-#if defined(TFT_320_RECTANGLE)
+#if defined(RECTANGULAR_DISPLAY)
 long mapXCoord(Coord x) noexcept
 {
   return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
@@ -400,12 +436,10 @@ std::pair<Coord, Coord> swapCoords(Coord x, Coord y)
 
 float curProgress = 0.0f;
 float progressStep = wm->getTheme()->getProgressBarIndeterminateStep();
-uint8_t frameCounter = 0;
-u_long accumulator = 0UL;
 
 void loop()
 {
-  u_long before = micros();
+#if !defined(TFT_480_RECTANGLE)
   if (isFocalTouch && focal_ctp.touched()) {
     TS_Point pt = focal_ctp.getPoint();
 #if defined(TFT_320_RECTANGLE)
@@ -423,6 +457,17 @@ void loop()
 #endif
     wm->hitTest(pt.x, pt.y);
   }
+#elif defined(TFT_480_RECTANGLE)
+  if (ctp.touched() > 0) {
+    FT_TS_Point pt = ctp.getPoint();
+# if TFT_ROTATION != 0
+    auto tmp = pt.y;
+    pt.y = mapXCoord(wm->getDisplayHeight() - pt.x);
+    pt.x = mapYCoord(tmp);
+# endif
+    wm->hitTest(pt.x, pt.y);
+  }
+#endif
   if (curProgress < 100.0f) {
     curProgress += progressStep;
   } else {
@@ -431,11 +476,4 @@ void loop()
   testProgressBar->setProgressValue(curProgress);
   wm->update();
   wm->render();
-  if (++frameCounter == 100) {
-    TWM_LOG(TWM_DEBUG, "avg. loop time: %luμs", accumulator / 100);
-    frameCounter = 0;
-    accumulator = 0UL;
-  }
-  accumulator += micros() - before;
-  delay(1);
 }
