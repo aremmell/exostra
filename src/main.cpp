@@ -10,6 +10,7 @@
 //#define TFT_480_ROUND
 //#define TFT_320_RECTANGLE
 #define TFT_480_RECTANGLE
+//#define TFT_800_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
@@ -41,7 +42,7 @@
 # define TS_MAXY DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
 # define TWM_GFX_ADAFRUIT
-# define RECTANGULAR_DISPLAY
+# define EYESPI_DISPLAY
 # include <Adafruit_ILI9341.h>
 /* # define TWM_GFX_ARDUINO
 # include <display/Arduino_ILI9341.h> */
@@ -57,11 +58,29 @@
 # define TS_MAXY DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
 # define TWM_GFX_ADAFRUIT
-# define RECTANGULAR_DISPLAY
+# define EYESPI_DISPLAY
 # include <Adafruit_HX8357.h>
 # include <Adafruit_FT5336.h>
+#elif defined(TFT_800_RECTANGLE)
+# include <Fonts/FreeSans12pt7b.h>
+# define DEFAULT_FONT &FreeSans12pt7b
+# define DISPLAY_WIDTH 800
+# define DISPLAY_HEIGHT 480
+# define TFT_ROTATION 3
+# define TS_MINX 0
+# define TS_MINY 0
+# define TS_MAXX DISPLAY_WIDTH
+# define TS_MAXY DISPLAY_HEIGHT
+# define TWM_GFX_ADAFRUIT
+# define ADAFRUIT_RA8875
+# define EYESPI_DISPLAY
+# include <Adafruit_RA8875.h>
 #else
 # error "invalid display selection"
+#endif
+
+#if DISPLAY_WIDTH != DISPLAY_HEIGHT
+# define COORDINATE_MAPPING
 #endif
 
 #define TFT_SCREENSAVER_AFTER 5 * 60 * 1000
@@ -76,33 +95,49 @@ Adafruit_FT6206 focal_ctp;
 Adafruit_CST8XX cst_ctp;
 #endif
 
-#if defined(ARDUINO_PROS3)
-// Unexpected Maker ProS3.
-# include <UMS3.h>
-UMS3 ums3;
-# define PIN_DC   13
-# define PIN_CS   12
-# define PIN_RST  14
-# define PIN_SCK  36
-# define PIN_MOSI 35
-# define PIN_MISO 37
+#if defined(ARDUINO_PROS3) || defined(ARDUINO_FEATHERS3)
+# define S3
 #endif
 
-#if defined(RECTANGULAR_DISPLAY)
-# if !defined(ARDUINO_PROS3)
-#  error "only the UM ProS3 is configured for use with this display"
+#if defined(S3)
+// Unexpected Maker ProS3 or FeatherS3.
+# include <UMS3.h>
+UMS3 ums3;
+# if defined(ARDUINO_PROS3)
+#  define PIN_DC   13
+#  define PIN_CS   12
+#  define PIN_RST  14
+#  define PIN_SCK  36
+#  define PIN_MOSI 35
+#  define PIN_MISO 37
+# elif defined(ARDUINO_FEATHERS3)
+#  define PIN_CS   01
+#  define PIN_RST  11
+#  define PIN_SCK  36
+#  define PIN_MOSI 35
+#  define PIN_MISO 37
+#  define PIN_INT  10
 # endif
-#if defined(TWM_GFX_ADAFRUIT)
-# if defined(TFT_320_RECTANGLE)
+#endif
+
+#if defined(EYESPI_DISPLAY)
+# if !defined(ARDUINO_PROS3) && !defined(ARDUINO_FEATHERS3)
+#  error "only the UM ProS3 and Feather S3 are configured for use with this display"
+# endif
+# if defined(TWM_GFX_ADAFRUIT)
+#  if defined(TFT_320_RECTANGLE)
 auto display = std::make_shared<Adafruit_ILI9341>(PIN_CS, PIN_DC);
-# elif defined(TFT_480_RECTANGLE)
+#  elif defined(TFT_480_RECTANGLE)
 auto display = std::make_shared<Adafruit_HX8357>(PIN_CS, PIN_DC);
-# endif
+#  elif defined(ADAFRUIT_RA8875)
+auto display = std::make_shared<Adafruit_RA8875>(PIN_CS, PIN_RST);
+#  endif
 auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH);
-#elif defined(TWM_GFX_ARDUINO)
+# elif defined(TWM_GFX_ARDUINO)
 Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
 auto display = std::make_shared<Arduino_ILI9341>(&bus);
 auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH, display.get());
+# endif
 #endif
 
 auto wm = createWindowManager(
@@ -111,7 +146,8 @@ auto wm = createWindowManager(
     std::make_shared<DefaultTheme>(),
     DEFAULT_FONT
 );
-#else
+
+#if !defined(S3)
 // Implied Qualia RGB666 for now.
 # if defined(PLATFORMIO) /// TODO: detect qualia, hopefully remove hack
 #  include <esp32_qualia.h>
@@ -227,7 +263,7 @@ public:
 
 void on_fatal_error()
 {
-#if defined(ARDUINO_PROS3)
+#if defined(S3)
   ums3.setPixelPower(true); // assume pixel could be off.
   ums3.setPixelBrightness(255); // maximum brightness.
   while (true) {
@@ -246,11 +282,12 @@ void on_fatal_error()
 std::shared_ptr<TestProgressBar> testProgressBar;
 std::shared_ptr<TestOKPrompt> okPrompt;
 
-bool touchInitialized = false;
 bool isFocalTouch = false;
 
 void setup(void)
 {
+  bool touchInitialized = false;
+
   while (!Serial) {
     /// TODO: If you want to run without a serial cable, exit this loop
     delay(10);
@@ -259,23 +296,39 @@ void setup(void)
   delay(500);
   TWM_LOG(TWM_DEBUG, "initializing");
 
-#if defined(RECTANGULAR_DISPLAY)
-# if defined(TWM_GFX_ARDUINO)
+#if defined(EYESPI_DISPLAY) && defined(TWM_GFX_ARDUINO)
   bus.begin();
-# endif
+#endif
+
+#if defined(S3)
   ums3.begin();
 #endif
+
   Wire.setClock(1000000);
+#if defined(ADAFRUIT_RA8875)
+  if (!wm->begin(RA8875_800x480)) {
+#else
   if (!wm->begin(0)) {
+#endif
     TWM_LOG(TWM_ERROR, "WindowManager: error");
     on_fatal_error();
   }
   TWM_LOG(TWM_DEBUG, "WindowManager: OK");
-  wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
-  wm->getTheme()->drawScreensaver();
+#if defined(ADAFRUIT_RA8875)
+  display->displayOn(true);
+  display->GPIOX(true);
+  display->PWM1config(true, RA8875_PWM_CLK_DIV1024);
+  display->PWM1out(255);
+  display->graphicsMode();
+#endif
   display->setRotation(TFT_ROTATION);
   display->setCursor(0, 0);
-#if !defined(RECTANGULAR_DISPLAY)
+  wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
+  wm->getTheme()->drawScreensaver();
+#if defined(ADAFRUIT_RA8875)
+
+#else
+#if !defined(EYESPI_DISPLAY)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
@@ -304,6 +357,7 @@ void setup(void)
   if (!touchInitialized) {
     on_fatal_error();
   }
+#endif
 
   WindowID id = 1;
   auto theme = wm->getTheme();
@@ -358,7 +412,7 @@ void setup(void)
     button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2),
     wm->getTheme()->getDefaultProgressBarHeight(),
-    PBR_INDETERMINATE
+    PBR_NORMAL
   );
   if (!testProgressBar) {
     on_fatal_error();
@@ -412,11 +466,13 @@ void setup(void)
     on_fatal_error();
   }
   button1->setPrompt(yesNoPromptWnd);
-  wm->getTheme()->drawScreensaver();
   TWM_LOG(TWM_DEBUG, "setup completed");
 }
 
-#if defined(RECTANGULAR_DISPLAY)
+#if defined(COORDINATE_MAPPING)
+# if TFT_ROTATION != 3
+#  error "only rotation orientation 3 is implemented"
+# endif
 long mapXCoord(Coord x) noexcept
 {
   return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
@@ -439,10 +495,13 @@ float progressStep = wm->getTheme()->getProgressBarIndeterminateStep();
 
 void loop()
 {
+#if defined(ADAFRUIT_RA8875)
+# error "loop not implemented for RA8875"
+#else
 #if !defined(TFT_480_RECTANGLE)
   if (isFocalTouch && focal_ctp.touched()) {
     TS_Point pt = focal_ctp.getPoint();
-#if defined(TFT_320_RECTANGLE)
+#if defined(COORDINATE_MAPPING)
     const auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
@@ -450,7 +509,7 @@ void loop()
     wm->hitTest(pt.x, pt.y);
   } else if (!isFocalTouch && cst_ctp.touched()) {
     CST_TS_Point pt = cst_ctp.getPoint();
-#if defined(TFT_320_RECTANGLE)
+#if defined(COORDINATE_MAPPING)
     const auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
@@ -460,13 +519,14 @@ void loop()
 #elif defined(TFT_480_RECTANGLE)
   if (ctp.touched() > 0) {
     FT_TS_Point pt = ctp.getPoint();
-# if TFT_ROTATION != 0
     auto tmp = pt.y;
+#if defined(COORDINATE_MAPPING)
     pt.y = mapXCoord(wm->getDisplayHeight() - pt.x);
     pt.x = mapYCoord(tmp);
-# endif
+#endif
     wm->hitTest(pt.x, pt.y);
   }
+#endif
 #endif
   if (curProgress < 100.0f) {
     curProgress += progressStep;

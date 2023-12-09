@@ -83,7 +83,9 @@
 
 # if defined(TWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
 #  include <Adafruit_GFX.h>
-#  if __has_include(<Adafruit_SPITFT.h>)
+#  if defined(_ADAFRUIT_RA8875_H)
+    using IGfxDisplay = Adafruit_RA8875;
+#  elif __has_include(<Adafruit_SPITFT.h>)
 #   include <Adafruit_SPITFT.h>
     using IGfxDisplay = Adafruit_SPITFT;
 #  else
@@ -557,9 +559,11 @@ to select a color mode"
 
         DisplaySize getDisplaySize() const final
         {
-            if (_gfxContext->width() <= 320) {
+            auto width  = _gfxContext->width();
+            auto height = _gfxContext->height();
+            if (width <= 320 && height <= 320) {
                 return DisplaySize::Small;
-            } else if (_gfxContext->width() <= 480) {
+            } else if (width <= 480 && height <= 480) {
                 return DisplaySize::Medium;
             } else {
                 return DisplaySize::Large;
