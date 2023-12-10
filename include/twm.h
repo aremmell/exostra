@@ -435,6 +435,7 @@ namespace thumby
         METRIC_CORNER_RADIUS_WINDOW,        /**< Coord */
         METRIC_CORNER_RADIUS_BUTTON,        /**< Coord */
         METRIC_CORNER_RADIUS_PROMPT,        /**< Coord */
+        METRIC_CORNER_RADIUS_CHECKBOX,      /**< Coord */
 
         METRIC_DEF_BUTTON_CX,               /**< Extent */
         METRIC_DEF_BUTTON_CY,               /**< Extent */
@@ -646,6 +647,9 @@ namespace thumby
                 break;
                 case METRIC_CORNER_RADIUS_PROMPT:
                     retval.setCoord(getScaledValue(4));
+                break;
+                case METRIC_CORNER_RADIUS_CHECKBOX:
+                    retval.setCoord(getScaledValue(0));
                 break;
                 case METRIC_DEF_BUTTON_CX:
                     retval.setExtent(abs(max(_gfxContext->width() * 0.19f, 60.0f)));
@@ -959,7 +963,8 @@ namespace thumby
 
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
-            drawWindowBackground(rect, 0, getColor(COLOR_WINDOW_BG));
+            const auto radius = getMetric(METRIC_CORNER_RADIUS_CHECKBOX).getCoord();
+            drawWindowBackground(rect, radius, getColor(COLOR_WINDOW_BG));
             auto checkableRect = Rect(
                 rect.left,
                 rect.top + getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent(),
@@ -967,22 +972,24 @@ namespace thumby
                 rect.top + (rect.height() - getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent())
             );
             checkableRect.top = rect.top + ((rect.height() / 2) - (checkableRect.height() / 2));
-            _gfxContext->fillRect(
+            _gfxContext->fillRoundRect(
                 checkableRect.left,
                 checkableRect.top,
                 checkableRect.width(),
                 checkableRect.height(),
+                radius,
                 getColor(COLOR_CHECKBOX_CHECK_BG)
             );
-            drawWindowFrame(checkableRect, 0, getColor(COLOR_CHECKBOX_CHECK_FRAME));
+            drawWindowFrame(checkableRect, radius, getColor(COLOR_CHECKBOX_CHECK_FRAME));
             if (checked) {
                 auto rectCheckMark = checkableRect;
                 rectCheckMark.deflate(getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent());
-                _gfxContext->fillRect(
+                _gfxContext->fillRoundRect(
                     rectCheckMark.left,
                     rectCheckMark.top,
                     rectCheckMark.width(),
                     rectCheckMark.height(),
+                    radius,
                     getColor(COLOR_CHECKBOX_CHECK)
                 );
             }
