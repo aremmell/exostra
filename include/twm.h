@@ -330,14 +330,14 @@ namespace thumby
 
     enum
     {
-        PBR_NORMAL        = 1 << 0,
-        PBR_INDETERMINATE = 1 << 1
+        STA_ALIVE   = 1 << 0, /**< Active (not yet destroyed). */
+        STA_CHECKED = 1 << 1  /**< Checked/highlighted item. */
     };
 
     enum
     {
-        STA_ALIVE   = 1 << 0, /**< Active (not yet destroyed). */
-        STA_CHECKED = 1 << 1  /**< Checked/highlighted item. */
+        PBR_NORMAL        = 1 << 0, /**< Standard linear-fill progress bar. */
+        PBR_INDETERMINATE = 1 << 1  /**< Marquee-style progress bar. */
     };
 
     enum
