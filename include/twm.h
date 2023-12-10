@@ -67,10 +67,24 @@
         Serial.printf("[%c] (%s:%d): ", prefix, basename(__FILE__), __LINE__); \
         Serial.printf(fmt "\n" __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
+# define TWM_BACKTRACE_FRAMES 5
+# if defined(ESP32) || defined(ESP8266)
+#  include <esp_debug_helpers.h>
+#  define print_backtrace() \
+    ets_install_putc1([](char c) \
+    { \
+        Serial.print(c); \
+    }); \
+    esp_backtrace_print(TWM_BACKTRACE_FRAMES)
+# else
+#  define print_backtrace
+# endif
 #  define TWM_ASSERT(expr) \
     do { \
         if (!(expr)) { \
             TWM_LOG(TWM_ERROR, "!!! ASSERT: '" #expr "'"); \
+            print_backtrace(); \
+            while (true); \
         } \
     } while (false)
 # else
