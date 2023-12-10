@@ -410,6 +410,124 @@ namespace thumby
         COLOR_CHECKBOX_CHECK
     } ColorID;
 
+    typedef enum
+    {
+        METRIC_X_PADDING = 1,               /**< Extent */
+        METRIC_Y_PADDING,                   /**< Extent */
+
+        METRIC_DEF_TEXT_SIZE,               /**< uint8_t */
+
+        METRIC_WINDOW_FRAME_PX,             /**< Extent */
+        METRIC_CORNER_RADIUS_WINDOW,        /**< Coord */
+        METRIC_CORNER_RADIUS_BUTTON,        /**< Coord */
+        METRIC_CORNER_RADIUS_PROMPT,        /**< Coord */
+
+        METRIC_DEF_BUTTON_CX,               /**< Extent */
+        METRIC_DEF_BUTTON_CY,               /**< Extent */
+        METRIC_BUTTON_LABEL_PADDING,        /**< Extent */
+        METRIC_BUTTON_TAPPED_DURATION,      /**< uint32_t */
+
+        METRIC_MAX_PROMPT_CX,               /**< Extent */
+        METRIC_MAX_PROMPT_CY,               /**< Extent */
+
+        METRIC_DEF_PROGBAR_HEIGHT,          /**< Extent */
+        METRIC_PROGBAR_MARQUEE_CX_FACTOR,   /**< float */
+        METRIC_PROGBAR_MARQUEE_STEP,        /**< float */
+
+        METRIC_DEF_CHECKBOX_HEIGHT,         /**< Extent */
+        METRIC_CHECKBOX_CHECK_AREA_PADDING, /**< Extent */
+        METRIC_CHECKBOX_CHECK_MARK_PADDING, /**< Extent */
+        METRIC_CHECKBOX_CHECK_DELAY         /**< uint32_t */
+    } MetricID;
+
+    struct Variant
+    {
+        enum
+        {
+            EMPTY  = 0,
+            EXTENT = 1,
+            COORD  = 2,
+            UINT8  = 3,
+            UINT32 = 4,
+            FLOAT  = 5
+        };
+
+        Variant() = default;
+
+        int getType() const noexcept { return _type; }
+
+        Extent getExtent() const noexcept
+        {
+            TWM_ASSERT(_type == EXTENT);
+            return _extentValue;
+        }
+
+        void setExtent(const Extent& extent) noexcept
+        {
+            _extentValue = extent;
+            _type = EXTENT;
+        }
+
+        Coord getCoord() const noexcept
+        {
+            TWM_ASSERT(_type == COORD);
+            return _coordValue;
+        }
+
+        void setCoord(const Coord& coord) noexcept
+        {
+            _coordValue = coord;
+            _type = COORD;
+        }
+
+        uint8_t getUint8() const noexcept
+        {
+            TWM_ASSERT(_type == UINT8);
+            return _uint8Value;
+        }
+
+        void setUint8(const uint8_t& octet) noexcept
+        {
+            _uint8Value = octet;
+            _type = UINT8;
+        }
+
+        uint32_t getUint32() const noexcept
+        {
+            TWM_ASSERT(_type == UINT32);
+            return _uint32Value;
+        }
+
+        void setUint32(const uint32_t& dword) noexcept
+        {
+            _uint32Value = dword;
+            _type = UINT32;
+        }
+
+        float getFloat() const noexcept
+        {
+            TWM_ASSERT(_type == FLOAT);
+            return _floatValue;
+        }
+
+        void setFloat(const float& flt) noexcept
+        {
+            _floatValue = flt;
+            _type = FLOAT;
+        }
+
+    private:
+        union
+        {
+            Extent _extentValue;
+            Coord _coordValue;
+            uint8_t _uint8Value;
+            uint32_t _uint32Value;
+            float _floatValue = 0.0f;
+        };
+        int _type = EMPTY;
+    };
+
     class ITheme
     {
     public:
@@ -419,33 +537,21 @@ namespace thumby
             Medium,
             Large
         };
+
         virtual void setGfxContext(const GfxContextPtr&) = 0;
 
         virtual Color getColor(ColorID) const = 0;
+        virtual Variant getMetric(MetricID) const = 0;
 
         virtual void drawScreensaver() const = 0;
         virtual void drawDesktopBackground() const = 0;
 
-        virtual Extent getMaximumPromptWidth() const = 0;
-        virtual Extent getMaximumPromptHeight() const = 0;
-
         virtual void setDefaultFont(const Font*) = 0;
         virtual const Font* getDefaultFont() const = 0;
         virtual void setTextSize(uint8_t) const = 0;
-        virtual uint8_t getDefaultTextSize() const = 0;
 
         virtual DisplaySize getDisplaySize() const = 0;
         virtual Extent getScaledValue(Extent) const = 0;
-        virtual Coord getCornerRadius(Style) const = 0;
-        virtual Extent getXPadding() const = 0;
-        virtual Extent getYPadding() const = 0;
-
-        virtual Extent getWindowFrameThickness() const = 0;
-
-        virtual Extent getDefaultButtonWidth() const = 0;
-        virtual Extent getDefaultButtonHeight() const = 0;
-        virtual Extent getButtonLabelPadding() const = 0;
-        virtual u_long getButtonTappedDuration() const = 0;
 
         virtual void drawWindowFrame(const Rect&, Coord, Color) const = 0;
         virtual void drawWindowShadow(const Rect&, Coord, Color) const = 0;
@@ -453,19 +559,9 @@ namespace thumby
         virtual void drawText(const char*, uint8_t, const Rect&,
             uint8_t, Color, const Font*) const = 0;
 
-        virtual Extent getDefaultProgressBarHeight() const = 0;
-        virtual float getProgressBarIndeterminateBandWidthFactor() const = 0;
-        virtual float getProgressBarIndeterminateStep() const = 0;
-
         virtual void drawProgressBarBackground(const Rect&) const = 0;
         virtual void drawProgressBarProgress(const Rect&, float) const = 0;
         virtual void drawProgressBarIndeterminate(const Rect&, float) const = 0;
-
-        virtual Extent getDefaultCheckBoxHeight() const = 0;
-        virtual Rect getCheckBoxCheckableArea(const Rect&) const = 0;
-        virtual Extent getCheckBoxCheckableAreaPadding() const = 0;
-        virtual Extent getCheckBoxCheckMarkPadding() const = 0;
-        virtual u_long getCheckBoxCheckDelay() const = 0;
 
         virtual void drawCheckBox(const char*, bool, const Rect&) const = 0;
     };
@@ -486,33 +582,116 @@ namespace thumby
         Color getColor(ColorID colorID) const final
         {
             switch (colorID) {
-                case COLOR_SCREENSAVER: return 0x0000;
-                case COLOR_DESKTOP: return 0xb59a;
-
-                case COLOR_PROMPT_BG: return 0xef5c;
-                case COLOR_PROMPT_FRAME: return 0x9cf3;
-                case COLOR_PROMPT_SHADOW: return 0xb5b6;
-
-                case COLOR_WINDOW_TEXT: return 0x0000;
-                case COLOR_WINDOW_BG: return 0xdedb;
-                case COLOR_WINDOW_FRAME: return 0x9cf3;
-                case COLOR_WINDOW_SHADOW: return 0xb5b6;
-
-                case COLOR_BUTTON_TEXT: return 0xffff;
-                case COLOR_BUTTON_TEXT_PRESSED: return 0xffff;
-                case COLOR_BUTTON_BG: return 0x8c71;
-                case COLOR_BUTTON_BG_PRESSED: return 0x738e;
-                case COLOR_BUTTON_FRAME: return 0x6b6d;
+                case COLOR_SCREENSAVER:          return 0x0000;
+                case COLOR_DESKTOP:              return 0xb59a;
+                case COLOR_PROMPT_BG:            return 0xef5c;
+                case COLOR_PROMPT_FRAME:         return 0x9cf3;
+                case COLOR_PROMPT_SHADOW:        return 0xb5b6;
+                case COLOR_WINDOW_TEXT:          return 0x0000;
+                case COLOR_WINDOW_BG:            return 0xdedb;
+                case COLOR_WINDOW_FRAME:         return 0x9cf3;
+                case COLOR_WINDOW_SHADOW:        return 0xb5b6;
+                case COLOR_BUTTON_TEXT:          return 0xffff;
+                case COLOR_BUTTON_TEXT_PRESSED:  return 0xffff;
+                case COLOR_BUTTON_BG:            return 0x8c71;
+                case COLOR_BUTTON_BG_PRESSED:    return 0x738e;
+                case COLOR_BUTTON_FRAME:         return 0x6b6d;
                 case COLOR_BUTTON_FRAME_PRESSED: return 0x6b6d;
-
-                case COLOR_PROGRESS_BG: return 0xef5d;
-                case COLOR_PROGRESS_FILL: return 0x0ce0;
-
-                case COLOR_CHECKBOX_CHECK_BG: return 0xef5d;
-                case COLOR_CHECKBOX_CHECK: return 0x3166;
+                case COLOR_PROGRESS_BG:          return 0xef5d;
+                case COLOR_PROGRESS_FILL:        return 0x0ce0;
+                case COLOR_CHECKBOX_CHECK_BG:    return 0xef5d;
+                case COLOR_CHECKBOX_CHECK:       return 0x3166;
                 case COLOR_CHECKBOX_CHECK_FRAME: return 0x9cf3;
-                default: return Color(0);
+                default:
+                    TWM_ASSERT("!invalid color ID");
+                    return Color(0);
             }
+        }
+
+        Variant getMetric(MetricID metricID) const final
+        {
+            Variant retval;
+            switch (metricID) {
+                case METRIC_X_PADDING:
+                    retval.setExtent(abs(_gfxContext->width() * 0.05f));
+                break;
+                case METRIC_Y_PADDING:
+                    retval.setExtent(abs(_gfxContext->height() * 0.05f));
+                break;
+                case METRIC_DEF_TEXT_SIZE:
+                    retval.setUint8(1);
+                break;
+                case METRIC_WINDOW_FRAME_PX:
+                    retval.setExtent(1);
+                break;
+                case METRIC_CORNER_RADIUS_WINDOW:
+                    retval.setCoord(0);
+                break;
+                case METRIC_CORNER_RADIUS_BUTTON:
+                    retval.setCoord(getScaledValue(4));
+                break;
+                case METRIC_CORNER_RADIUS_PROMPT:
+                    retval.setCoord(getScaledValue(4));
+                break;
+                case METRIC_DEF_BUTTON_CX:
+                    retval.setExtent(abs(max(_gfxContext->width() * 0.19f, 60.0f)));
+                break;
+                case METRIC_DEF_BUTTON_CY: {
+                    const auto btnWidth = getMetric(METRIC_DEF_BUTTON_CX).getExtent();
+                    retval.setExtent(abs(btnWidth * 0.52f));
+                }
+                break;
+                case METRIC_BUTTON_LABEL_PADDING:
+                    retval.setExtent(getScaledValue(10));
+                break;
+                case METRIC_BUTTON_TAPPED_DURATION:
+                    retval.setUint32(200);
+                break;
+                case METRIC_MAX_PROMPT_CX:
+                    retval.setExtent(abs(_gfxContext->width() * 0.75f));
+                break;
+                case METRIC_MAX_PROMPT_CY:
+                    retval.setExtent(abs(_gfxContext->height() * 0.75f));
+                break;
+                case METRIC_DEF_PROGBAR_HEIGHT:
+                    retval.setExtent(abs(_gfxContext->height() * 0.10f));
+                break;
+                case METRIC_PROGBAR_MARQUEE_CX_FACTOR:
+                    retval.setFloat(0.33f);
+                break;
+                case METRIC_PROGBAR_MARQUEE_STEP: {
+                    static constexpr float step = 1.0f;
+                    switch (getDisplaySize()) {
+                        default:
+                        case DisplaySize::Small:
+                            retval.setFloat(step);
+                        break;
+                        case DisplaySize::Medium:
+                            retval.setFloat(step * 2.0f);
+                        break;
+                        case DisplaySize::Large:
+                            retval.setFloat(step * 4.0f);
+                        break;
+                    }
+                }
+                break;
+                case METRIC_DEF_CHECKBOX_HEIGHT:
+                    retval.setExtent(abs(_gfxContext->height() * 0.10f));
+                break;
+                case METRIC_CHECKBOX_CHECK_AREA_PADDING:
+                    retval.setExtent(getScaledValue(2));
+                break;
+                case METRIC_CHECKBOX_CHECK_MARK_PADDING:
+                    retval.setExtent(getScaledValue(2));
+                break;
+                case METRIC_CHECKBOX_CHECK_DELAY:
+                    retval.setUint32(200);
+                break;
+                default:
+                    TWM_ASSERT(!"invalid metric ID");
+                break;
+            }
+            return retval;
         }
 
         void drawScreensaver() const final
@@ -525,16 +704,6 @@ namespace thumby
             _gfxContext->fillScreen(getColor(COLOR_DESKTOP));
         }
 
-        Extent getMaximumPromptWidth() const final
-        {
-            return abs(_gfxContext->width() * 0.75f);
-        }
-
-        Extent getMaximumPromptHeight() const final
-        {
-            return abs(_gfxContext->height() * 0.75f);
-        }
-
         void setDefaultFont(const Font* font) final
         {
             _defaultFont = font;
@@ -543,12 +712,11 @@ namespace thumby
 
         const Font* getDefaultFont() const final { return _defaultFont; }
         void setTextSize(uint8_t size) const final { _gfxContext->setTextSize(size); }
-        uint8_t getDefaultTextSize() const final { return 1; }
 
         DisplaySize getDisplaySize() const final
         {
-            auto width  = _gfxContext->width();
-            auto height = _gfxContext->height();
+            const auto width  = _gfxContext->width();
+            const auto height = _gfxContext->height();
             if (width <= 320 && height <= 320) {
                 return DisplaySize::Small;
             } else if (width <= 480 && height <= 480) {
@@ -571,34 +739,10 @@ namespace thumby
             }
         }
 
-        Coord getCornerRadius(Style windowStyle) const final
-        {
-            Coord radius = 0;
-            if (bitsHigh(windowStyle, STY_BUTTON)) {
-                radius = 4;
-            } else if (bitsHigh(windowStyle, STY_PROMPT)) {
-                radius = 4;
-            }
-            return getScaledValue(radius);
-        }
-
-        Extent getXPadding() const final { return abs(_gfxContext->width() * 0.05f); }
-        Extent getYPadding() const final { return abs(_gfxContext->height() * 0.05f); }
-        Extent getWindowFrameThickness() const final { return 1; }
-
-        Extent getDefaultButtonWidth() const final
-        {
-          return abs(max(_gfxContext->width() * 0.19f, 60.0f));
-        }
-
-        Extent getDefaultButtonHeight() const final { return abs(getDefaultButtonWidth() * 0.52f); }
-        Extent getButtonLabelPadding() const final { return getScaledValue(10); }
-        u_long getButtonTappedDuration() const final { return 200UL; }
-
         void drawWindowFrame(const Rect& rect, Coord radius, Color color) const final
         {
             auto tmp = rect;
-            auto pixels = getWindowFrameThickness();
+            auto pixels = getMetric(METRIC_WINDOW_FRAME_PX).getExtent();
             while (pixels-- > 0) {
                 _gfxContext->drawRoundRect(tmp.left, tmp.top, tmp.width(), tmp.height(),
                     radius, color);
@@ -608,7 +752,7 @@ namespace thumby
 
         void drawWindowShadow(const Rect& rect, Coord radius, Color color) const final
         {
-            const auto thickness = getWindowFrameThickness();
+            const auto thickness = getMetric(METRIC_WINDOW_FRAME_PX).getExtent();
             _gfxContext->drawLine(
                 rect.left + radius + thickness,
                 rect.bottom,
@@ -627,14 +771,8 @@ namespace thumby
 
         void drawWindowBackground(const Rect& rect, Coord radius, Color color) const final
         {
-            _gfxContext->fillRoundRect(
-                rect.left,
-                rect.top,
-                rect.width(),
-                rect.height(),
-                radius,
-                color
-            );
+            _gfxContext->fillRoundRect(rect.left, rect.top, rect.width(), rect.height(),
+                radius, color);
         }
 
         void drawText(const char* text, uint8_t flags, const Rect& rect,
@@ -656,11 +794,11 @@ namespace thumby
                 _gfxContext->getTextBounds(text, rect.left, y, &x, &y, &w, &h);
                 yAccum = rect.top + (rect.height() / 2) + (h / 2) - 1;
             } else {
-                yAccum = rect.top + getYPadding();
+                yAccum = rect.top + getMetric(METRIC_Y_PADDING).getExtent();
             }
 
             const Extent xPadding =
-                ((singleLine && !xCenter) ? 0 : getXPadding());
+                ((singleLine && !xCenter) ? 0 : getMetric(METRIC_X_PADDING).getExtent());
             const Extent xExtent = rect.right - xPadding;
             const char* cursor = text;
 
@@ -754,24 +892,6 @@ namespace thumby
             }
         }
 
-        Extent getDefaultProgressBarHeight() const final
-        {
-            return abs(_gfxContext->height() * 0.10f);
-        }
-
-        float getProgressBarIndeterminateBandWidthFactor() const final { return 0.33f; }
-
-        float getProgressBarIndeterminateStep() const final
-        {
-            static constexpr float step = 1.0f;
-            switch (getDisplaySize()) {
-                default:
-                case DisplaySize::Small:  return step;
-                case DisplaySize::Medium: return step * 2;
-                case DisplaySize::Large:  return step * 4;
-            }
-        }
-
         void drawProgressBarBackground(const Rect& rect) const final
         {
             _gfxContext->fillRect(rect.left, rect.top, rect.width(), rect.height(),
@@ -782,7 +902,7 @@ namespace thumby
         {
             TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
             Rect barRect = rect;
-            barRect.deflate(getWindowFrameThickness() * 2);
+            barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
             float progressWidth = (barRect.width() * (min(100.0f, percent) / 100.0f));
             barRect.right = barRect.left + abs(progressWidth);
             _gfxContext->fillRect(barRect.left, barRect.top, barRect.width(),
@@ -793,19 +913,20 @@ namespace thumby
         {
             TWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
             Rect barRect = rect;
-            barRect.deflate(getWindowFrameThickness() * 2);
-            Extent bandWidth
-                = (barRect.width() * getProgressBarIndeterminateBandWidthFactor());
+            barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
+            const auto cxFactor = getMetric(METRIC_PROGBAR_MARQUEE_CX_FACTOR).getFloat();
+            Extent marqueeWidth
+                = (barRect.width() * cxFactor);
             Coord offset
-                = (barRect.width() + bandWidth) * (min(100.0f, counter) / 100.0f);
-            static Coord reverseOffset = bandWidth;
+                = (barRect.width() + marqueeWidth) * (min(100.0f, counter) / 100.0f);
+            static Coord reverseOffset = marqueeWidth;
 
             Coord x = 0;
             Extent width = 0;
-            if (offset < bandWidth) {
+            if (offset < marqueeWidth) {
                 x = barRect.left;
                 if (counter <= __FLT_EPSILON__) {
-                    reverseOffset = bandWidth;
+                    reverseOffset = marqueeWidth;
                 }
                 width = offset;
             } else {
@@ -817,7 +938,7 @@ namespace thumby
                     barRect.right
                 );
                 width = min(
-                    bandWidth,
+                    marqueeWidth,
                     static_cast<Extent>(barRect.right - x)
                 );
             }
@@ -825,32 +946,17 @@ namespace thumby
                 getColor(COLOR_PROGRESS_FILL));
         }
 
-        Extent getDefaultCheckBoxHeight() const final
+        void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
-            return abs(_gfxContext->height() * 0.10f);
-        }
-
-        Rect getCheckBoxCheckableArea(const Rect& rect) const final
-        {
-            auto checkPadding = getScaledValue(getCheckBoxCheckableAreaPadding());
-            Rect checkableRect(
+            drawWindowBackground(rect, 0, getColor(COLOR_WINDOW_BG));
+            const auto checkPadding = getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent();
+            auto checkableRect = Rect(
                 rect.left,
                 rect.top + checkPadding,
                 rect.left + (rect.height() - (checkPadding * 2)),
                 rect.top + (rect.height() - checkPadding)
             );
             checkableRect.top = rect.top + ((rect.height() / 2) - (checkableRect.height() / 2));
-            return checkableRect;
-        }
-
-        Extent getCheckBoxCheckableAreaPadding() const final { return 2; }
-        Extent getCheckBoxCheckMarkPadding() const final { return 2; }
-        u_long getCheckBoxCheckDelay() const final { return 200UL; }
-
-        void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
-        {
-            drawWindowBackground(rect, 0, getColor(COLOR_WINDOW_BG));
-            auto checkableRect = getCheckBoxCheckableArea(rect);
             _gfxContext->fillRect(
                 checkableRect.left,
                 checkableRect.top,
@@ -859,9 +965,9 @@ namespace thumby
                 getColor(COLOR_CHECKBOX_CHECK_BG)
             );
             drawWindowFrame(checkableRect, 0, getColor(COLOR_CHECKBOX_CHECK_FRAME));
+            auto checkMarkPadding = getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent();
             if (checked) {
                 auto rectCheckMark = checkableRect;
-                auto checkMarkPadding = getScaledValue(getCheckBoxCheckMarkPadding());
                 rectCheckMark.deflate(checkMarkPadding);
                 _gfxContext->fillRect(
                     rectCheckMark.left,
@@ -871,15 +977,20 @@ namespace thumby
                     getColor(COLOR_CHECKBOX_CHECK)
                 );
             }
-            auto checkPadding = getScaledValue(getCheckBoxCheckableAreaPadding());
             Rect textRect(
-                checkableRect.right + checkPadding,
+                checkableRect.right + checkMarkPadding,
                 rect.top,
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
             );
-            drawText(lbl, DT_SINGLE | DT_ELLIPSIS, textRect, getDefaultTextSize(),
-                getColor(COLOR_WINDOW_TEXT), getDefaultFont());
+            drawText(
+                lbl,
+                DT_SINGLE | DT_ELLIPSIS,
+                textRect,
+                getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
+                getColor(COLOR_WINDOW_TEXT),
+                getDefaultFont()
+            );
         }
 
     private:
@@ -1095,19 +1206,18 @@ namespace thumby
             const GfxContextPtr& gfxContext,
             const ThemePtr& theme,
             const Font* defaultFont
-        ) : _gfxDisplay(gfxDisplay), _gfxContext(gfxContext), _theme(theme)
+        ) : _gfxDisplay(gfxDisplay), _gfxContext(gfxContext), _theme(theme),
+            _registry(std::make_shared<WindowContainer>())
         {
+            TWM_ASSERT(_registry);
             TWM_ASSERT(_gfxDisplay);
             TWM_ASSERT(_gfxContext);
             TWM_ASSERT(_theme);
-            if (_theme && _gfxContext) {
-                _displayWidth  = _gfxContext->width();
-                _displayHeight = _gfxContext->height();
-                _theme->setGfxContext(_gfxContext);
-                _theme->setDefaultFont(defaultFont);
-            }
-            _registry = std::make_shared<WindowContainer>();
-            TWM_ASSERT(_registry);
+
+            _displayWidth  = _gfxContext->width();
+            _displayHeight = _gfxContext->height();
+            _theme->setGfxContext(_gfxContext);
+            _theme->setDefaultFont(defaultFont);
         }
 
         virtual ~WindowManager()
@@ -1220,10 +1330,14 @@ namespace thumby
         )
         {
             TWM_ASSERT(bitsHigh(style, STY_PROMPT));
-            Extent width = min(_theme->getMaximumPromptWidth(),
-                static_cast<Extent>(getDisplayWidth() - (_theme->getXPadding() * 2)));
-            Extent height = min(_theme->getMaximumPromptHeight(),
-                static_cast<Extent>(getDisplayHeight() - (_theme->getYPadding() * 2)));
+            const auto maxWidth  = _theme->getMetric(METRIC_MAX_PROMPT_CX).getExtent();
+            const auto maxHeight = _theme->getMetric(METRIC_MAX_PROMPT_CY).getExtent();
+            const auto xPadding  = _theme->getMetric(METRIC_X_PADDING).getExtent();
+            const auto yPadding  = _theme->getMetric(METRIC_Y_PADDING).getExtent();
+            Extent width = min(maxWidth,
+                static_cast<Extent>(getDisplayWidth() - (xPadding * 2)));
+            Extent height = min(maxHeight,
+                static_cast<Extent>(getDisplayHeight() - (yPadding * 2)));
             auto prompt = createWindow<TPrompt>(
                 parent,
                 id,
@@ -1270,7 +1384,7 @@ namespace thumby
 
         void hitTest(Coord x, Coord y)
         {
-            auto state = getState();
+            const auto state = getState();
             if (bitsHigh(state, WMS_SSAVER_ENABLED)) {
                 _ssaverEpoch = millis();
                 if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
@@ -1296,7 +1410,7 @@ namespace thumby
         {
 #if defined(TWM_DIAGNOSTICS)
             static uint8_t invocationCount = 0;
-            auto beginTime = micros();
+            const auto beginTime = micros();
 #endif
             auto state = getState();
             if (bitsHigh(state, WMS_SSAVER_ENABLED)) {
@@ -1327,7 +1441,7 @@ namespace thumby
                     if (!win->isDrawable()) {
                         return true;
                     }
-                    auto windowRect = win->getRect();
+                    const auto windowRect = win->getRect();
                     bool covered = false;
                     _registry->forEachChildReverse([&](const WindowPtr& other)
                     {
@@ -1382,7 +1496,7 @@ namespace thumby
         {
 #if defined(TWM_DIAGNOSTICS)
             static uint8_t invocationCount = 0;
-            auto beginTime = micros();
+            const auto beginTime = micros();
 #endif
             /// TODO: implement different calls for different color modes
 # if defined(TWM_GFX_ADAFRUIT)
@@ -1453,12 +1567,11 @@ namespace thumby
         ) : _wm(wm), _parent(parent), _rect(rect), _style(style), _id(id), _text(text)
         {
             auto theme = _getTheme();
-            if (theme) {
-                _bgColor     = theme->getColor(COLOR_WINDOW_BG);
-                _textColor   = theme->getColor(COLOR_WINDOW_TEXT);
-                _frameColor  = theme->getColor(COLOR_WINDOW_FRAME);
-                _shadowColor = theme->getColor(COLOR_WINDOW_SHADOW);
-            }
+            TWM_ASSERT(theme != nullptr);
+            _bgColor     = theme->getColor(COLOR_WINDOW_BG);
+            _textColor   = theme->getColor(COLOR_WINDOW_TEXT);
+            _frameColor  = theme->getColor(COLOR_WINDOW_FRAME);
+            _shadowColor = theme->getColor(COLOR_WINDOW_SHADOW);
         }
 
         virtual ~Window() = default;
@@ -1498,15 +1611,15 @@ namespace thumby
         void setText(const std::string& text) override { _text = text; }
 
         Color getBgColor() const noexcept override { return _bgColor; }
-        void setBgColor(Color Color) noexcept override { _bgColor = Color; }
+        void setBgColor(Color color) noexcept override { _bgColor = color; }
         Color getTextColor() const noexcept override { return _textColor; }
-        void setTextColor(Color Color) noexcept override { _textColor = Color; }
+        void setTextColor(Color color) noexcept override { _textColor = color; }
 
         Color getFrameColor() const noexcept override { return _frameColor; }
-        void setFrameColor(Color Color) noexcept override { _frameColor = Color; }
+        void setFrameColor(Color color) noexcept override { _frameColor = color; }
 
         Color getShadowColor() const noexcept override { return _shadowColor; }
-        void setShadowColor(Color Color) noexcept override { _shadowColor = Color; }
+        void setShadowColor(Color color) noexcept override { _shadowColor = color; }
 
         Coord getCornerRadius() const noexcept override { return _cornerRadius; }
         void setCornerRadius(Coord radius) noexcept override { _cornerRadius = radius; }
@@ -1658,7 +1771,13 @@ namespace thumby
         // ====== Begin message handlers ======
 
         // MSG_CREATE: p1 = 0, p2 = 0.
-        bool onCreate(MsgParam p1, MsgParam p2) override { return true; }
+        bool onCreate(MsgParam p1, MsgParam p2) override
+        {
+            auto theme = _getTheme();
+            TWM_ASSERT(theme != nullptr);
+            setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_WINDOW).getCoord());
+            return true;
+        }
 
         // MSG_DESTROY: p1 = 0, p2 = 0.
         bool onDestroy(MsgParam p1, MsgParam p2) override
@@ -1671,20 +1790,18 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                auto rect   = getRect();
-                auto style  = getStyle();
-                auto radius = theme->getCornerRadius(style);
-                theme->drawWindowBackground(rect, radius, getBgColor());
-                if (bitsHigh(style, STY_FRAME)) {
-                    theme->drawWindowFrame(rect, radius, getFrameColor());
-                }
-                if (bitsHigh(style, STY_SHADOW)) {
-                    theme->drawWindowShadow(rect, radius, getShadowColor());
-                }
-                return true;
+            TWM_ASSERT(theme != nullptr);
+            const auto rect   = getRect();
+            const auto style  = getStyle();
+            const auto radius = getCornerRadius();
+            theme->drawWindowBackground(rect, radius, getBgColor());
+            if (bitsHigh(style, STY_FRAME)) {
+                theme->drawWindowFrame(rect, radius, getFrameColor());
             }
-            return false;
+            if (bitsHigh(style, STY_SHADOW)) {
+                theme->drawWindowShadow(rect, radius, getShadowColor());
+            }
+            return true;
         }
 
         // MSG_INPUT: p1 = (loword: type), p2 = (hiword: x, loword: y).
@@ -1763,52 +1880,66 @@ namespace thumby
             _lastTapped = millis();
             routeMessage(MSG_DRAW);
             auto parent = getParent();
+            TWM_ASSERT(parent != nullptr);
             if (parent) {
                 parent->queueMessage(MSG_EVENT, EVT_CHILD_TAPPED, getID());
             }
+            return parent != nullptr;
+        }
+
+        bool onCreate(MsgParam p1, MsgParam p2) override
+        {
+            if (!Window::onCreate(p1, p2)) {
+                return false;
+            }
+
+            auto theme = _getTheme();
+            TWM_ASSERT(theme != nullptr);
+            setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord());
             return true;
         }
 
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                bool pressed = (millis() - _lastTapped < theme->getButtonTappedDuration());
-                auto rect = getRect();
-                auto radius = theme->getCornerRadius(getStyle());
-                theme->drawWindowBackground(rect, radius,
-                    theme->getColor(pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG));
-                theme->drawWindowFrame(rect, radius,
-                    theme->getColor(pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME));
-                theme->drawText(
-                    getText().c_str(),
-                    DT_SINGLE | DT_CENTER,
-                    rect,
-                    theme->getDefaultTextSize(),
-                    theme->getColor(pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT),
-                    theme->getDefaultFont()
-                );
-                return true;
-            }
-            return false;
+            TWM_ASSERT(theme != nullptr);
+            const auto duration = theme->getMetric(METRIC_BUTTON_TAPPED_DURATION).getUint32();
+            const bool pressed = (millis() - _lastTapped < duration);
+            const auto rect = getRect();
+            const auto radius = theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord();
+            theme->drawWindowBackground(rect, radius,
+                theme->getColor(pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG));
+            theme->drawWindowFrame(rect, radius,
+                theme->getColor(pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME));
+            theme->drawText(
+                getText().c_str(),
+                DT_SINGLE | DT_CENTER,
+                rect,
+                theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
+                theme->getColor(pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT),
+                theme->getDefaultFont()
+            );
+            return true;
         }
 
         bool onResize(MsgParam p1, MsgParam p2) override
         {
             auto gfx = _getGfxContext();
+            TWM_ASSERT(gfx != nullptr);
             auto theme = _getTheme();
-            if (gfx && theme) {
-                Coord x, y;
-                Extent width, height;
-                Rect rect = getRect();
-                gfx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
-                rect.right = rect.left + max(width, theme->getDefaultButtonWidth()) + (theme->getButtonLabelPadding() * 2);
-                rect.bottom = rect.top + theme->getDefaultButtonHeight();
-                setRect(rect);
-                /// TODO: if not autosize, clip label, perhaps with ellipsis.
-                return true;
-            }
-            return false;
+            TWM_ASSERT(theme != nullptr);
+            Coord x, y;
+            Extent width, height;
+            Rect rect = getRect();
+            gfx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
+            const auto defWidth = theme->getMetric(METRIC_DEF_BUTTON_CX).getExtent();
+            const auto defHeight = theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
+            const auto lblPadding = theme->getMetric(METRIC_BUTTON_LABEL_PADDING).getExtent();
+            rect.right = rect.left + max(width, defWidth) + (lblPadding * 2);
+            rect.bottom = rect.top + defHeight;
+            setRect(rect);
+            /// TODO: if not autosize, clip label, perhaps with ellipsis.
+            return true;
         }
 
     protected:
@@ -1825,20 +1956,18 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                Rect rect = getRect();
-                theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
-                theme->drawText(
-                    getText().c_str(),
-                    DT_SINGLE | DT_ELLIPSIS,
-                    rect,
-                    theme->getDefaultTextSize(),
-                    getTextColor(),
-                    theme->getDefaultFont()
-                );
-                return true;
-            }
-            return false;
+            TWM_ASSERT(theme != nullptr);
+            const auto rect = getRect();
+            theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
+            theme->drawText(
+                getText().c_str(),
+                DT_SINGLE | DT_ELLIPSIS,
+                rect,
+                theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
+                getTextColor(),
+                theme->getDefaultFont()
+            );
+            return true;
         }
     };
 
@@ -1852,20 +1981,18 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                Rect rect = getRect();
-                theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
-                theme->drawText(
-                    getText().c_str(),
-                    DT_CENTER,
-                    rect,
-                    theme->getDefaultTextSize(),
-                    getTextColor(),
-                    theme->getDefaultFont()
-                );
-                return true;
-            }
-            return false;
+            TWM_ASSERT(theme != nullptr);
+            const auto rect = getRect();
+            theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
+            theme->drawText(
+                getText().c_str(),
+                DT_CENTER,
+                rect,
+                theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
+                getTextColor(),
+                theme->getDefaultFont()
+            );
+            return true;
         }
     };
 
@@ -1889,23 +2016,18 @@ namespace thumby
         bool addButton(const ButtonInfo& bi)
         {
             auto wm = _getWM();
-            if (wm) {
-                auto theme = _getTheme();
-                if (theme) {
-                    auto btn = wm->createWindow<Button>(
-                        shared_from_this(),
-                        bi.first,
-                        STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON,
-                        0,
-                        0,
-                        0,
-                        0,
-                        bi.second
-                    );
-                    return btn != nullptr;
-                }
-            }
-            return false;
+            TWM_ASSERT(wm != nullptr);
+            auto btn = wm->createWindow<Button>(
+                shared_from_this(),
+                bi.first,
+                STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON,
+                0,
+                0,
+                0,
+                0,
+                bi.second
+            );
+            return btn != nullptr;
         }
 
         void setText(const std::string& text) override
@@ -1918,78 +2040,79 @@ namespace thumby
         bool onCreate(MsgParam p1, MsgParam p2) override
         {
             auto wm = _getWM();
-            if (wm) {
-                auto theme = _getTheme();
-                if (theme) {
-                    setBgColor(theme->getColor(COLOR_PROMPT_BG));
-                    setFrameColor(theme->getColor(COLOR_PROMPT_FRAME));
-                    setShadowColor(theme->getColor(COLOR_PROMPT_SHADOW));
-                    Rect rect = getRect();
-                    _label = wm->createWindow<MultilineLabel>(
-                        shared_from_this(),
-                        LabelID,
-                        STY_CHILD | STY_VISIBLE | STY_LABEL,
-                        rect.left + theme->getXPadding(),
-                        rect.top + theme->getYPadding(),
-                        rect.width() - (theme->getXPadding() * 2),
-                        rect.height() - ((theme->getYPadding() * 3) + theme->getDefaultButtonHeight()),
-                        getText()
-                    );
-                    if (!_label) {
-                        return false;
-                    }
-                    _label->setBgColor(theme->getColor(COLOR_PROMPT_BG));
-                    auto rectLbl = _label->getRect();
-                    /// TODO: refactor this. prompts should have styles, such as
-                    // PROMPT_1BUTTON and PROMPT_2BUTTON. they should then take
-                    // the appropriate button metadata in their constructor
-                    bool first = true;
-                    uint8_t numButtons = 0;
-                    forEachChild([&](const WindowPtr& child)
-                    {
-                        if (bitsHigh(child->getStyle(), STY_BUTTON)) {
-                            numButtons++;
-                        }
-                        return true;
-                    });
-                    forEachChild([&](const WindowPtr& child)
-                    {
-                        if (!bitsHigh(child->getStyle(), STY_BUTTON)) {
-                            return true;
-                        }
-                        Rect rectBtn = child->getRect();
-                        rectBtn.top = rectLbl.bottom + theme->getYPadding();
-                        rectBtn.bottom = rectBtn.top + theme->getDefaultButtonHeight();
-                        auto width = rectBtn.width();
-                        if (first) {
-                            first = false;
-                            switch (numButtons) {
-                                case 1: {
-                                    rectBtn.left
-                                        = rect.left + (rect.width() / 2) - (width / 2);
-                                }
-                                break;
-                                case 2: {
-                                    rectBtn.left = rect.left + theme->getXPadding();
-                                }
-                                break;
-                                default:
-                                    TWM_ASSERT(false);
-                                return false;
-                            }
-                            rectBtn.right = rectBtn.left + width;
-                        } else {
-                            rectBtn.right = rect.right - theme->getXPadding();
-                            rectBtn.left = rectBtn.right - width;
-                        }
-                        child->setRect(rectBtn);
-                        return true;
-                    });
-
+            TWM_ASSERT(wm != nullptr);
+            auto theme = _getTheme();
+            TWM_ASSERT(theme != nullptr);
+            setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_PROMPT).getCoord());
+            setBgColor(theme->getColor(COLOR_PROMPT_BG));
+            setFrameColor(theme->getColor(COLOR_PROMPT_FRAME));
+            setShadowColor(theme->getColor(COLOR_PROMPT_SHADOW));
+            const auto rect = getRect();
+            const auto xPadding = theme->getMetric(METRIC_X_PADDING).getExtent();
+            const auto yPadding = theme->getMetric(METRIC_Y_PADDING).getExtent();
+            const auto defBtnHeight = theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
+            _label = wm->createWindow<MultilineLabel>(
+                shared_from_this(),
+                LabelID,
+                STY_CHILD | STY_VISIBLE | STY_LABEL,
+                rect.left + xPadding,
+                rect.top + yPadding,
+                rect.width() - (xPadding * 2),
+                rect.height() - ((yPadding * 3) + defBtnHeight),
+                getText()
+            );
+            if (!_label) {
+                return false;
+            }
+            _label->setBgColor(theme->getColor(COLOR_PROMPT_BG));
+            auto rectLbl = _label->getRect();
+            /// TODO: refactor this. prompts should have styles, such as
+            // PROMPT_1BUTTON and PROMPT_2BUTTON. they should then take
+            // the appropriate button metadata in their constructor
+            bool first = true;
+            uint8_t numButtons = 0;
+            forEachChild([&](const WindowPtr& child)
+            {
+                if (bitsHigh(child->getStyle(), STY_BUTTON)) {
+                    numButtons++;
+                }
+                return true;
+            });
+            forEachChild([&](const WindowPtr& child)
+            {
+                if (!bitsHigh(child->getStyle(), STY_BUTTON)) {
                     return true;
                 }
-            }
-            return false;
+                Rect rectBtn = child->getRect();
+                rectBtn.top = rectLbl.bottom + yPadding;
+                rectBtn.bottom = rectBtn.top + defBtnHeight;
+                auto width = rectBtn.width();
+                if (first) {
+                    first = false;
+                    switch (numButtons) {
+                        case 1: {
+                            rectBtn.left
+                                = rect.left + (rect.width() / 2) - (width / 2);
+                        }
+                        break;
+                        case 2: {
+                            rectBtn.left = rect.left + xPadding;
+                        }
+                        break;
+                        default:
+                            TWM_ASSERT(false);
+                        return false;
+                    }
+                    rectBtn.right = rectBtn.left + width;
+                } else {
+                    rectBtn.right = rect.right - xPadding;
+                    rectBtn.left = rectBtn.right - width;
+                }
+                child->setRect(rectBtn);
+                return true;
+            });
+
+            return true;
         }
 
         bool onEvent(MsgParam p1, MsgParam p2) override
@@ -2030,18 +2153,17 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                Rect rect = getRect();
-                theme->drawProgressBarBackground(rect);
-                theme->drawWindowFrame(rect, getCornerRadius(), getFrameColor());
-                if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
-                    theme->drawProgressBarProgress(rect, getProgressValue());
-                    return true;
-                }
-                if (bitsHigh(getProgressBarStyle(), PBR_INDETERMINATE)) {
-                    theme->drawProgressBarIndeterminate(rect, getProgressValue());
-                    return true;
-                }
+            TWM_ASSERT(theme != nullptr);
+            const auto rect = getRect();
+            theme->drawProgressBarBackground(rect);
+            theme->drawWindowFrame(rect, getCornerRadius(), getFrameColor());
+            if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
+                theme->drawProgressBarProgress(rect, getProgressValue());
+                return true;
+            }
+            if (bitsHigh(getProgressBarStyle(), PBR_INDETERMINATE)) {
+                theme->drawProgressBarIndeterminate(rect, getProgressValue());
+                return true;
             }
             return false;
         }
@@ -2061,10 +2183,11 @@ namespace thumby
         {
             if (isChecked() != checked) {
                 _lastToggle = millis();
+                const auto state = getState();
                 if (checked) {
-                    setState(getState() | STA_CHECKED);
+                    setState(state | STA_CHECKED);
                 } else {
-                    setState(getState() & ~STA_CHECKED);
+                    setState(state & ~STA_CHECKED);
                 }
                 redraw();
             }
@@ -2076,24 +2199,21 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                Rect rect = getRect();
-                theme->drawCheckBox(getText().c_str(), isChecked(), rect);
-                return true;
-            }
-            return false;
+            TWM_ASSERT(theme != nullptr);
+            const auto rect = getRect();
+            theme->drawCheckBox(getText().c_str(), isChecked(), rect);
+            return true;
         }
 
         bool onTapped(Coord x, Coord y) override
         {
             auto theme = _getTheme();
-            if (theme) {
-                if (millis() - _lastToggle >= theme->getCheckBoxCheckDelay()) {
-                    setChecked(!isChecked());
-                    return true;
-                }
+            TWM_ASSERT(theme != nullptr);
+            const auto delay = theme->getMetric(METRIC_CHECKBOX_CHECK_DELAY).getUint32();
+            if (millis() - _lastToggle >= delay) {
+                setChecked(!isChecked());
             }
-            return false;
+            return true;
         }
 
     private:

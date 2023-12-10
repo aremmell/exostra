@@ -361,8 +361,8 @@ void setup(void)
 
   WindowID id = 1;
   auto theme = wm->getTheme();
-  auto xPadding = theme->getXPadding();
-  auto yPadding = theme->getYPadding();
+  auto xPadding = theme->getMetric(METRIC_X_PADDING).getExtent();
+  auto yPadding = theme->getMetric(METRIC_Y_PADDING).getExtent();
   auto defaultWin = wm->createWindow<DefaultWindow>(
     nullptr,
     id++,
@@ -397,7 +397,7 @@ void setup(void)
     button1->getRect().right + xPadding,
     button1->getRect().top,
     button1->getRect().width(),
-    theme->getDefaultButtonHeight(),
+    theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent(),
     "Label"
   );
   if (!label1) {
@@ -411,7 +411,7 @@ void setup(void)
     defaultWin->getRect().left + xPadding,
     button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2),
-    wm->getTheme()->getDefaultProgressBarHeight(),
+    theme->getMetric(METRIC_DEF_PROGBAR_HEIGHT).getExtent(),
     PBR_NORMAL
   );
   if (!testProgressBar) {
@@ -425,7 +425,7 @@ void setup(void)
     defaultWin->getRect().left + xPadding,
     testProgressBar->getRect().bottom + yPadding,
     theme->getScaledValue(130),
-    theme->getDefaultCheckBoxHeight(),
+    theme->getMetric(METRIC_DEF_CHECKBOX_HEIGHT).getExtent(),
     "CheckBox"
   );
   if (!testCheckbox) {
@@ -491,7 +491,7 @@ std::pair<Coord, Coord> swapCoords(Coord x, Coord y)
 #endif
 
 float curProgress = 0.0f;
-float progressStep = wm->getTheme()->getProgressBarIndeterminateStep();
+float progressStep = wm->getTheme()->getMetric(METRIC_PROGBAR_MARQUEE_STEP).getFloat();
 
 void loop()
 {
