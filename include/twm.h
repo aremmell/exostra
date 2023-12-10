@@ -2067,6 +2067,7 @@ namespace thumby
             const auto rect = getRect();
             const auto xPadding = theme->getMetric(METRIC_X_PADDING).getExtent();
             const auto yPadding = theme->getMetric(METRIC_Y_PADDING).getExtent();
+            const auto defBtnHeight = theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
             _label = wm->createWindow<MultilineLabel>(
                 shared_from_this(),
                 LabelID,
@@ -2074,7 +2075,7 @@ namespace thumby
                 rect.left + xPadding,
                 rect.top + yPadding,
                 rect.width() - (xPadding * 2),
-                rect.height() - ((yPadding * 3) + theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent()),
+                rect.height() - ((yPadding * 3) + defBtnHeight),
                 getText()
             );
             if (!_label) {
@@ -2101,13 +2102,14 @@ namespace thumby
                 }
                 auto rectBtn = child->getRect();
                 rectBtn.top = rectLbl.bottom + yPadding;
-                rectBtn.bottom = rectBtn.top + theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
+                rectBtn.bottom = rectBtn.top + defBtnHeight;
+                auto width = rectBtn.width();
                 if (first) {
                     first = false;
                     switch (numButtons) {
                         case 1: {
                             rectBtn.left
-                                = rect.left + (rect.width() / 2) - (rectBtn.width() / 2);
+                                = rect.left + (rect.width() / 2) - (width / 2);
                         }
                         break;
                         case 2: {
@@ -2118,10 +2120,10 @@ namespace thumby
                             TWM_ASSERT(false);
                         return false;
                     }
-                    rectBtn.right = rectBtn.left + rectBtn.width();
+                    rectBtn.right = rectBtn.left + width;
                 } else {
                     rectBtn.right = rect.right - xPadding;
-                    rectBtn.left = rectBtn.right - rectBtn.width();
+                    rectBtn.left = rectBtn.right - width;
                 }
                 child->setRect(rectBtn);
                 return true;
