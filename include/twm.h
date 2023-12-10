@@ -987,7 +987,7 @@ namespace thumby
                 );
             }
             Rect textRect(
-                checkableRect.right + getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent(),
+                checkableRect.right + (getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent() * 2),
                 rect.top,
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
