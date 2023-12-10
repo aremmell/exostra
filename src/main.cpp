@@ -71,10 +71,9 @@
 # define TS_MINY 0
 # define TS_MAXX DISPLAY_WIDTH
 # define TS_MAXY DISPLAY_HEIGHT
-# define TWM_GFX_ADAFRUIT
-# define ADAFRUIT_RA8875
-# define EYESPI_DISPLAY
-# include <Adafruit_RA8875.h>
+# define TWM_GFX_ARDUINO
+//# define ADAFRUIT_RA8875
+//# include <Adafruit_RA8875.h>
 #else
 # error "invalid display selection"
 #endif
@@ -99,6 +98,10 @@ Adafruit_CST8XX cst_ctp;
 # define S3
 #endif
 
+#if defined(EYESPI_DISPLAY) && !defined(S3)
+# error "only the UM ProS3 and Feather S3 are configured for use with this display"
+#endif
+
 #if defined(S3)
 // Unexpected Maker ProS3 or FeatherS3.
 # include <UMS3.h>
@@ -120,10 +123,7 @@ UMS3 ums3;
 # endif
 #endif
 
-#if defined(EYESPI_DISPLAY)
-# if !defined(ARDUINO_PROS3) && !defined(ARDUINO_FEATHERS3)
-#  error "only the UM ProS3 and Feather S3 are configured for use with this display"
-# endif
+#if defined(S3)
 # if defined(TWM_GFX_ADAFRUIT)
 #  if defined(TFT_320_RECTANGLE)
 auto display = std::make_shared<Adafruit_ILI9341>(PIN_CS, PIN_DC);
@@ -138,16 +138,13 @@ Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
 auto display = std::make_shared<Arduino_ILI9341>(&bus);
 auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH, display.get());
 # endif
-#endif
-
 auto wm = createWindowManager(
     display,
     context,
     std::make_shared<DefaultTheme>(),
     DEFAULT_FONT
 );
-
-#if !defined(S3)
+#else // !S3
 // Implied Qualia RGB666 for now.
 # if defined(PLATFORMIO) /// TODO: detect qualia, hopefully remove hack
 #  include <esp32_qualia.h>
@@ -163,10 +160,10 @@ auto rgbpanel = new Arduino_ESP32RGBPanel(
     PIN_NS::TFT_R1, PIN_NS::TFT_R2, PIN_NS::TFT_R3, PIN_NS::TFT_R4, PIN_NS::TFT_R5,
     PIN_NS::TFT_G0, PIN_NS::TFT_G1, PIN_NS::TFT_G2, PIN_NS::TFT_G3, PIN_NS::TFT_G4, PIN_NS::TFT_G5,
     PIN_NS::TFT_B1, PIN_NS::TFT_B2, PIN_NS::TFT_B3, PIN_NS::TFT_B4, PIN_NS::TFT_B5,
-    //1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
-    //1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
-    1 /* hync_polarity */, 46 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
-    1 /* vsync_polarity */, 50 /* vsync_front_porch */, 16 /* vsync_pulse_width */, 16 /* vsync_back_porch */
+    1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
+    1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
+    //1 /* hync_polarity */, 46 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
+    //1 /* vsync_polarity */, 50 /* vsync_front_porch */, 16 /* vsync_pulse_width */, 16 /* vsync_back_porch */
 );
 auto display = std::make_shared<Arduino_RGB_Display>(
   DISPLAY_WIDTH, DISPLAY_HEIGHT, rgbpanel, 0, true, expander, GFX_NOT_DEFINED,
@@ -305,10 +302,13 @@ void setup(void)
 #endif
 
   Wire.setClock(1000000);
+
 #if defined(ADAFRUIT_RA8875)
   if (!wm->begin(RA8875_800x480)) {
-#else
+#elif defined(TWM_GFX_ADAFRUIT)
   if (!wm->begin(0)) {
+#else
+  if (!wm->begin()) {
 #endif
     TWM_LOG(TWM_ERROR, "WindowManager: error");
     on_fatal_error();
@@ -332,7 +332,7 @@ void setup(void)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
-#if !defined(TFT_480_RECTANGLE)
+#if !defined(TFT_480_RECTANGLE) && !defined(TFT_800_RECTANGLE)
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
     TWM_LOG(TWM_ERROR, "FT6206: error at 0x%x", I2C_TOUCH_ADDR);
     if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
@@ -496,7 +496,12 @@ float progressStep = wm->getTheme()->getProgressBarIndeterminateStep();
 void loop()
 {
 #if defined(ADAFRUIT_RA8875)
-# error "loop not implemented for RA8875"
+  if (display->touched()) {
+    uint16_t x, y;
+    if (display->touchRead(&x, &y)) {
+      wm->hitTest(x, y);
+    }
+  }
 #else
 #if !defined(TFT_480_RECTANGLE)
   if (isFocalTouch && focal_ctp.touched()) {
