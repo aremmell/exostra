@@ -10,8 +10,6 @@
             "includePath": [
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/include",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/src",
-                "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit RA8875",
-                "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit FT5336",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit HX8357 Library",
                 "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/GFX Library for Arduino/src",
@@ -234,6 +232,7 @@
                 "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                 "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
                 "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
+                "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                 "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
                 "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src",
@@ -266,8 +265,6 @@
                 "path": [
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/include",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/src",
-                    "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit RA8875",
-                    "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit FT5336",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/Adafruit HX8357 Library",
                     "/Users/ryan/Documents/PlatformIO/Projects/twm/.pio/libdeps/um_pros3/GFX Library for Arduino/src",
@@ -490,6 +487,7 @@
                     "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                     "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
                     "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
+                    "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                     "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
                     "/Users/ryan/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src",
