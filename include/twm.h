@@ -40,7 +40,7 @@
 // TODO: remove me
 # define TWM_COLOR_565
 
-// Disables mutex locks for multi-threaded environments.
+// Disables mutex locks used in multi-threaded environments.
 # define TWM_SINGLETHREAD
 
 // Enables serial logging (increases compiled binary size substantially!).
@@ -901,10 +901,9 @@ namespace thumby
         void drawProgressBarProgress(const Rect& rect, float percent) const final
         {
             TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
-            Rect barRect = rect;
+            auto barRect = rect;
             barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
-            float progressWidth = (barRect.width() * (min(100.0f, percent) / 100.0f));
-            barRect.right = barRect.left + abs(progressWidth);
+            barRect.right = barRect.left + abs(barRect.width() * (min(100.0f, percent) / 100.0f));
             _gfxContext->fillRect(barRect.left, barRect.top, barRect.width(),
                 barRect.height(), getColor(COLOR_PROGRESS_FILL));
         }
@@ -912,15 +911,13 @@ namespace thumby
         void drawProgressBarIndeterminate(const Rect& rect, float counter) const final
         {
             TWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
-            Rect barRect = rect;
+            auto barRect = rect;
             barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
-            const auto cxFactor = getMetric(METRIC_PROGBAR_MARQUEE_CX_FACTOR).getFloat();
             Extent marqueeWidth
-                = (barRect.width() * cxFactor);
+                = (barRect.width() * getMetric(METRIC_PROGBAR_MARQUEE_CX_FACTOR).getFloat());
             Coord offset
                 = (barRect.width() + marqueeWidth) * (min(100.0f, counter) / 100.0f);
             static Coord reverseOffset = marqueeWidth;
-
             Coord x = 0;
             Extent width = 0;
             if (offset < marqueeWidth) {
@@ -949,12 +946,11 @@ namespace thumby
         void drawCheckBox(const char* lbl, bool checked, const Rect& rect) const final
         {
             drawWindowBackground(rect, 0, getColor(COLOR_WINDOW_BG));
-            const auto checkPadding = getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent();
             auto checkableRect = Rect(
                 rect.left,
-                rect.top + checkPadding,
-                rect.left + (rect.height() - (checkPadding * 2)),
-                rect.top + (rect.height() - checkPadding)
+                rect.top + getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent(),
+                rect.left + (rect.height() - (getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent() * 2)),
+                rect.top + (rect.height() - getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent())
             );
             checkableRect.top = rect.top + ((rect.height() / 2) - (checkableRect.height() / 2));
             _gfxContext->fillRect(
@@ -965,10 +961,9 @@ namespace thumby
                 getColor(COLOR_CHECKBOX_CHECK_BG)
             );
             drawWindowFrame(checkableRect, 0, getColor(COLOR_CHECKBOX_CHECK_FRAME));
-            auto checkMarkPadding = getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent();
             if (checked) {
                 auto rectCheckMark = checkableRect;
-                rectCheckMark.deflate(checkMarkPadding);
+                rectCheckMark.deflate(getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent());
                 _gfxContext->fillRect(
                     rectCheckMark.left,
                     rectCheckMark.top,
@@ -978,7 +973,7 @@ namespace thumby
                 );
             }
             Rect textRect(
-                checkableRect.right + checkMarkPadding,
+                checkableRect.right + getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent(),
                 rect.top,
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
@@ -1213,7 +1208,6 @@ namespace thumby
             TWM_ASSERT(_gfxDisplay);
             TWM_ASSERT(_gfxContext);
             TWM_ASSERT(_theme);
-
             _displayWidth  = _gfxContext->width();
             _displayHeight = _gfxContext->height();
             _theme->setGfxContext(_gfxContext);
@@ -1238,7 +1232,8 @@ namespace thumby
 
         void disableScreensaver() noexcept
         {
-            State flags = WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN;
+            TWM_CONST(State, flags,
+                WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN);
             setState(getState() & ~flags);
             TWM_LOG(TWM_DEBUG, "disabled screensaver");
         }
@@ -1330,14 +1325,18 @@ namespace thumby
         )
         {
             TWM_ASSERT(bitsHigh(style, STY_PROMPT));
-            const auto maxWidth  = _theme->getMetric(METRIC_MAX_PROMPT_CX).getExtent();
-            const auto maxHeight = _theme->getMetric(METRIC_MAX_PROMPT_CY).getExtent();
-            const auto xPadding  = _theme->getMetric(METRIC_X_PADDING).getExtent();
-            const auto yPadding  = _theme->getMetric(METRIC_Y_PADDING).getExtent();
-            Extent width = min(maxWidth,
-                static_cast<Extent>(getDisplayWidth() - (xPadding * 2)));
-            Extent height = min(maxHeight,
-                static_cast<Extent>(getDisplayHeight() - (yPadding * 2)));
+            const Extent width = min(
+                _theme->getMetric(METRIC_MAX_PROMPT_CX).getExtent(),
+                static_cast<Extent>(
+                    getDisplayWidth() - (_theme->getMetric(METRIC_X_PADDING).getExtent() * 2)
+                )
+            );
+            const Extent height = min(
+                _theme->getMetric(METRIC_MAX_PROMPT_CY).getExtent(),
+                static_cast<Extent>(
+                    getDisplayHeight() - (_theme->getMetric(METRIC_Y_PADDING).getExtent() * 2)
+                )
+            );
             auto prompt = createWindow<TPrompt>(
                 parent,
                 id,
@@ -1384,10 +1383,9 @@ namespace thumby
 
         void hitTest(Coord x, Coord y)
         {
-            const auto state = getState();
-            if (bitsHigh(state, WMS_SSAVER_ENABLED)) {
+            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
                 _ssaverEpoch = millis();
-                if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
+                if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
                     return;
                 }
             }
@@ -1412,29 +1410,38 @@ namespace thumby
             static uint8_t invocationCount = 0;
             const auto beginTime = micros();
 #endif
-            auto state = getState();
-            if (bitsHigh(state, WMS_SSAVER_ENABLED)) {
+            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
                 if (millis() - _ssaverEpoch >= _ssaverActivateAfter) {
-                    if (!bitsHigh(state, WMS_SSAVER_ACTIVE)) {
-                        setState(state | WMS_SSAVER_ACTIVE);
+                    if (!bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                        setState(getState() | WMS_SSAVER_ACTIVE);
                         TWM_LOG(TWM_DEBUG, "activated screensaver");
                     }
                 } else {
-                    if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
-                        setState(state & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
+                    if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                        setState(getState() & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
                         TWM_LOG(TWM_DEBUG, "de-activated screensaver");
                     }
                 }
             }
-            state = getState();
-            if (bitsHigh(state, WMS_SSAVER_ACTIVE)) {
-                if (!bitsHigh(state, WMS_SSAVER_DRAWN)) {
+            if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+                if (!bitsHigh(getState(), WMS_SSAVER_DRAWN)) {
                     _theme->drawScreensaver();
-                    setState(state | WMS_SSAVER_DRAWN);
+                    setState(getState() | WMS_SSAVER_DRAWN);
                 }
             } else {
-                auto displayRect = Rect(0, 0, getDisplayWidth(), getDisplayHeight());
-                _theme->drawDesktopBackground();
+                bool drawDesktop = true;
+                _registry->forEachChild([&drawDesktop](const WindowPtr& win)
+                {
+                    if (bitsHigh(win->getStyle(), STY_FULLSCREEN)) {
+                        drawDesktop = false;
+                        return false;
+                    }
+                    return true;
+                });
+                if (drawDesktop) {
+                    _theme->drawDesktopBackground();
+                }
+                const auto displayRect = Rect(0, 0, getDisplayWidth(), getDisplayHeight());
                 _registry->forEachChild([=](const WindowPtr& win)
                 {
                     while (win->processQueue());
@@ -1451,8 +1458,7 @@ namespace thumby
                         if (!other->isDrawable()) {
                             return true;
                         }
-                        auto otherRect = other->getRect();
-                        if (windowRect.withinRect(otherRect)) {
+                        if (windowRect.withinRect(other->getRect())) {
                             covered = true;
                             return false;
                         }
@@ -1680,8 +1686,7 @@ namespace thumby
             if (!isDrawable()) {
                 return false;
             }
-            Rect rect = getRect();
-            if (!rect.pointWithin(params->x, params->y)) {
+            if (!getRect().pointWithin(params->x, params->y)) {
                 return false;
             }
             bool handled = false;
@@ -1791,15 +1796,12 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto rect   = getRect();
-            const auto style  = getStyle();
-            const auto radius = getCornerRadius();
-            theme->drawWindowBackground(rect, radius, getBgColor());
-            if (bitsHigh(style, STY_FRAME)) {
-                theme->drawWindowFrame(rect, radius, getFrameColor());
+            theme->drawWindowBackground(getRect(), getCornerRadius(), getBgColor());
+            if (bitsHigh(getStyle(), STY_FRAME)) {
+                theme->drawWindowFrame(getRect(), getCornerRadius(), getFrameColor());
             }
-            if (bitsHigh(style, STY_SHADOW)) {
-                theme->drawWindowShadow(rect, radius, getShadowColor());
+            if (bitsHigh(getStyle(), STY_SHADOW)) {
+                theme->drawWindowShadow(getRect(), getCornerRadius(), getShadowColor());
             }
             return true;
         }
@@ -1903,18 +1905,22 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto duration = theme->getMetric(METRIC_BUTTON_TAPPED_DURATION).getUint32();
-            const bool pressed = (millis() - _lastTapped < duration);
-            const auto rect = getRect();
-            const auto radius = theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord();
-            theme->drawWindowBackground(rect, radius,
-                theme->getColor(pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG));
-            theme->drawWindowFrame(rect, radius,
-                theme->getColor(pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME));
+            const bool pressed = (millis() - _lastTapped <
+                theme->getMetric(METRIC_BUTTON_TAPPED_DURATION).getUint32());
+            theme->drawWindowBackground(
+                getRect(),
+                theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord(),
+                theme->getColor(pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG)
+            );
+            theme->drawWindowFrame(
+                getRect(),
+                theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord(),
+                theme->getColor(pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME)
+            );
             theme->drawText(
                 getText().c_str(),
                 DT_SINGLE | DT_CENTER,
-                rect,
+                getRect(),
                 theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
                 theme->getColor(pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT),
                 theme->getDefaultFont()
@@ -1930,13 +1936,12 @@ namespace thumby
             TWM_ASSERT(theme != nullptr);
             Coord x, y;
             Extent width, height;
-            Rect rect = getRect();
+            auto rect = getRect();
             gfx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
-            const auto defWidth = theme->getMetric(METRIC_DEF_BUTTON_CX).getExtent();
-            const auto defHeight = theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
-            const auto lblPadding = theme->getMetric(METRIC_BUTTON_LABEL_PADDING).getExtent();
-            rect.right = rect.left + max(width, defWidth) + (lblPadding * 2);
-            rect.bottom = rect.top + defHeight;
+            const auto maxWidth = max(width, theme->getMetric(METRIC_DEF_BUTTON_CX).getExtent());
+            rect.right = rect.left + maxWidth +
+                (theme->getMetric(METRIC_BUTTON_LABEL_PADDING).getExtent() * 2);
+            rect.bottom = rect.top + theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
             setRect(rect);
             /// TODO: if not autosize, clip label, perhaps with ellipsis.
             return true;
@@ -1957,12 +1962,11 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto rect = getRect();
-            theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
+            theme->drawWindowBackground(getRect(), getCornerRadius(), getBgColor());
             theme->drawText(
                 getText().c_str(),
                 DT_SINGLE | DT_ELLIPSIS,
-                rect,
+                getRect(),
                 theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
                 getTextColor(),
                 theme->getDefaultFont()
@@ -1982,12 +1986,11 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto rect = getRect();
-            theme->drawWindowBackground(rect, getCornerRadius(), getBgColor());
+            theme->drawWindowBackground(getRect(), getCornerRadius(), getBgColor());
             theme->drawText(
                 getText().c_str(),
                 DT_CENTER,
-                rect,
+                getRect(),
                 theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
                 getTextColor(),
                 theme->getDefaultFont()
@@ -2050,7 +2053,6 @@ namespace thumby
             const auto rect = getRect();
             const auto xPadding = theme->getMetric(METRIC_X_PADDING).getExtent();
             const auto yPadding = theme->getMetric(METRIC_Y_PADDING).getExtent();
-            const auto defBtnHeight = theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
             _label = wm->createWindow<MultilineLabel>(
                 shared_from_this(),
                 LabelID,
@@ -2058,7 +2060,7 @@ namespace thumby
                 rect.left + xPadding,
                 rect.top + yPadding,
                 rect.width() - (xPadding * 2),
-                rect.height() - ((yPadding * 3) + defBtnHeight),
+                rect.height() - ((yPadding * 3) + theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent()),
                 getText()
             );
             if (!_label) {
@@ -2083,16 +2085,15 @@ namespace thumby
                 if (!bitsHigh(child->getStyle(), STY_BUTTON)) {
                     return true;
                 }
-                Rect rectBtn = child->getRect();
+                auto rectBtn = child->getRect();
                 rectBtn.top = rectLbl.bottom + yPadding;
-                rectBtn.bottom = rectBtn.top + defBtnHeight;
-                auto width = rectBtn.width();
+                rectBtn.bottom = rectBtn.top + theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
                 if (first) {
                     first = false;
                     switch (numButtons) {
                         case 1: {
                             rectBtn.left
-                                = rect.left + (rect.width() / 2) - (width / 2);
+                                = rect.left + (rect.width() / 2) - (rectBtn.width() / 2);
                         }
                         break;
                         case 2: {
@@ -2103,10 +2104,10 @@ namespace thumby
                             TWM_ASSERT(false);
                         return false;
                     }
-                    rectBtn.right = rectBtn.left + width;
+                    rectBtn.right = rectBtn.left + rectBtn.width();
                 } else {
                     rectBtn.right = rect.right - xPadding;
-                    rectBtn.left = rectBtn.right - width;
+                    rectBtn.left = rectBtn.right - rectBtn.width();
                 }
                 child->setRect(rectBtn);
                 return true;
@@ -2154,15 +2155,14 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto rect = getRect();
-            theme->drawProgressBarBackground(rect);
-            theme->drawWindowFrame(rect, getCornerRadius(), getFrameColor());
+            theme->drawProgressBarBackground(getRect());
+            theme->drawWindowFrame(getRect(), getCornerRadius(), getFrameColor());
             if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
-                theme->drawProgressBarProgress(rect, getProgressValue());
+                theme->drawProgressBarProgress(getRect(), getProgressValue());
                 return true;
             }
             if (bitsHigh(getProgressBarStyle(), PBR_INDETERMINATE)) {
-                theme->drawProgressBarIndeterminate(rect, getProgressValue());
+                theme->drawProgressBarIndeterminate(getRect(), getProgressValue());
                 return true;
             }
             return false;
@@ -2183,11 +2183,10 @@ namespace thumby
         {
             if (isChecked() != checked) {
                 _lastToggle = millis();
-                const auto state = getState();
                 if (checked) {
-                    setState(state | STA_CHECKED);
+                    setState(getState() | STA_CHECKED);
                 } else {
-                    setState(state & ~STA_CHECKED);
+                    setState(getState() & ~STA_CHECKED);
                 }
                 redraw();
             }
@@ -2200,8 +2199,7 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto rect = getRect();
-            theme->drawCheckBox(getText().c_str(), isChecked(), rect);
+            theme->drawCheckBox(getText().c_str(), isChecked(), getRect());
             return true;
         }
 
@@ -2209,8 +2207,8 @@ namespace thumby
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
-            const auto delay = theme->getMetric(METRIC_CHECKBOX_CHECK_DELAY).getUint32();
-            if (millis() - _lastToggle >= delay) {
+            if (millis() - _lastToggle >=
+                theme->getMetric(METRIC_CHECKBOX_CHECK_DELAY).getUint32()) {
                 setChecked(!isChecked());
             }
             return true;
