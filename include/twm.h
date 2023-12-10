@@ -597,7 +597,7 @@ namespace thumby
         {
             switch (colorID) {
                 case COLOR_SCREENSAVER:          return 0x0000;
-                case COLOR_DESKTOP:              return 0xb59a;
+                case COLOR_DESKTOP:              return 0xc63c;
                 case COLOR_PROMPT_BG:            return 0xef5c;
                 case COLOR_PROMPT_FRAME:         return 0x9cf3;
                 case COLOR_PROMPT_SHADOW:        return 0xb5b6;
