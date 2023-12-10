@@ -91,8 +91,6 @@
 #  else
     using IGfxDisplay = Adafruit_GFX;
 #  endif
-    using IGfxContext1  = GFXcanvas1;
-    using IGfxContext8  = GFXcanvas8;
     using IGfxContext16 = GFXcanvas16;
 #   if defined(__AVR__)
 #    include <avr/pgmspace.h>
@@ -118,14 +116,11 @@
 # elif defined(TWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
 #  include <Arduino_GFX_Library.h>
 #  if defined(LITTLE_FOOT_PRINT)
-#   error "required Arduino GFX canvas classes unavailable due to LITTLE_FOOT_PRINT"
+#   error "required Arduino_Canvas implementation unavailable due to LITTLE_FOOT_PRINT"
 #  endif
 #  if defined(ATTINY_CORE)
 #   error "required GFXfont implementation unavailable due to ATTINY_CORE"
 #  endif
-    using IGfxDisplay   = Arduino_GFX;
-    using IGfxContext1  = Arduino_Canvas_Mono;
-    using IGfxContext8  = Arduino_Canvas_Indexed;
     using IGfxContext16 = Arduino_Canvas;
 # else
 #  error "define TWM_GFX_ADAFRUIT or TWM_GFX_ARDUINO, and install the relevant \
@@ -158,20 +153,13 @@ namespace thumby
     /** Pointer to physical display driver. */
     using GfxDisplayPtr = std::shared_ptr<GfxDisplay>;
 
-# if defined(TWM_COLOR_MONO)
-    using Color      = uint8_t;       /**< Color (monochrome). */
-    using GfxContext = IGfxContext1;  /**< Graphics context (monochrome). */
-# elif defined(TWM_COLOR_256)
-    using Color      = uint8_t;       /**< Color (8-bit). */
-    using GfxContext = IGfxContext8;  /**< Graphics context (8-bit). */
-# elif defined(TWM_COLOR_565)
+# if defined(TWM_COLOR_565)
     using Color      = uint16_t;      /**< Color type (16-bit 565 RGB). */
     using GfxContext = IGfxContext16; /**< Graphics context (16-bit 565 RGB). */
-# elif defined(TWM_COLOR_RBB)
+# elif defined(TWM_COLOR_888)
 #  error "24-bit RGB mode is not yet implemented"
 # else
-#  error "define TWM_COLOR_565, TWM_COLOR_256, or TWM_COLOR_MONO in order \
-to select a color mode"
+#  error "define TWM_COLOR_565 or TWM_COLOR_888 in order to select a color mode"
 # endif
 
     /** Pointer to graphics context (e.g. canvas/frame buffer). */
