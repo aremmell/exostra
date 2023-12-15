@@ -1,3 +1,12 @@
 {
-    "C_Cpp.default.compilerPath": "/Users/ryan/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-gcc"
+    "C_Cpp.default.compilerPath": "/Users/ryan/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-gcc",
+    "idf.adapterTargetName": "esp32s3",
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32s3.cfg"
+    ],
+    "idf.flashType": "UART",
+    "idf.port": "/dev/cu.usbmodem101",
+    "files.associations": {
+    }
 }
