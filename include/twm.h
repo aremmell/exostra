@@ -47,7 +47,11 @@
 # define TWM_ENABLE_LOGGING
 
 // Enables internal diagnostics; implies TWM_ENABLE_LOGGING.
-# define TWM_DIAGNOSTICS
+
+# if defined (TWM_DIAGNOSTICS)
+#  include <typeinfo>
+#  include <cxxabi.h>
+# endif
 
 # if defined(TWM_ENABLE_LOGGING) || defined(TWM_DIAGNOSTICS)
     enum
@@ -111,7 +115,7 @@
     using IGfxContext16 = GFXcanvas16;
 #   if defined(__AVR__)
 #    include <avr/pgmspace.h>
-#   elif defined(ESP8266) || defined(ESP32)
+#   elif defined(ESP32) || defined(ESP8266)
 #    include <pgmspace.h>
 #   endif
 #   if !defined(pgm_read_byte)
@@ -172,7 +176,11 @@ namespace thumby
 
 # if defined(TWM_COLOR_565)
     using Color      = uint16_t;      /**< Color type (16-bit 565 RGB). */
+#  if !defined(ADAFRUIT_RA8875)
     using GfxContext = IGfxContext16; /**< Graphics context (16-bit 565 RGB). */
+#  else
+    using GfxContext = Adafruit_RA8875;
+#  endif
 # elif defined(TWM_COLOR_888)
 #  error "24-bit RGB mode is not yet implemented"
 # else
@@ -217,6 +225,19 @@ namespace thumby
         {
         }
 
+        bool operator==(const Rect& rhs) const noexcept
+        {
+            return left   == rhs.left &&
+                   top    == rhs.top &&
+                   right  == rhs.right &&
+                   bottom == rhs.bottom;
+        }
+
+        bool operator !=(const Rect& rhs) const noexcept
+        {
+            return !(*this == rhs);
+        }
+
         Coord left   = 0; /**< X-axis value of the left edge. */
         Coord top    = 0; /**< Y-axis value of the top edge. */
         Coord right  = 0; /**< X-axis value of the right edge. */
@@ -255,12 +276,33 @@ namespace thumby
             bottom -= px;
         }
 
+        void mergeRect(const Rect& other) noexcept
+        {
+            if (other.left < left) {
+                left = other.left;
+            }
+            if (other.top < top) {
+                top = other.top;
+            }
+            if (other.right > right) {
+                right = other.right;
+            }
+            if (other.bottom > bottom) {
+                bottom = other.bottom;
+            }
+        }
+
         bool overlapsRect(const Rect& other) const noexcept
         {
             return other.pointWithin(left, top) ||
                    other.pointWithin(right, top) ||
                    other.pointWithin(left, bottom) ||
                    other.pointWithin(right, bottom);
+        }
+
+        bool intersectsRect(const Rect& other) const noexcept
+        {
+            return overlapsRect(other) || other.overlapsRect(*this);
         }
 
         bool outsideRect(const Rect& other) const noexcept
@@ -348,7 +390,8 @@ namespace thumby
     enum
     {
         STA_ALIVE   = 1 << 0, /**< Active (not yet destroyed). */
-        STA_CHECKED = 1 << 1  /**< Checked/highlighted item. */
+        STA_CHECKED = 1 << 1, /**< Checked/highlighted item. */
+        STA_DIRTY   = 1 << 2  /**< Needs redrawing. */
     };
 
     enum
@@ -401,7 +444,6 @@ namespace thumby
     typedef enum
     {
         COLOR_SCREENSAVER = 1,
-        COLOR_DESKTOP,
 
         COLOR_PROMPT_BG,
         COLOR_PROMPT_FRAME,
@@ -562,7 +604,6 @@ namespace thumby
         virtual Variant getMetric(MetricID) const = 0;
 
         virtual void drawScreensaver() const = 0;
-        virtual void drawDesktopBackground() const = 0;
 
         virtual void setDefaultFont(const Font*) = 0;
         virtual const Font* getDefaultFont() const = 0;
@@ -601,7 +642,6 @@ namespace thumby
         {
             switch (colorID) {
                 case COLOR_SCREENSAVER:          return 0x0000;
-                case COLOR_DESKTOP:              return 0xc63c;
                 case COLOR_PROMPT_BG:            return 0xef5c;
                 case COLOR_PROMPT_FRAME:         return 0x9cf3;
                 case COLOR_PROMPT_SHADOW:        return 0xb5b6;
@@ -718,11 +758,6 @@ namespace thumby
         void drawScreensaver() const final
         {
             _gfxContext->fillScreen(getColor(COLOR_SCREENSAVER));
-        }
-
-        void drawDesktopBackground() const final
-        {
-            _gfxContext->fillScreen(getColor(COLOR_DESKTOP));
         }
 
         void setDefaultFont(const Font* font) final
@@ -1033,6 +1068,8 @@ namespace thumby
         virtual bool hasChildren() = 0;
         virtual size_t childCount() = 0;
         virtual std::shared_ptr<IWindow> getChildByID(WindowID) = 0;
+        virtual bool setForegroundWindow(const std::shared_ptr<IWindow>&) = 0;
+        virtual void recalculateZOrder() = 0;
         virtual bool addChild(const std::shared_ptr<IWindow>&) = 0;
         virtual bool removeChildByID(WindowID) = 0;
         virtual void removeAllChildren() = 0;
@@ -1044,7 +1081,6 @@ namespace thumby
     {
     public:
         virtual std::shared_ptr<IWindow> getParent() const = 0;
-        virtual void setParent(const std::shared_ptr<IWindow>&) = 0;
 
         virtual Rect getRect() const noexcept = 0;
         virtual void setRect(const Rect&) noexcept = 0;
@@ -1053,6 +1089,9 @@ namespace thumby
         virtual void setStyle(Style) noexcept = 0;
 
         virtual WindowID getID() const noexcept = 0;
+
+        virtual uint8_t getZOrder() const noexcept = 0;
+        virtual void setZOrder(uint8_t) noexcept = 0;
 
         virtual State getState() const noexcept = 0;
         virtual void setState(State) noexcept = 0;
@@ -1074,17 +1113,24 @@ namespace thumby
 
         virtual bool routeMessage(Message, MsgParam, MsgParam) = 0;
         virtual bool queueMessage(Message, MsgParam, MsgParam) = 0;
-        virtual bool processQueue() = 0;
+        virtual bool processQueue(bool&) = 0;
         virtual bool processInput(InputParams*) = 0;
 
-        virtual bool redraw() = 0;
+        virtual bool redraw(Rect* = nullptr, bool = false) = 0;
+        virtual bool redrawChildren(Rect* = nullptr, bool = false) = 0;
         virtual bool hide() noexcept = 0;
         virtual bool show() noexcept = 0;
         virtual bool isVisible() const noexcept = 0;
         virtual bool isAlive() const noexcept = 0;
+        virtual bool isDirty() const noexcept = 0;
+        virtual void setDirty(bool) noexcept = 0;
         virtual bool isDrawable() const noexcept = 0;
 
         virtual bool destroy() = 0;
+
+# if defined(TWM_DIAGNOSTICS)
+        std::string typeName;
+# endif
 
     protected:
         virtual bool onCreate(MsgParam, MsgParam) = 0;
@@ -1129,12 +1175,45 @@ namespace thumby
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_childMtx);
 # endif
-            for (auto win : _children) {
+            for (const auto& win : _children) {
                 if (id == win->getID()) {
                     return win;
                 }
             }
             return nullptr;
+        }
+
+        bool setForegroundWindow(const WindowPtr& win) override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            bool success = false;
+            if (!win->getParent() && bitsHigh(win->getStyle(), STY_TOPLEVEL)) {
+                for (auto it = _children.begin(); it != _children.end(); it++) {
+                    if ((*it)->getID() == win->getID()) {
+                        _children.erase(it);
+                        _children.push_back(win);
+                        success = true;
+                        break;
+                    }
+                }
+                if (success) {
+                    recalculateZOrder();
+                }
+            }
+            return success;
+        }
+
+        void recalculateZOrder() override
+        {
+# if !defined(TWM_SINGLETHREAD)
+            ScopeLock lock(_childMtx);
+# endif
+            uint8_t zOrder = 0;
+            for (const auto& win : _children) {
+                win->setZOrder(zOrder++);
+            }
         }
 
         bool addChild(const WindowPtr& child) override
@@ -1145,6 +1224,12 @@ namespace thumby
             if (getChildByID(child->getID()) != nullptr) {
                 return false;
             }
+            uint8_t zOrder = 0;
+            auto last = _children.rbegin();
+            if (last != _children.rend()) {
+                zOrder = (*last)->getZOrder() + 1;
+            }
+            child->setZOrder(zOrder);
             _children.push_back(child);
             return true;
         }
@@ -1157,6 +1242,7 @@ namespace thumby
             for (auto it = _children.begin(); it != _children.end(); it++) {
                 if (id == (*it)->getID()) {
                     _children.erase(it);
+                    recalculateZOrder();
                     return true;
                 }
             }
@@ -1218,15 +1304,25 @@ namespace thumby
     class WindowManager : public std::enable_shared_from_this<WindowManager>
     {
     public:
+        struct Config
+        {
+            uint32_t minRenderIntervalMsec  = 0U;
+            uint32_t minHitTestIntervalMsec = 0U;
+        };
+
+        static constexpr uint32_t DefaultMinRenderIntervalMsec = 100U;
+        static constexpr uint32_t DefaultMinHitTestIntervalMsec = 200U;
+
         WindowManager() = delete;
 
         explicit WindowManager(
             const GfxDisplayPtr& gfxDisplay,
             const GfxContextPtr& gfxContext,
             const ThemePtr& theme,
-            const Font* defaultFont
-        ) : _gfxDisplay(gfxDisplay), _gfxContext(gfxContext), _theme(theme),
-            _registry(std::make_shared<WindowContainer>())
+            const Font* defaultFont,
+            const Config* config = nullptr
+        ) : _registry(std::make_shared<WindowContainer>()),
+            _gfxDisplay(gfxDisplay), _gfxContext(gfxContext), _theme(theme)
         {
             TWM_ASSERT(_registry);
             TWM_ASSERT(_gfxDisplay);
@@ -1236,6 +1332,12 @@ namespace thumby
             _displayHeight = _gfxContext->height();
             _theme->setGfxContext(_gfxContext);
             _theme->setDefaultFont(defaultFont);
+            if (config) {
+                _config = *config;
+            } else {
+                _config.minRenderIntervalMsec  = DefaultMinRenderIntervalMsec;
+                _config.minHitTestIntervalMsec = DefaultMinHitTestIntervalMsec;
+            }
         }
 
         virtual ~WindowManager()
@@ -1246,12 +1348,15 @@ namespace thumby
         void setState(State state) noexcept { _state = state; }
         State getState() const noexcept { return _state; }
 
-        void enableScreensaver(u_long activateAfter) noexcept
+        Config getConfig() const noexcept { return _config; }
+        void setConfig(const Config& config) noexcept { _config = config; }
+
+        void enableScreensaver(uint32_t activateAfterMsec) noexcept
         {
-            _ssaverActivateAfter = activateAfter;
+            _ssaverActivateAfter = activateAfterMsec;
             _ssaverEpoch = millis();
             setState(getState() | WMS_SSAVER_ENABLED);
-            TWM_LOG(TWM_DEBUG, "enabled screensaver (%lums)", activateAfter);
+            TWM_LOG(TWM_DEBUG, "screensaver enabled (%ums)", activateAfterMsec);
         }
 
         void disableScreensaver() noexcept
@@ -1259,7 +1364,7 @@ namespace thumby
             TWM_CONST(State, flags,
                 WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN);
             setState(getState() & ~flags);
-            TWM_LOG(TWM_DEBUG, "disabled screensaver");
+            TWM_LOG(TWM_DEBUG, "screensaver disabled");
         }
 
         virtual void tearDown()
@@ -1278,6 +1383,11 @@ namespace thumby
 
         Extent getDisplayWidth() const noexcept { return _displayWidth; }
         Extent getDisplayHeight() const noexcept { return _displayHeight; }
+
+        Rect getDisplayRect() const noexcept
+        {
+            return Rect(0, 0, _displayWidth, _displayHeight);
+        }
 
         template<class TWindow>
         std::shared_ptr<TWindow> createWindow(
@@ -1308,6 +1418,18 @@ namespace thumby
                     shared_from_this(), parent, id, style, rect, text
                 )
             );
+# if defined(TWM_DIAGNOSTICS)
+            char* demangleBuf = reinterpret_cast<char*>(malloc(64));
+            size_t dbufSize = 64;
+            int status = 0;
+            const auto dName = __cxxabiv1::__cxa_demangle(typeid(TWindow).name(),
+                demangleBuf, &dbufSize, &status);
+            TWM_ASSERT(status == 0);
+            if (status == 0) {
+                win->typeName = dName;
+            }
+            free(demangleBuf);
+# endif
             if (bitsHigh(style, STY_CHILD) && !parent) {
                 TWM_LOG(TWM_ERROR, "STY_CHILD && null parent");
                 return nullptr;
@@ -1330,7 +1452,6 @@ namespace thumby
                     id, parent ? parent->getID() : WID_INVALID);
                 return nullptr;
             }
-            win->setState(win->getState() | STA_ALIVE);
             if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
                 win->routeMessage(MSG_RESIZE);
             }
@@ -1405,24 +1526,85 @@ namespace thumby
             return pbar;
         }
 
+        bool setForegroundWindow(const WindowPtr& win)
+        {
+            return _registry->setForegroundWindow(win);
+        }
+
         void hitTest(Coord x, Coord y)
         {
+            if (millis() - _lastHitTestTime < _config.minHitTestIntervalMsec) {
+                return;
+            }
+            TWM_ASSERT(x > 0 && y > 0);
+            TWM_ASSERT(x <= _displayWidth && y <= _displayHeight);
+            TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd", x, y);
             if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
                 _ssaverEpoch = millis();
                 if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
                     return;
                 }
             }
+            bool claimed = false;
             _registry->forEachChildReverse([&](const WindowPtr& child)
             {
+                if (!child->isDrawable()) {
+                    return true;
+                }
+# if defined(TWM_DIAGNOSTICS)
+                TWM_LOG(TWM_DEBUG, "interrogating %s (%hhu) about hit test @ %hd, %hd",
+                    child->typeName.c_str(), child->getID(), x, y);
+# endif
                 InputParams params;
                 params.type = INPUT_TAP;
                 params.x    = x;
                 params.y    = y;
                 if (child->processInput(&params)) {
-                    //TWM_LOG(TWM_DEBUG, "%hhu claimed hit test @ %hd, %hd",
-                    //    params.handledBy, x, y);
+# if defined(TWM_DIAGNOSTICS)
+                    TWM_LOG(TWM_DEBUG, "%s (%hhu) claimed hit test @ %hd, %hd",
+                        child->typeName.c_str(), params.handledBy, x, y);
+# endif
+                    claimed = true;
                     return false;
+                }
+                return true;
+            });
+            if (!claimed) {
+                TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd unclaimed", x, y);
+            }
+            _lastHitTestTime = millis();
+        }
+
+        bool isWindowEntirelyCovered(const WindowPtr& win)
+        {
+            bool covered = false;
+            const auto rect = win->getRect();
+            _registry->forEachChildReverse([&](const WindowPtr& other)
+            {
+                if (other == win) {
+                    return false;
+                }
+                if (!other->isDrawable()) {
+                    return true;
+                }
+                if (rect.withinRect(other->getRect())) {
+                    covered = true;
+                    return false;
+                }
+                return true;
+            });
+            return covered;
+        }
+
+        virtual void setDirtyRect(const Rect& rect)
+        {
+            _registry->forEachChild([=](const WindowPtr& win)
+            {
+                if (!win->isDrawable() || win->isDirty()) {
+                    return true;
+                }
+                if (win->getRect().intersectsRect(rect)) {
+                    win->setDirty(true);
                 }
                 return true;
             });
@@ -1430,10 +1612,13 @@ namespace thumby
 
         virtual void update()
         {
+            if (millis() - _lastRenderTime < _config.minRenderIntervalMsec) {
+                return;
+            }
 #if defined(TWM_DIAGNOSTICS)
-            static uint8_t invocationCount = 0;
             const auto beginTime = micros();
 #endif
+            bool updated = false;
             if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
                 if (millis() - _ssaverEpoch >= _ssaverActivateAfter) {
                     if (!bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
@@ -1443,6 +1628,7 @@ namespace thumby
                 } else {
                     if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
                         setState(getState() & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
+                        setDirtyRect(getDisplayRect());
                         TWM_LOG(TWM_DEBUG, "de-activated screensaver");
                     }
                 }
@@ -1450,120 +1636,194 @@ namespace thumby
             if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
                 if (!bitsHigh(getState(), WMS_SSAVER_DRAWN)) {
                     _theme->drawScreensaver();
+                    updated = true;
                     setState(getState() | WMS_SSAVER_DRAWN);
                 }
             } else {
-                bool drawDesktop = true;
-                _registry->forEachChild([&drawDesktop](const WindowPtr& win)
+                uint8_t zOrderHighWaterMark = 0;
+                Rect dirtyRect(0, 0, 0, 0);
+
+                auto maybeDrawWindow = [&](const WindowPtr& win, const Rect& rect,
+                    uint8_t zOrder, bool draw, bool force, bool pseudo)
                 {
-                    if (bitsHigh(win->getStyle(), STY_FULLSCREEN)) {
-                        drawDesktop = false;
-                        return false;
+                    bool drawn = false;
+                    Rect drawnRect;
+                    if (draw && !pseudo) {
+                        drawn = win->redraw(&drawnRect, force);
+                        if (drawn) {
+                            dirtyRect.mergeRect(drawnRect);
+                        }
                     }
-                    return true;
-                });
-                if (drawDesktop) {
-                    _theme->drawDesktopBackground();
-                }
-                const auto displayRect = Rect(0, 0, getDisplayWidth(), getDisplayHeight());
-                _registry->forEachChild([=](const WindowPtr& win)
+                    if (drawn || pseudo) {
+                        if (zOrder > zOrderHighWaterMark) {
+                            zOrderHighWaterMark = zOrder;
+                        }
+                        dirtyRect.mergeRect(pseudo ? rect : drawnRect);
+                    }
+                    return drawn || pseudo;
+                };
+
+                _registry->forEachChild([&](const WindowPtr& win)
                 {
-                    while (win->processQueue());
-                    if (!win->isDrawable()) {
-                        return true;
-                    }
-                    const auto windowRect = win->getRect();
-                    bool covered = false;
-                    _registry->forEachChildReverse([&](const WindowPtr& other)
-                    {
-                        if (other == win) {
-                            return false;
+                    bool redrawnProcessing = false;
+                    while (
+                        win->processQueue(redrawnProcessing)
+                    );
+                    if (redrawnProcessing) {
+                        if (maybeDrawWindow(win, win->getRect(), win->getZOrder(),
+                            false, false, true)) {
+                            updated = true;
                         }
-                        if (!other->isDrawable()) {
-                            return true;
-                        }
-                        if (windowRect.withinRect(other->getRect())) {
-                            covered = true;
-                            return false;
-                        }
-                        return true;
-                    });
-                    if (covered) {
-                        return true;
                     }
-                    if (windowRect.outsideRect(displayRect)) {
-                        return true;
+
+                    const auto rect   = win->getRect();
+                    const auto zOrder = win->getZOrder();
+
+                    bool lowerDrawn  = updated && zOrderHighWaterMark < zOrder;
+                    bool dirty       = win->isDirty();
+                    bool intersectsDirtyRect = rect.intersectsRect(dirtyRect);
+                    bool invalidated = dirty || (lowerDrawn && intersectsDirtyRect);
+                    bool drawable    = win->isDrawable();
+                    bool pseudoDraw  = drawable && isWindowEntirelyCovered(win);
+
+                    bool drawn = maybeDrawWindow(
+                        win,
+                        rect,
+                        zOrder,
+                        (invalidated || dirty) && drawable,
+                        invalidated && !dirty && !pseudoDraw,
+                        pseudoDraw && !(invalidated && drawable)
+                    );
+                    if (drawn) {
+                        updated = true;
+                    } else {
+                        if (!pseudoDraw) {
+                            Rect drawnRect;
+                            if (win->redrawChildren(&drawnRect)) {
+                                updated = true;
+                                dirtyRect.mergeRect(drawnRect);
+                            }
+                        }
                     }
-                    win->redraw();
                     return true;
                 });
             }
 #if defined(TWM_DIAGNOSTICS)
-            if (++invocationCount == _sampleFrames) {
-                invocationCount = 0;
-                _renderAvg   = _renderAccum / _sampleFrames;
-                _renderAccum = 0UL;
-                return;
-            }
-            _renderAccum += micros() - beginTime;
+            _renderAccumTime += micros() - beginTime;
+            _renderAccumCount++;
 #endif
+            if (updated) {
+                render();
+            }
+            _lastRenderTime = millis();
         }
 
         template<typename... TDisplayArgs>
         inline bool begin(TDisplayArgs&&... args)
         {
-            bool success = true;
-# if defined(TWM_GFX_ADAFRUIT)
-            _gfxDisplay->begin(args...);
-# elif defined(TWM_GFX_ARDUINO)
-            success &= _gfxDisplay->begin(args...);
-            success &= _gfxContext->begin(GFX_SKIP_OUTPUT_BEGIN);
+# if !defined(ADAFRUIT_RA8875)
+            TWM_ASSERT(_gfxDisplay);
+            TWM_ASSERT(_gfxContext);
+            bool success = _gfxDisplay && _gfxContext;
+# else
+            TWM_ASSERT(_gfxContext);
+            bool success = _gfxContext;
 # endif
+            if (success) {
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM) && !defined(ADAFRUIT_RA8875)
+                bool alloc_failed = _gfxContext->getBuffer() == nullptr;
+                if (alloc_failed) {
+                    auto buf_size = _gfxContext->width() * _gfxContext->height()
+                        * sizeof(uint16_t);
+                    TWM_LOG(TWM_WARN, "malloc of %u bytes failed! err: %d", buf_size, errno);
+                    auto new_buffer = ps_calloc(1, buf_size);
+                    success = new_buffer != nullptr;
+                    if (!success) {
+                        TWM_LOG(TWM_ERROR, "ps_calloc of %u bytes failed! err: %d", buf_size, errno);
+                        return false;
+                    }
+                    _gfxContext->setBuffer(static_cast<uint16_t*>(new_buffer));
+                }
+#endif
+# if defined(TWM_GFX_ADAFRUIT)
+                /// TODO: possible in C++11 to deduce return type
+                /// of begin() and capture it if it's bool?
+#  if defined(ADAFRUIT_RA8875)
+                _gfxContext->begin(args...);
+#  else
+                _gfxDisplay->begin(args...);
+#  endif
+# elif defined(TWM_GFX_ARDUINO)
+                success &= _gfxDisplay->begin(args...);
+                success &= _gfxContext->begin(GFX_SKIP_OUTPUT_BEGIN);
+# endif
+            }
+            TWM_ASSERT(success);
+            if (success) {
+                _displayWidth = _gfxContext->width();
+                _displayHeight = _gfxContext->height();
+                TWM_LOG(TWM_DEBUG, "display size %hux%hu", _displayWidth, _displayHeight);
+            }
             return success;
         }
 
         void render()
         {
 #if defined(TWM_DIAGNOSTICS)
-            static uint8_t invocationCount = 0;
+            static constexpr uint32_t reportInterval = 10000U;
+            static uint32_t lastReport = 0;
             const auto beginTime = micros();
 #endif
-            /// TODO: implement different calls for different color modes
 # if defined(TWM_GFX_ADAFRUIT)
+#  if !defined(ADAFRUIT_RA8875)
             _gfxDisplay->drawRGBBitmap(0, 0, _gfxContext->getBuffer(),
                 getDisplayWidth(), getDisplayHeight());
+#  else
+            //_gfxDisplay->flush();
+#  endif
 # elif defined(TWM_GFX_ARDUINO)
             _gfxContext->flush();
 # endif
 #if defined(TWM_DIAGNOSTICS)
-            if (++invocationCount == _sampleFrames) {
-                invocationCount = 0;
-                _copyFrameAvg   = _copyFrameAccum / _sampleFrames;
-                _copyFrameAccum = 0UL;
-                TWM_LOG(TWM_DEBUG, "avg. times: render = %luμs, copy = %luμs,"
-                    " total = %luμs", _renderAvg, _copyFrameAvg, (_renderAvg + _copyFrameAvg));
+            if (millis() - lastReport > reportInterval) {
+                _copyFrameAccumCount = max(1U, _copyFrameAccumCount);
+                _renderAccumCount    = max(1U, _renderAccumCount);
+                _copyFrameAvg        = _copyFrameAccumTime / _copyFrameAccumCount;
+                _renderAvg           = _renderAccumTime / _renderAccumCount;
+                _renderAccumTime     = 0U;
+                _renderAccumCount    = 0U;
+                _copyFrameAccumTime  = 0U;
+                _copyFrameAccumCount = 0U;
+                TWM_LOG(TWM_DEBUG, "avg. render: %uμs, copy: %uμs, total: %uμs",
+                    _renderAvg, _copyFrameAvg, (_renderAvg + _copyFrameAvg));
+                lastReport = millis();
                 return;
             }
-            _copyFrameAccum += micros() - beginTime;
+            _copyFrameAccumTime += micros() - beginTime;
+            _copyFrameAccumCount++;
 #endif
         }
 
     protected:
+        Config _config;
         WindowContainerPtr _registry;
         GfxDisplayPtr _gfxDisplay;
         GfxContextPtr _gfxContext;
         ThemePtr _theme;
-        State _state = 0;
-        Extent _displayWidth = 0;
-        Extent _displayHeight = 0;
-        u_long _ssaverEpoch = 0UL;
-        u_long _ssaverActivateAfter = 0UL;
+        State _state                  = 0;
+        Extent _displayWidth          = 0;
+        Extent _displayHeight         = 0;
+        uint32_t _ssaverEpoch         = 0U;
+        uint32_t _ssaverActivateAfter = 0U;
+        uint32_t _lastRenderTime      = 0U;
+        uint32_t _lastHitTestTime     = 0U;
 #if defined(TWM_DIAGNOSTICS)
-        u_long _renderAvg      = 0UL;
-        u_long _copyFrameAvg   = 0UL;
-        u_long _renderAccum    = 0UL;
-        u_long _copyFrameAccum = 0UL;
-        static constexpr uint8_t _sampleFrames = 100;
+        uint32_t _renderAvg           = 0U;
+        uint32_t _copyFrameAvg        = 0U;
+        uint32_t _renderAccumTime     = 0U;
+        uint32_t _renderAccumCount    = 0U;
+        uint32_t _copyFrameAccumTime  = 0U;
+        uint32_t _copyFrameAccumCount = 0U;
 #endif
     };
 
@@ -1594,7 +1854,7 @@ namespace thumby
             Style style,
             const Rect& rect,
             const std::string& text
-        ) : _wm(wm), _parent(parent), _rect(rect), _style(style), _id(id), _text(text)
+        ) : _wm(wm), _parent(parent), _rect(rect), _text(text), _style(style), _id(id)
         {
             auto theme = _getTheme();
             TWM_ASSERT(theme != nullptr);
@@ -1609,6 +1869,14 @@ namespace thumby
         bool hasChildren() override { return _children.hasChildren(); }
         size_t childCount() override { return _children.childCount(); }
         WindowPtr getChildByID(WindowID id) override { return _children.getChildByID(id); }
+
+        bool setForegroundWindow(const WindowPtr& win) override
+        {
+            TWM_UNUSED(win);
+            return false;
+        }
+
+        void recalculateZOrder() override { _children.recalculateZOrder(); }
         bool addChild(const WindowPtr& child) override { return _children.addChild(child); }
         bool removeChildByID(WindowID id) override { return _children.removeChildByID(id); }
         void removeAllChildren() override { return _children.removeAllChildren(); }
@@ -1624,54 +1892,140 @@ namespace thumby
         }
 
         WindowPtr getParent() const override { return _parent; }
-        void setParent(const WindowPtr& parent) override { _parent = parent; }
 
         Rect getRect() const noexcept override { return _rect; }
-        void setRect(const Rect& rect) noexcept override { _rect = rect; }
+
+        void setRect(const Rect& rect) noexcept override
+        {
+            if (rect != _rect) {
+                _rect = rect;
+                setDirty(true);
+            }
+        }
 
         Style getStyle() const noexcept override { return _style; }
-        void setStyle(Style style) noexcept override { _style = style; }
+
+        void setStyle(Style style) noexcept override
+        {
+            if (style != _style) {
+                _style = style;
+                setDirty(true);
+            }
+        }
 
         WindowID getID() const noexcept override { return _id; }
+
+        uint8_t getZOrder() const noexcept override { return _zOrder; }
+        void setZOrder(uint8_t zOrder) noexcept override { _zOrder = zOrder; }
 
         State getState() const noexcept override { return _state; }
         void setState(State state) noexcept override { _state = state; }
 
         std::string getText() const override { return _text; }
-        void setText(const std::string& text) override { _text = text; }
+
+        void setText(const std::string& text) override
+        {
+            if (text != _text) {
+                _text = text;
+                setDirty(true);
+            }
+        }
 
         Color getBgColor() const noexcept override { return _bgColor; }
-        void setBgColor(Color color) noexcept override { _bgColor = color; }
+
+        void setBgColor(Color color) noexcept override
+        {
+            if (color != _bgColor) {
+                _bgColor = color;
+                setDirty(true);
+            }
+        }
+
         Color getTextColor() const noexcept override { return _textColor; }
-        void setTextColor(Color color) noexcept override { _textColor = color; }
+
+        void setTextColor(Color color) noexcept override
+        {
+            if (color != _textColor) {
+                _textColor = color;
+                setDirty(true);
+            }
+        }
 
         Color getFrameColor() const noexcept override { return _frameColor; }
-        void setFrameColor(Color color) noexcept override { _frameColor = color; }
+
+        void setFrameColor(Color color) noexcept override
+        {
+            if (color != _frameColor) {
+                _frameColor = color;
+                setDirty(true);
+            }
+        }
 
         Color getShadowColor() const noexcept override { return _shadowColor; }
-        void setShadowColor(Color color) noexcept override { _shadowColor = color; }
+
+        void setShadowColor(Color color) noexcept override
+        {
+            if (color != _shadowColor) {
+                _shadowColor = color;
+                setDirty(true);
+            }
+        }
 
         Coord getCornerRadius() const noexcept override { return _cornerRadius; }
-        void setCornerRadius(Coord radius) noexcept override { _cornerRadius = radius; }
+
+        void setCornerRadius(Coord radius) noexcept override
+        {
+            if (radius != _cornerRadius) {
+                _cornerRadius = radius;
+                setDirty(true);
+            }
+        }
 
         bool routeMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
         {
+            bool handled = false;
+            bool dirty   = false;
             switch (msg) {
-                case MSG_CREATE: return onCreate(p1, p2);
-                case MSG_DESTROY: return onDestroy(p1, p2);
+                case MSG_CREATE: {
+                    dirty = handled = onCreate(p1, p2);
+                    if (handled) {
+                        setState(getState() | STA_ALIVE);
+                    }
+                    break;
+                }
+                case MSG_DESTROY: {
+                    handled = onDestroy(p1, p2);
+                    setState(getState() & ~STA_ALIVE);
+                    break;
+                }
                 case MSG_DRAW: {
                     if (!isDrawable()) {
-                        return false;
+                        break;
                     }
-                    return onDraw(p1, p2);
+                    if (!isDirty() && p1 == 0U) {
+                        break;
+                    }
+                    handled = onDraw(p1, p2);
+                    setDirty(false);
+                    break;
                 }
-                case MSG_INPUT: return onInput(p1, p2);
+                case MSG_INPUT: {
+                    dirty = handled = onInput(p1, p2);
+                    break;
+                }
                 case MSG_EVENT: return onEvent(p1, p2);
-                case MSG_RESIZE: return onResize(p1, p2);
+                case MSG_RESIZE: {
+                    dirty = handled = onResize(p1, p2);
+                    break;
+                }
                 default:
                     TWM_ASSERT(false);
-                return false;
+                    return false;
             }
+            if (dirty) {
+                setDirty(true);
+            }
+            return handled;
         }
 
         bool queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
@@ -1687,7 +2041,7 @@ namespace thumby
             return msg == MSG_INPUT && getMsgParamLoWord(p1) == INPUT_TAP;
         }
 
-        bool processQueue() override
+        bool processQueue(bool& redrawn) override
         {
 # if !defined(TWM_SINGLETHREAD)
             ScopeLock lock(_queueMtx);
@@ -1695,11 +2049,13 @@ namespace thumby
             if (!_queue.empty()) {
                 auto pm = _queue.front();
                 _queue.pop();
-                routeMessage(pm.msg, pm.p1, pm.p2);
+                if (routeMessage(pm.msg, pm.p1, pm.p2) && pm.msg == MSG_DRAW) {
+                    redrawn = true;
+                }
             }
             forEachChild([&](const WindowPtr& child)
             {
-                child->processQueue();
+                child->processQueue(redrawn);
                 return true;
             });
             return !_queue.empty();
@@ -1735,18 +2091,39 @@ namespace thumby
             return handled;
         }
 
-        bool redraw() override
+        bool redraw(Rect* dirtyRect = nullptr, bool force = false) override
         {
             if (!isDrawable()) {
                 return false;
             }
-            bool redrawn = routeMessage(MSG_DRAW);
+            bool redrawn = (isDirty() || force)
+                ? routeMessage(MSG_DRAW, force ? 1U : 0U) : false;
+            bool childRedrawn = false;
+            if (redrawn) {
+                if (dirtyRect != nullptr) {
+                    dirtyRect->mergeRect(getRect());
+                }
+                forEachChild([](const WindowPtr& child)
+                {
+                    child->setDirty(true);
+                    return true;
+                });
+            }
+            childRedrawn = redrawChildren(dirtyRect, force);
+            return redrawn || childRedrawn;
+        }
+
+        bool redrawChildren(Rect* dirtyRect = nullptr, bool force = false) override
+        {
+            bool childRedrawn = false;
             forEachChild([&](const WindowPtr& child)
             {
-                redrawn &= child->redraw();
+                if (child->redraw(dirtyRect, force)) {
+                    childRedrawn = true;
+                }
                 return true;
             });
-            return redrawn;
+            return childRedrawn;
         }
 
         bool hide() noexcept override
@@ -1755,21 +2132,34 @@ namespace thumby
                 return false;
             }
             setStyle(getStyle() & ~STY_VISIBLE);
+            auto wm = _getWM();
+            TWM_ASSERT(wm);
+            wm->setDirtyRect(getRect());
             return true;
         }
 
         bool show() noexcept override
         {
-            if (isVisible()) {
+            const auto topLevel = bitsHigh(getStyle(), STY_TOPLEVEL);
+            TWM_ASSERT(!topLevel || !getParent());
+            if (!topLevel && isVisible()) {
                 return false;
             }
+            auto shown = true;
+            if (topLevel) {
+                auto wm = _getWM();
+                shown = wm->setForegroundWindow(shared_from_this());
+            }
             setStyle(getStyle() | STY_VISIBLE);
-            return redraw();
+            setDirty(true);
+            return shown;
         }
 
         bool isVisible() const noexcept override
         {
-            return bitsHigh(getStyle(), STY_VISIBLE);
+            const auto rect = getRect();
+            return bitsHigh(getStyle(), STY_VISIBLE) && rect.width() > 0 &&
+                rect.height() > 0;
         }
 
         bool isAlive() const noexcept override
@@ -1777,15 +2167,38 @@ namespace thumby
             return bitsHigh(getState(), STA_ALIVE);
         }
 
+        bool isDirty() const noexcept override
+        {
+            return bitsHigh(getState(), STA_DIRTY);
+        }
+
+        void setDirty(bool dirty) noexcept override
+        {
+            if (dirty) {
+                setState(getState() | STA_DIRTY);
+                forEachChild([&](const WindowPtr& child)
+                {
+                    child->setDirty(true);
+                    return true;
+                });
+            } else {
+                setState(getState() & ~STA_DIRTY);
+            }
+        }
+
         bool isDrawable() const noexcept override
         {
-            auto parent = getParent();
-            return isVisible() && isAlive() &&
-                (!parent || (parent && parent->isDrawable()));
+            const auto wm = _getWM();
+            const auto parent = getParent();
+            return isVisible() &&
+                   isAlive() &&
+                   (!parent || (parent && parent->isDrawable())) &&
+                   !getRect().outsideRect(wm->getDisplayRect());
         }
 
         bool destroy() override
         {
+            hide();
             bool destroyed = routeMessage(MSG_DESTROY);
             forEachChild([&](const WindowPtr& child)
             {
@@ -1811,11 +2224,12 @@ namespace thumby
         // MSG_DESTROY: p1 = 0, p2 = 0.
         bool onDestroy(MsgParam p1, MsgParam p2) override
         {
-            setState(getState() & ~STA_ALIVE);
+            TWM_UNUSED(p1);
+            TWM_UNUSED(p2);
             return true;
         }
 
-        // MSG_DRAW: p1 = 0, p2 = 0.
+        // MSG_DRAW: p1 = 1 (force) || 0, p2 = 0.
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
@@ -1859,7 +2273,11 @@ namespace thumby
 
         // ====== End message handlers ======
 
-        bool onTapped(Coord x, Coord y) override { return false; }
+        bool onTapped(Coord x, Coord y) override {
+            TWM_UNUSED(x);
+            TWM_UNUSED(y);
+            return false;
+        }
 
         WindowManagerPtr _getWM() const { return _wm; }
 
@@ -1884,10 +2302,11 @@ namespace thumby
         WindowManagerPtr _wm;
         WindowPtr _parent;
         Rect _rect;
-        Style _style = 0;
-        WindowID _id = WID_INVALID;
-        State _state = 0;
         std::string _text;
+        Style _style        = 0;
+        WindowID _id        = WID_INVALID;
+        uint8_t _zOrder     = 0;
+        State _state        = 0;
         Color _bgColor      = 0;
         Color _textColor    = 0;
         Color _frameColor   = 0;
@@ -1904,7 +2323,6 @@ namespace thumby
         bool onTapped(Coord x, Coord y) override
         {
             _lastTapped = millis();
-            routeMessage(MSG_DRAW);
             auto parent = getParent();
             TWM_ASSERT(parent != nullptr);
             if (parent) {
@@ -2171,10 +2589,24 @@ namespace thumby
         virtual ~ProgressBar() = default;
 
         Style getProgressBarStyle() const noexcept { return _barStyle; }
-        void setProgressBarStyle(Style pbarStyle) noexcept { _barStyle = pbarStyle; }
+
+        void setProgressBarStyle(Style barStyle) noexcept
+        {
+            if (barStyle != _barStyle) {
+                _barStyle = barStyle;
+                setDirty(true);
+            }
+        }
 
         float getProgressValue() const noexcept { return _value; }
-        void setProgressValue(float value) noexcept { _value = value; }
+
+        void setProgressValue(float value) noexcept
+        {
+            if (abs(value) != abs(_value)) {
+                _value = value;
+                setDirty(true);
+            }
+        }
 
     protected:
         bool onDraw(MsgParam p1, MsgParam p2) override
@@ -2208,13 +2640,12 @@ namespace thumby
         void setChecked(bool checked)
         {
             if (isChecked() != checked) {
-                _lastToggle = millis();
                 if (checked) {
                     setState(getState() | STA_CHECKED);
                 } else {
                     setState(getState() & ~STA_CHECKED);
                 }
-                redraw();
+                setDirty(true);
             }
         }
 
@@ -2236,6 +2667,7 @@ namespace thumby
             if (millis() - _lastToggle >=
                 theme->getMetric(METRIC_CHECKBOX_CHECK_DELAY).getUint32()) {
                 setChecked(!isChecked());
+                _lastToggle = millis();
             }
             return true;
         }
