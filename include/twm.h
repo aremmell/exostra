@@ -92,6 +92,9 @@
 #  define TWM_ASSERT(expr)
 # endif
 
+# define TWM_UNUSED(var) (void)(var);
+# define TWM_BOOL2STR(b) ((b) ? "true" : "false")
+
 # define TWM_CONST(type, name, value) \
     static constexpr PROGMEM type name = value
 
