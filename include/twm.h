@@ -85,16 +85,17 @@
             case TWM_WARN:  prefix = 'W'; break; \
             case TWM_DEBUG: prefix = 'D'; break; \
         } \
-        Serial.printf("[%c] (%s:%d): ", prefix, basename(__FILE__), __LINE__); \
-        Serial.printf(fmt "\n" __VA_OPT__(,) __VA_ARGS__); \
+        printf("[%c] (%s:%d): ", prefix, basename(__FILE__), __LINE__); \
+        printf(fmt "\n" __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
+# endif
 # define TWM_BACKTRACE_FRAMES 5
 # if defined(ESP32) || defined(ESP8266)
 #  include <esp_debug_helpers.h>
 #  define print_backtrace() \
     ets_install_putc1([](char c) \
     { \
-        Serial.print(c); \
+        putc(c, stderr); \
     }); \
     esp_backtrace_print(TWM_BACKTRACE_FRAMES)
 # else
