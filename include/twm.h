@@ -28,7 +28,6 @@
 #ifndef _THUMBY_WM_H_INCLUDED
 # define _THUMBY_WM_H_INCLUDED
 
-# include <Arduino.h>
 # include <cstdint>
 # include <functional>
 # include <type_traits>
@@ -47,6 +46,7 @@
 # define TWM_ENABLE_LOGGING
 
 // Enables internal diagnostics; implies TWM_ENABLE_LOGGING.
+# define TWM_DIAGNOSTICS
 
 # if defined (TWM_DIAGNOSTICS)
 #  include <typeinfo>
@@ -60,6 +60,23 @@
         TWM_WARN  = 2,
         TWM_DEBUG = 3
     };
+# if defined(ESP32) || defined(ESP8266)
+#  include <esp32-hal-log.h>
+#  define TWM_LOG(lvl, fmt, ...) \
+    do { \
+        switch (lvl) { \
+            case TWM_ERROR: \
+                log_e(fmt __VA_OPT__(,) __VA_ARGS__); \
+            break; \
+            case TWM_WARN: \
+                log_w(fmt __VA_OPT__(,) __VA_ARGS__); \
+            break; \
+            case TWM_DEBUG: \
+                log_d(fmt __VA_OPT__(,) __VA_ARGS__); \
+            break; \
+        } \
+    } while (false)
+# else
 #  define TWM_LOG(lvl, fmt, ...) \
     do { \
         char prefix = '\0'; \
@@ -329,11 +346,11 @@ namespace thumby
 
     inline GFXglyph* getGlyphAtOffset(const GFXfont* font, uint8_t off)
     {
-#   ifdef __AVR__
+# ifdef __AVR__
         return &((static_cast<GFXglyph*>(pgm_read_pointer(&font->glyph)))[off]);
-#   else
+# else
         return font->glyph + off;
-#   endif
+# endif
     }
 
     static void getCharBounds(uint8_t ch, uint8_t* cx, uint8_t* cy, uint8_t* xAdv,
@@ -1310,7 +1327,7 @@ namespace thumby
             uint32_t minHitTestIntervalMsec = 0U;
         };
 
-        static constexpr uint32_t DefaultMinRenderIntervalMsec = 100U;
+        static constexpr uint32_t DefaultMinRenderIntervalMsec  = 100U;
         static constexpr uint32_t DefaultMinHitTestIntervalMsec = 200U;
 
         WindowManager() = delete;
@@ -1328,8 +1345,6 @@ namespace thumby
             TWM_ASSERT(_gfxDisplay);
             TWM_ASSERT(_gfxContext);
             TWM_ASSERT(_theme);
-            _displayWidth  = _gfxContext->width();
-            _displayHeight = _gfxContext->height();
             _theme->setGfxContext(_gfxContext);
             _theme->setDefaultFont(defaultFont);
             if (config) {
@@ -1381,12 +1396,12 @@ namespace thumby
         GfxContextPtr getGfxContext() const { return _gfxContext; }
         ThemePtr getTheme() const { return _theme; }
 
-        Extent getDisplayWidth() const noexcept { return _displayWidth; }
-        Extent getDisplayHeight() const noexcept { return _displayHeight; }
+        Extent getDisplayWidth() const noexcept { return _gfxContext->width(); }
+        Extent getDisplayHeight() const noexcept { return _gfxContext->height(); }
 
         Rect getDisplayRect() const noexcept
         {
-            return Rect(0, 0, _displayWidth, _displayHeight);
+            return Rect(0, 0, getDisplayWidth(), getDisplayHeight());
         }
 
         template<class TWindow>
@@ -1536,8 +1551,8 @@ namespace thumby
             if (millis() - _lastHitTestTime < _config.minHitTestIntervalMsec) {
                 return;
             }
-            TWM_ASSERT(x > 0 && y > 0);
-            TWM_ASSERT(x <= _displayWidth && y <= _displayHeight);
+            TWM_ASSERT(x >= 0 && y >= 0);
+            TWM_ASSERT(x <= getDisplayWidth() && y <= getDisplayHeight());
             TWM_LOG(TWM_DEBUG, "hit test @ %hd, %hd", x, y);
             if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
                 _ssaverEpoch = millis();
@@ -1724,27 +1739,13 @@ namespace thumby
 # if !defined(ADAFRUIT_RA8875)
             TWM_ASSERT(_gfxDisplay);
             TWM_ASSERT(_gfxContext);
-            bool success = _gfxDisplay && _gfxContext;
+            bool success = _gfxDisplay && _gfxContext &&
+                _gfxContext->getBuffer() != nullptr;
 # else
             TWM_ASSERT(_gfxContext);
             bool success = _gfxContext;
 # endif
             if (success) {
-#if defined(ESP32) && defined(BOARD_HAS_PSRAM) && !defined(ADAFRUIT_RA8875)
-                bool alloc_failed = _gfxContext->getBuffer() == nullptr;
-                if (alloc_failed) {
-                    auto buf_size = _gfxContext->width() * _gfxContext->height()
-                        * sizeof(uint16_t);
-                    TWM_LOG(TWM_WARN, "malloc of %u bytes failed! err: %d", buf_size, errno);
-                    auto new_buffer = ps_calloc(1, buf_size);
-                    success = new_buffer != nullptr;
-                    if (!success) {
-                        TWM_LOG(TWM_ERROR, "ps_calloc of %u bytes failed! err: %d", buf_size, errno);
-                        return false;
-                    }
-                    _gfxContext->setBuffer(static_cast<uint16_t*>(new_buffer));
-                }
-#endif
 # if defined(TWM_GFX_ADAFRUIT)
                 /// TODO: possible in C++11 to deduce return type
                 /// of begin() and capture it if it's bool?
@@ -1760,9 +1761,8 @@ namespace thumby
             }
             TWM_ASSERT(success);
             if (success) {
-                _displayWidth = _gfxContext->width();
-                _displayHeight = _gfxContext->height();
-                TWM_LOG(TWM_DEBUG, "display size %hux%hu", _displayWidth, _displayHeight);
+                TWM_LOG(TWM_DEBUG, "display size: %hux%hu",
+                    getDisplayWidth(), getDisplayHeight());
             }
             return success;
         }
@@ -1811,8 +1811,6 @@ namespace thumby
         GfxContextPtr _gfxContext;
         ThemePtr _theme;
         State _state                  = 0;
-        Extent _displayWidth          = 0;
-        Extent _displayHeight         = 0;
         uint32_t _ssaverEpoch         = 0U;
         uint32_t _ssaverActivateAfter = 0U;
         uint32_t _lastRenderTime      = 0U;

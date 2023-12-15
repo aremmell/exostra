@@ -1,16 +1,16 @@
-#include <SPI.h>
-#include <Wire.h>
 #include <Adafruit_FT6206.h>
 #include <Adafruit_CST8XX.h>
 #include <Adafruit_GFX.h>
 #include <Arduino_GFX_Library.h>
-#include <HardwareSerial.h>
+#include <freertos/FreeRTOS.h>
+#include "sdkconfig.h"
+#include <Arduino.h>
 
 //#define TFT_720_SQUARE
 //#define TFT_480_ROUND
 //#define TFT_320_RECTANGLE
-//#define TFT_480_RECTANGLE
-#define TFT_800_RECTANGLE
+#define TFT_480_RECTANGLE
+//#define TFT_800_RECTANGLE
 
 #if defined(TFT_720_SQUARE)
 # include <Fonts/FreeSans18pt7b.h>
@@ -135,16 +135,15 @@ auto display = std::make_shared<Adafruit_HX8357>(PIN_CS, PIN_DC);
 #  elif defined(ADAFRUIT_RA8875)
 auto display = std::make_shared<Adafruit_RA8875>(PIN_CS, PIN_RST);
 #  endif
-//auto context = std::make_shared<GfxContext>(DISPLAY_WIDTH, DISPLAY_HEIGHT);
-std::shared_ptr<Adafruit_RA8875> context;
+auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH);
 # elif defined(TWM_GFX_ARDUINO)
 Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
 auto display = std::make_shared<Arduino_ILI9341>(&bus);
 auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH, display.get());
 # endif
 auto wm = createWindowManager(
-    context,
     display,
+    context,
     std::make_shared<DefaultTheme>(),
     DEFAULT_FONT
 );
@@ -267,14 +266,14 @@ void on_fatal_error()
 #if defined(S3)
   /*ums3.setPixelPower(true); // assume pixel could be off.
   ums3.setPixelBrightness(255); // maximum brightness.*/
-  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(13, OUTPUT);
   while (true) {
     TWM_LOG(TWM_ERROR, "!! fatal error !!");
     //ums3.setPixelColor(0xff, 0x00, 0x00); // pure red.
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(13, LOW);
     delay(1000);
     //ums3.setPixelColor(0x00, 0x00, 0x00); // black (off).
-    digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(13, HIGH);
     delay(1000);
   }
 #else
@@ -291,15 +290,8 @@ bool isFocalTouch = false;
 
 void setup(void)
 {
-  /*/// TODO: If you want to run without a serial cable, exit this loop
-  while (!Serial) {
-    delay(10);
-  }*/
-
   delay(500);
   TWM_LOG(TWM_DEBUG, "initializing");
-
-  Wire.begin(SDA, SCL, 1000000);
 
 #if defined(EYESPI_DISPLAY)
   bool touchInitialized = false;
@@ -351,7 +343,7 @@ void setup(void)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
-  display->fillScreen(0x0000);
+  wm->getGfxContext()->fillScreen(0xb5be);
 #if !defined(TFT_480_RECTANGLE) && !defined(TFT_800_RECTANGLE)
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
     TWM_LOG(TWM_ERROR, "FT6206: error at 0x%x", I2C_TOUCH_ADDR);
@@ -564,11 +556,13 @@ void loop()
     pt.y = mapXCoord(wm->getDisplayHeight() - pt.x);
     pt.x = mapYCoord(tmp);
 #endif
-    wm->hitTest(pt.x, pt.y);
+    if (pt.x >= 0 && pt.y >= 0) {
+      wm->hitTest(pt.x, pt.y);
+    }
   }
 #endif
 #endif
-  if (++iteration % 20 == 0) {
+  if (++iteration % 50 == 0) {
     if (curProgress < 100.0f) {
       curProgress += progressStep;
     } else {
@@ -577,5 +571,4 @@ void loop()
     testProgressBar->setProgressValue(curProgress);
   }
   wm->update();
-  delay(100);
 }
