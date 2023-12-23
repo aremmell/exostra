@@ -19,8 +19,8 @@
 # define DISPLAY_HEIGHT 720
 # define TFT_ROTATION 0
 # define I2C_TOUCH_ADDR 0x48
-//# define TWM_GFX_ADAFRUIT
-# define TWM_GFX_ARDUINO
+//# define EWM_GFX_ADAFRUIT
+# define EWM_GFX_ARDUINO
 #elif defined(TFT_480_ROUND)
 # include <Fonts/FreeSans12pt7b.h>
 # define DEFAULT_FONT &FreeSans12pt7b
@@ -28,8 +28,8 @@
 # define DISPLAY_HEIGHT 480
 # define TFT_ROTATION 0
 # define I2C_TOUCH_ADDR 0x15
-//# define TWM_GFX_ADAFRUIT
-# define TWM_GFX_ARDUINO
+//# define EWM_GFX_ADAFRUIT
+# define EWM_GFX_ARDUINO
 #elif defined(TFT_320_RECTANGLE)
 # include <Fonts/FreeSans9pt7b.h>
 # define DEFAULT_FONT &FreeSans9pt7b
@@ -41,10 +41,10 @@
 # define TS_MAXX DISPLAY_WIDTH
 # define TS_MAXY DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
-# define TWM_GFX_ADAFRUIT
+# define EWM_GFX_ADAFRUIT
 # define EYESPI_DISPLAY
 # include <Adafruit_ILI9341.h>
-/* # define TWM_GFX_ARDUINO
+/* # define EWM_GFX_ARDUINO
 # include <display/Arduino_ILI9341.h> */
 #elif defined(TFT_480_RECTANGLE)
 # include <Fonts/FreeSans12pt7b.h>
@@ -57,7 +57,7 @@
 # define TS_MAXX DISPLAY_WIDTH
 # define TS_MAXY DISPLAY_HEIGHT
 # define I2C_TOUCH_ADDR 0x38
-# define TWM_GFX_ADAFRUIT
+# define EWM_GFX_ADAFRUIT
 # define EYESPI_DISPLAY
 # include <Adafruit_HX8357.h>
 # include <Adafruit_FT5336.h>
@@ -71,8 +71,8 @@
 # define TS_MINY 0
 # define TS_MAXX DISPLAY_WIDTH
 # define TS_MAXY DISPLAY_HEIGHT
-# define TWM_GFX_ADAFRUIT
-//# define TWM_GFX_ARDUINO
+# define EWM_GFX_ADAFRUIT
+//# define EWM_GFX_ARDUINO
 # define ADAFRUIT_RA8875
 # include <Adafruit_RA8875.h>
 #else
@@ -85,8 +85,8 @@
 
 #define TFT_SCREENSAVER_AFTER 0.5 * 60 * 1000
 
-#include "twm.h"
-using namespace thumby;
+#include "exostra.h"
+using namespace exostra;
 
 #if defined(TFT_480_RECTANGLE)
 Adafruit_FT5336 ctp;
@@ -103,9 +103,9 @@ Adafruit_CST8XX cst_ctp;
 # error "only the UM ProS3 and Feather S3 are configured for use with this display"
 #endif
 
-# define PIN_SCK  SCK
-# define PIN_MOSI MOSI
-# define PIN_MISO MISO
+#define PIN_SCK  SCK
+#define PIN_MOSI MOSI
+#define PIN_MISO MISO
 
 #if defined(S3) // Unexpected Maker ProS3 or FeatherS3.
 # if defined(ARDUINO_PROS3)
@@ -127,7 +127,7 @@ Adafruit_CST8XX cst_ctp;
 #endif
 
 #if defined(S3) || defined(ARDUINO_ADAFRUIT_FEATHER_ESP32S2_REVTFT)
-# if defined(TWM_GFX_ADAFRUIT)
+# if defined(EWM_GFX_ADAFRUIT)
 #  if defined(TFT_320_RECTANGLE)
 auto display = std::make_shared<Adafruit_ILI9341>(PIN_CS, PIN_DC);
 #  elif defined(TFT_480_RECTANGLE)
@@ -135,7 +135,7 @@ auto display = std::make_shared<Adafruit_HX8357>(PIN_CS, PIN_DC);
 #  elif defined(ADAFRUIT_RA8875)
 auto display = std::make_shared<Adafruit_RA8875>(PIN_CS, PIN_RST);
 #  endif
-# elif defined(TWM_GFX_ARDUINO)
+# elif defined(EWM_GFX_ARDUINO)
 Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
 auto display = std::make_shared<Arduino_ILI9341>(&bus);
 # endif
@@ -259,7 +259,7 @@ void on_fatal_error()
   ums3.setPixelBrightness(255); // maximum brightness.*/
   pinMode(13, OUTPUT);
   while (true) {
-    TWM_LOG_E("!! fatal error !!");
+    EWM_LOG_E("!! fatal error !!");
     //ums3.setPixelColor(0xff, 0x00, 0x00); // pure red.
     digitalWrite(13, LOW);
     delay(1000);
@@ -269,7 +269,7 @@ void on_fatal_error()
   }
 #else
   /// TODO: blink an LED or something.
-  TWM_LOG_E("fatal error");
+  EWM_LOG_E("fatal error");
   while (true);
 #endif
 }
@@ -282,7 +282,7 @@ bool isFocalTouch = false;
 void setup(void)
 {
   delay(500);
-  TWM_LOG_D("initializing");
+  EWM_LOG_D("initializing");
 
 #if defined(EYESPI_DISPLAY)
   bool touchInitialized = false;
@@ -290,7 +290,7 @@ void setup(void)
 
   auto logMemoryValue = [](const char* name, uint32_t val)
   {
-    TWM_LOG_D("%s: %.2f KiB", name, val / 1024.0f);
+    EWM_LOG_D("%s: %.2f KiB", name, val / 1024.0f);
   };
 
   logMemoryValue("Total RAM", ESP.getHeapSize());
@@ -299,21 +299,21 @@ void setup(void)
   logMemoryValue("Free PSRAM", ESP.getFreePsram());
   logMemoryValue("Total flash", ESP.getFlashChipSize());
 
-#if defined(EYESPI_DISPLAY) && defined(TWM_GFX_ARDUINO)
+#if defined(EYESPI_DISPLAY) && defined(EWM_GFX_ARDUINO)
   bus.begin();
 #endif
 
 #if defined(ADAFRUIT_RA8875)
   if (!wm->begin(TFT_ROTATION, RA8875_800x480)) {
-#elif defined(TWM_GFX_ADAFRUIT)
+#elif defined(EWM_GFX_ADAFRUIT)
   if (!wm->begin(TFT_ROTATION, 0)) {
 #else
   if (!wm->begin(TFT_ROTATION)) {
 #endif
-    TWM_LOG_E("WindowManager: error");
+    EWM_LOG_E("WindowManager: error");
     on_fatal_error();
   }
-  TWM_LOG_I("WindowManager: OK");
+  EWM_LOG_I("WindowManager: OK");
 #if defined(ADAFRUIT_RA8875)
   display->displayOn(true);
   display->GPIOX(true);
@@ -328,33 +328,33 @@ void setup(void)
   pinMode(PIN_LITE, OUTPUT);
   digitalWrite(PIN_LITE, HIGH);
 #else
-#if !defined(EYESPI_DISPLAY)
+# if !defined(EYESPI_DISPLAY)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
-#endif
+# endif
   display->fillScreen(0xb5be);
-#if !defined(TFT_480_RECTANGLE) && !defined(TFT_800_RECTANGLE)
+# if !defined(TFT_480_RECTANGLE) && !defined(TFT_800_RECTANGLE)
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
-    TWM_LOG_E("FT6206: error at 0x%x", I2C_TOUCH_ADDR);
+    EWM_LOG_E("FT6206: error at 0x%x", I2C_TOUCH_ADDR);
     if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
-      TWM_LOG_E("CST8XX: error at 0x%x", I2C_TOUCH_ADDR);
+      EWM_LOG_E("CST8XX: error at 0x%x", I2C_TOUCH_ADDR);
     } else {
       touchInitialized = true;
       isFocalTouch = false;
-      TWM_LOG_I("CST8XX: OK");
+      EWM_LOG_I("CST8XX: OK");
     }
   } else {
     touchInitialized = isFocalTouch = true;
-    TWM_LOG_I("FT6206: OK");
+    EWM_LOG_I("FT6206: OK");
   }
-#elif defined(TFT_480_RECTANGLE)
+# elif defined(TFT_480_RECTANGLE)
   touchInitialized = ctp.begin(I2C_TOUCH_ADDR);
   if (!touchInitialized) {
-    TWM_LOG_E("FT5336: error at 0x%x", I2C_TOUCH_ADDR);
+    EWM_LOG_E("FT5336: error at 0x%x", I2C_TOUCH_ADDR);
   } else {
-    TWM_LOG_I("FT5336: OK");
+    EWM_LOG_I("FT5336: OK");
   }
-#endif
+# endif
   if (!touchInitialized) {
     on_fatal_error();
   }
@@ -467,7 +467,7 @@ void setup(void)
     on_fatal_error();
   }
   button1->setPrompt(yesNoPromptWnd);
-  TWM_LOG_I("setup completed");
+  EWM_LOG_I("setup completed");
 }
 
 #if defined(COORDINATE_MAPPING)
@@ -476,27 +476,27 @@ void setup(void)
 # endif
 long mapXCoord(Coord x) noexcept
 {
-#if TFT_ROTATION == 0
+# if TFT_ROTATION == 0
   return x;
-#elif TFT_ROTATION == 3
+# elif TFT_ROTATION == 3
   return map(x, TS_MINX, TS_MAXX, TS_MAXX, TS_MINX);
-#endif
+# endif
 }
 long mapYCoord(Coord y) noexcept
 {
-#if TFT_ROTATION == 0
+# if TFT_ROTATION == 0
   return y;
-#elif TFT_ROTATION == 3
+# elif TFT_ROTATION == 3
   return map(y, TS_MINY, TS_MAXY, TS_MAXY, TS_MINY);
-#endif
+# endif
 }
 std::pair<Coord, Coord> swapCoords(Coord x, Coord y)
 {
-#if TFT_ROTATION == 3
+# if TFT_ROTATION == 3
   auto tmp = y;
   y = x;
   x = wm->getDisplayWidth() - tmp;
-#endif
+# endif
   return std::make_pair(x, y);
 }
 #endif
@@ -519,37 +519,37 @@ void loop()
     }
   }
 #else
-#if !defined(TFT_480_RECTANGLE)
+# if !defined(TFT_480_RECTANGLE)
   if (isFocalTouch && focal_ctp.touched()) {
     TS_Point pt = focal_ctp.getPoint();
-#if defined(COORDINATE_MAPPING)
+#  if defined(COORDINATE_MAPPING)
     const auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
-#endif
+#  endif
     wm->hitTest(pt.x, pt.y);
   } else if (!isFocalTouch && cst_ctp.touched()) {
     CST_TS_Point pt = cst_ctp.getPoint();
-#if defined(COORDINATE_MAPPING)
+#  if defined(COORDINATE_MAPPING)
     const auto tmp = swapCoords(mapXCoord(pt.x), mapYCoord(pt.y));
     pt.x = tmp.first;
     pt.y = tmp.second;
-#endif
+#  endif
     wm->hitTest(pt.x, pt.y);
   }
-#elif defined(TFT_480_RECTANGLE)
+# elif defined(TFT_480_RECTANGLE)
   if (ctp.touched() > 0) {
     FT_TS_Point pt = ctp.getPoint();
     auto tmp = pt.y;
-#if defined(COORDINATE_MAPPING)
+#  if defined(COORDINATE_MAPPING)
     pt.y = mapXCoord(wm->getDisplayHeight() - pt.x);
     pt.x = mapYCoord(tmp);
-#endif
+#  endif
     if (pt.x >= 0 && pt.y >= 0) {
       wm->hitTest(pt.x, pt.y);
     }
   }
-#endif
+# endif
 #endif
   if (millis() - lastProgress > 500U) {
     lastProgress = millis();

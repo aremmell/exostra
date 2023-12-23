@@ -1,11 +1,11 @@
 {
-    "name": "twm",
+    "name": "exostra",
     "version": "0.0.1",
-    "description": "tiny window manager",
+    "description": "exostra window manager",
     "keywords": "",
     "repoistory": {
         "type": "git",
-        "url": "https://github.com/aremmell/twm.git"
+        "url": "https://github.com/aremmell/exostra.git"
     },
     "authors": [
         {
@@ -18,9 +18,8 @@
     "license": "MIT",
     "dependencies": {
         "adafruit/Adafruit GFX Library": "^1.11.9",
-        "adafruit/Adafruit BusIO": "^1.14.5",
-        "unexpectedmaker/UMS3 Helper": "^1.0.1"
+        "adafruit/Adafruit BusIO": "^1.14.5"
     },
-    "frameworks": "arduino",
+    "frameworks": "arduino, espidf",
     "platforms": "*"
 }

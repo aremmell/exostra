@@ -1,32 +1,30 @@
 /*
- * twm.h
+ * exostra.h : Exostra Window Manager (https://github.com/aremmell/exostra)
  *
- * Thumby Window Manager
- *
- * Author:    Ryan M. Lederman <lederman@gmail.com>
- * Copyright: Copyright (c) 2023
+ * Copyright: © 2023-2024 Ryan M. Lederman <lederman@gmail.com>
  * Version:   0.0.1
  * License:   The MIT License (MIT)
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the “Software”), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
-#ifndef _THUMBY_WM_H_INCLUDED
-# define _THUMBY_WM_H_INCLUDED
+#ifndef _EXOSTRA_H_INCLUDED
+# define _EXOSTRA_H_INCLUDED
 
 # include <cstdint>
 # include <functional>
@@ -37,105 +35,106 @@
 # include <mutex>
 
 // TODO: remove me
-# define TWM_COLOR_565
+# define EWM_COLOR_565
 
-// Disables mutex locks used in multi-threaded environments.
-# define TWM_SINGLETHREAD
+// Disables mutex locks required in multi-threaded environments.
+# define EWM_NOMUTEXES
 
 // Available logging levels.
-# define TWM_LOG_LEVEL_NONE    0
-# define TWM_LOG_LEVEL_ERROR   1
-# define TWM_LOG_LEVEL_WARNING 2
-# define TWM_LOG_LEVEL_INFO    3
-# define TWM_LOG_LEVEL_DEBUG   4
-# define TWM_LOG_LEVEL_VERBOSE 5
+# define EWM_LOG_LEVEL_NONE    0
+# define EWM_LOG_LEVEL_ERROR   1
+# define EWM_LOG_LEVEL_WARNING 2
+# define EWM_LOG_LEVEL_INFO    3
+# define EWM_LOG_LEVEL_DEBUG   4
+# define EWM_LOG_LEVEL_VERBOSE 5
 
-// Enabled logging level (setting to any level except TWM_LOG_LEVEL_NONE increases
+// Enabled logging level (setting to any level except EWM_LOG_LEVEL_NONE increases
 // the resulting binary size substantially!).
-# define TWM_LOG_LEVEL TWM_LOG_LEVEL_VERBOSE //TWM_LOG_LEVEL_INFO
+# define EWM_LOG_LEVEL EWM_LOG_LEVEL_VERBOSE //EWM_LOG_LEVEL_NONE
 
 // Enables runtime assertions. Upon a failed assertion, prints the expression that
-// evaluated to false, prints the backtrace leading up to the failed assertion
-// (if available), then enters an infinite loop. Implies TWM_LOG_LEVEL >= TWM_LOG_LEVEL_ERROR.
-# define TWM_ENABLE_ASSERTIONS
+// evaluated to false, as well as the backtrace leading up to the failed assertion
+// (if available), then enters an infinite loop. Implies EWM_LOG_LEVEL >=
+// EWM_LOG_LEVEL_ERROR.
+# define EWM_ENABLE_ASSERTIONS
 
 # if defined(ESP32) || defined(ESP8266)
 #  include <esp_debug_helpers.h>
-#  define TWM_BACKTRACE_FRAMES 5
+#  define EWM_BACKTRACE_FRAMES 5
 #  define print_backtrace() \
     ets_install_putc1([](char c) \
     { \
         putc(c, stderr); \
     }); \
-    esp_backtrace_print(TWM_BACKTRACE_FRAMES)
+    esp_backtrace_print(EWM_BACKTRACE_FRAMES)
 # else
 #  define print_backtrace
 # endif
 
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
 #  include <typeinfo>
 #  include <cxxabi.h>
 # endif
 
-# define _TWM_LOG(pfx, fmt, ...) \
+# define _EWM_LOG(pfx, fmt, ...) \
     do { \
         printf("[%c] %s (%s:%d): " fmt "\n", pfx, __FUNCTION__, basename(__FILE__), \
             __LINE__ __VA_OPT__(,) __VA_ARGS__); \
     } while(false)
-# define _TWM_LOG_E(fmt, ...) _TWM_LOG('E', fmt __VA_OPT__(,) __VA_ARGS__)
-# define _TWM_LOG_W(fmt, ...) _TWM_LOG('W', fmt __VA_OPT__(,) __VA_ARGS__)
-# define _TWM_LOG_I(fmt, ...) _TWM_LOG('I', fmt __VA_OPT__(,) __VA_ARGS__)
-# define _TWM_LOG_D(fmt, ...) _TWM_LOG('D', fmt __VA_OPT__(,) __VA_ARGS__)
-# define _TWM_LOG_V(fmt, ...) _TWM_LOG('V', fmt __VA_OPT__(,) __VA_ARGS__)
+# define _EWM_LOG_E(fmt, ...) _EWM_LOG('E', fmt __VA_OPT__(,) __VA_ARGS__)
+# define _EWM_LOG_W(fmt, ...) _EWM_LOG('W', fmt __VA_OPT__(,) __VA_ARGS__)
+# define _EWM_LOG_I(fmt, ...) _EWM_LOG('I', fmt __VA_OPT__(,) __VA_ARGS__)
+# define _EWM_LOG_D(fmt, ...) _EWM_LOG('D', fmt __VA_OPT__(,) __VA_ARGS__)
+# define _EWM_LOG_V(fmt, ...) _EWM_LOG('V', fmt __VA_OPT__(,) __VA_ARGS__)
 
-# if defined(TWM_ENABLE_ASSERTIONS)
-#  if TWM_LOG_LEVEL < TWM_LOG_LEVEL_ERROR
-#   undef TWM_LOG_LEVEL
-#   define TWM_LOG_LEVEL TWM_LOG_LEVEL_ERROR
+# if defined(EWM_ENABLE_ASSERTIONS)
+#  if EWM_LOG_LEVEL < EWM_LOG_LEVEL_ERROR
+#   undef EWM_LOG_LEVEL
+#   define EWM_LOG_LEVEL EWM_LOG_LEVEL_ERROR
 #  endif
-#  define TWM_ASSERT(expr) \
+#  define EWM_ASSERT(expr) \
     do { \
         if (!(expr)) { \
-            TWM_LOG_E("!!! ASSERT: '" #expr "'"); \
+            EWM_LOG_E("!!! ASSERT: '" #expr "'"); \
             print_backtrace(); \
             while (true); \
         } \
     } while (false)
 # else
-#  define TWM_ASSERT(expr)
+#  define EWM_ASSERT(expr)
 # endif
 
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_ERROR
-#  define TWM_LOG_E(fmt, ...) _TWM_LOG_E(fmt __VA_OPT__(,) __VA_ARGS__)
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_ERROR
+#  define EWM_LOG_E(fmt, ...) _EWM_LOG_E(fmt __VA_OPT__(,) __VA_ARGS__)
 # else
-#  define TWM_LOG_E(fmt, ...)
+#  define EWM_LOG_E(fmt, ...)
 # endif
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_WARNING
-#  define TWM_LOG_W(fmt, ...) _TWM_LOG_W(fmt __VA_OPT__(,) __VA_ARGS__)
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_WARNING
+#  define EWM_LOG_W(fmt, ...) _EWM_LOG_W(fmt __VA_OPT__(,) __VA_ARGS__)
 # else
-#  define TWM_LOG_W(fmt, ...)
+#  define EWM_LOG_W(fmt, ...)
 # endif
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_INFO
-#  define TWM_LOG_I(fmt, ...) _TWM_LOG_I(fmt __VA_OPT__(,) __VA_ARGS__)
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_INFO
+#  define EWM_LOG_I(fmt, ...) _EWM_LOG_I(fmt __VA_OPT__(,) __VA_ARGS__)
 # else
-#  define TWM_LOG_I(fmt, ...)
+#  define EWM_LOG_I(fmt, ...)
 # endif
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_DEBUG
-#  define TWM_LOG_D(fmt, ...) _TWM_LOG_D(fmt __VA_OPT__(,) __VA_ARGS__)
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_DEBUG
+#  define EWM_LOG_D(fmt, ...) _EWM_LOG_D(fmt __VA_OPT__(,) __VA_ARGS__)
 # else
-#  define TWM_LOG_D(fmt, ...)
+#  define EWM_LOG_D(fmt, ...)
 # endif
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
-#  define TWM_LOG_V(fmt, ...) _TWM_LOG_V(fmt __VA_OPT__(,) __VA_ARGS__)
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
+#  define EWM_LOG_V(fmt, ...) _EWM_LOG_V(fmt __VA_OPT__(,) __VA_ARGS__)
 # else
-#  define TWM_LOG_V(fmt, ...)
+#  define EWM_LOG_V(fmt, ...)
 # endif
 
-# define TWM_BOOL2STR(b) ((b) ? "true" : "false")
-# define TWM_CONST(type, name, value) \
+# define EWM_BOOL2STR(b) ((b) ? "true" : "false")
+# define EWM_CONST(type, name, value) \
     static constexpr PROGMEM type name = value
 
-# if defined(TWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
+# if defined(EWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
 #  include <Adafruit_GFX.h>
 #  if defined(_ADAFRUIT_RA8875_H)
     using IGfxDisplay = Adafruit_RA8875;
@@ -165,7 +164,7 @@
 #    define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
 #   endif
 #  endif
-# elif defined(TWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
+# elif defined(EWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
 #  include <Arduino_GFX_Library.h>
 #  if defined(LITTLE_FOOT_PRINT)
 #   error "required Arduino_Canvas implementation unavailable due to LITTLE_FOOT_PRINT"
@@ -175,17 +174,17 @@
 #  endif
     using IGfxContext16 = Arduino_Canvas;
 # else
-#  error "define TWM_GFX_ADAFRUIT or TWM_GFX_ARDUINO, and install the relevant \
+#  error "define EWM_GFX_ADAFRUIT or EWM_GFX_ARDUINO, and install the relevant \
 library in order to select a low-level graphics driver"
 # endif
 
-namespace thumby
+namespace exostra
 {
     /** Window identifier. */
     using WindowID = uint8_t;
 
     /** Represents an invalid window identifier. */
-    TWM_CONST(WindowID, WID_INVALID, 0);
+    EWM_CONST(WindowID, WID_INVALID, 0);
 
     /** Window style bitmask. */
     using Style = uint16_t;
@@ -205,17 +204,17 @@ namespace thumby
     /** Pointer to physical display driver. */
     using GfxDisplayPtr = std::shared_ptr<GfxDisplay>;
 
-# if defined(TWM_COLOR_565)
+# if defined(EWM_COLOR_565)
     using Color      = uint16_t;      /**< Color type (16-bit 565 RGB). */
 #  if !defined(ADAFRUIT_RA8875)
     using GfxContext = IGfxContext16; /**< Graphics context (16-bit 565 RGB). */
 #  else
     using GfxContext = Adafruit_RA8875;
 #  endif
-# elif defined(TWM_COLOR_888)
+# elif defined(EWM_COLOR_888)
 #  error "24-bit RGB mode is not yet implemented"
 # else
-#  error "define TWM_COLOR_565 or TWM_COLOR_888 in order to select a color mode"
+#  error "define EWM_COLOR_565 or EWM_COLOR_888 in order to select a color mode"
 # endif
 
     /** Pointer to graphics context (e.g. canvas/frame buffer). */
@@ -276,13 +275,13 @@ namespace thumby
 
         Extent width() const noexcept
         {
-            TWM_ASSERT(right >= left);
+            EWM_ASSERT(right >= left);
             return static_cast<Extent>(right - left);
         }
 
         Extent height() const noexcept
         {
-            TWM_ASSERT(bottom >= top);
+            EWM_ASSERT(bottom >= top);
             return static_cast<Extent>(bottom - top);
         }
 
@@ -304,8 +303,8 @@ namespace thumby
 
         void deflate(Extent px) noexcept
         {
-            TWM_ASSERT(px < width());
-            TWM_ASSERT(px < height());
+            EWM_ASSERT(px < width());
+            EWM_ASSERT(px < height());
             left   += px;
             top    += px;
             right  -= px;
@@ -586,7 +585,7 @@ namespace thumby
 
     struct InputParams
     {
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
         std::string handledBy;
 # endif
         InputType type = InputType(0);
@@ -686,7 +685,7 @@ namespace thumby
 
         Extent getExtent() const noexcept
         {
-            TWM_ASSERT(_type == EXTENT);
+            EWM_ASSERT(_type == EXTENT);
             return _extentValue;
         }
 
@@ -698,7 +697,7 @@ namespace thumby
 
         Coord getCoord() const noexcept
         {
-            TWM_ASSERT(_type == COORD);
+            EWM_ASSERT(_type == COORD);
             return _coordValue;
         }
 
@@ -710,7 +709,7 @@ namespace thumby
 
         uint8_t getUint8() const noexcept
         {
-            TWM_ASSERT(_type == UINT8);
+            EWM_ASSERT(_type == UINT8);
             return _uint8Value;
         }
 
@@ -722,7 +721,7 @@ namespace thumby
 
         uint32_t getUint32() const noexcept
         {
-            TWM_ASSERT(_type == UINT32);
+            EWM_ASSERT(_type == UINT32);
             return _uint32Value;
         }
 
@@ -734,7 +733,7 @@ namespace thumby
 
         float getFloat() const noexcept
         {
-            TWM_ASSERT(_type == FLOAT);
+            EWM_ASSERT(_type == FLOAT);
             return _floatValue;
         }
 
@@ -828,7 +827,7 @@ namespace thumby
                 case COLOR_CHECKBOX_CHECK:       return 0x3166;
                 case COLOR_CHECKBOX_CHECK_FRAME: return 0x9cf3;
                 default:
-                    TWM_ASSERT("!invalid color ID");
+                    EWM_ASSERT("!invalid color ID");
                     return Color(0);
             }
         }
@@ -916,7 +915,7 @@ namespace thumby
                     retval.setUint32(200);
                 break;
                 default:
-                    TWM_ASSERT(!"invalid metric ID");
+                    EWM_ASSERT(!"invalid metric ID");
                 break;
             }
             return retval;
@@ -924,7 +923,7 @@ namespace thumby
 
         void drawScreensaver(const GfxDisplayPtr& display) const final
         {
-            TWM_ASSERT(display);
+            EWM_ASSERT(display);
             display->fillScreen(getColor(COLOR_SCREENSAVER));
         }
 
@@ -965,7 +964,7 @@ namespace thumby
             auto tmp = rect;
             auto pixels = getMetric(METRIC_WINDOW_FRAME_PX).getExtent();
             while (pixels-- > 0) {
-                TWM_ASSERT(ctx);
+                EWM_ASSERT(ctx);
                 ctx->drawRoundRect(tmp.left, tmp.top, tmp.width(), tmp.height(), radius, color);
                 tmp.deflate(1);
             }
@@ -975,7 +974,7 @@ namespace thumby
             Coord radius, Color color) const final
         {
             const auto thickness = getMetric(METRIC_WINDOW_FRAME_PX).getExtent();
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->drawLine(
                 rect.left + radius + thickness,
                 rect.bottom,
@@ -995,7 +994,7 @@ namespace thumby
         void drawWindowBackground(const GfxContextPtr& ctx, const Rect& rect,
             Coord radius, Color color) const final
         {
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->fillRoundRect(rect.left, rect.top, rect.width(), rect.height(),
                 radius, color);
         }
@@ -1003,7 +1002,7 @@ namespace thumby
         void drawText(const GfxContextPtr& ctx, const char* text, uint8_t flags,
             const Rect& rect, uint8_t textSize, Color textColor, const Font* font) const final
         {
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->setTextSize(textSize);
             ctx->setFont(font);
 
@@ -1084,7 +1083,7 @@ namespace thumby
                         *old_cursor++,
                         textColor,
                         textColor
-# if defined(TWM_GFX_ADAFRUIT)
+# if defined(EWM_GFX_ADAFRUIT)
                         , textSize
 # endif
                     );
@@ -1106,7 +1105,7 @@ namespace thumby
                                 '.',
                                 textColor,
                                 textColor
-# if defined(TWM_GFX_ADAFRUIT)
+# if defined(EWM_GFX_ADAFRUIT)
                                 , textSize
 # endif
                             );
@@ -1120,25 +1119,25 @@ namespace thumby
 
         void drawProgressBarBackground(const GfxContextPtr& ctx, const Rect& rect) const final
         {
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
                 getColor(COLOR_PROGRESS_BG));
         }
 
         void drawProgressBarProgress(const GfxContextPtr& ctx, const Rect& rect, float percent) const final
         {
-            TWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
+            EWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
             auto barRect = rect;
             barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
             barRect.right = barRect.left + abs(barRect.width() * (min(100.0f, percent) / 100.0f));
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->fillRect(barRect.left, barRect.top, barRect.width(),
                 barRect.height(), getColor(COLOR_PROGRESS_FILL));
         }
 
         void drawProgressBarIndeterminate(const GfxContextPtr& ctx, const Rect& rect, float counter) const final
         {
-            TWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
+            EWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
             auto barRect = rect;
             barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
             Extent marqueeWidth
@@ -1167,7 +1166,7 @@ namespace thumby
                     static_cast<Extent>(barRect.right - x)
                 );
             }
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->fillRect(x, barRect.top, width, barRect.height(),
                 getColor(COLOR_PROGRESS_FILL));
         }
@@ -1183,7 +1182,7 @@ namespace thumby
                 rect.top + (rect.height() - getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent())
             );
             checkableRect.top = rect.top + ((rect.height() / 2) - (checkableRect.height() / 2));
-            TWM_ASSERT(ctx);
+            EWM_ASSERT(ctx);
             ctx->fillRoundRect(
                 checkableRect.left,
                 checkableRect.top,
@@ -1338,7 +1337,7 @@ namespace thumby
 
         bool hasChildren() override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             return !_children.empty();
@@ -1346,7 +1345,7 @@ namespace thumby
 
         size_t childCount() override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             return _children.size();
@@ -1354,7 +1353,7 @@ namespace thumby
 
         WindowPtr getChildByID(WindowID id) override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             for (const auto& win : _children) {
@@ -1367,7 +1366,7 @@ namespace thumby
 
         bool setForegroundWindow(const WindowPtr& win) override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             bool success = false;
@@ -1389,7 +1388,7 @@ namespace thumby
 
         void recalculateZOrder() override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             uint8_t zOrder = 0;
@@ -1400,7 +1399,7 @@ namespace thumby
 
         bool addChild(const WindowPtr& child) override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             if (getChildByID(child->getID()) != nullptr) {
@@ -1418,7 +1417,7 @@ namespace thumby
 
         bool removeChildByID(WindowID id) override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             for (auto it = _children.begin(); it != _children.end(); it++) {
@@ -1433,7 +1432,7 @@ namespace thumby
 
         void removeAllChildren() override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             _children.clear();
@@ -1444,7 +1443,7 @@ namespace thumby
             if (!cb) {
                 return;
             }
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             for (auto child : _children) {
@@ -1459,7 +1458,7 @@ namespace thumby
             if (!cb) {
                 return;
             }
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_childMtx);
 # endif
             for (auto it = _children.rbegin(); it != _children.rend(); it++) {
@@ -1471,7 +1470,7 @@ namespace thumby
 
     protected:
         WindowDeque _children;
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
         Mutex _childMtx;
 # endif
     };
@@ -1505,9 +1504,9 @@ namespace thumby
         ) : _registry(std::make_shared<WindowContainer>()),
             _gfxDisplay(gfxDisplay), _theme(theme)
         {
-            TWM_ASSERT(_registry);
-            TWM_ASSERT(_gfxDisplay);
-            TWM_ASSERT(_theme);
+            EWM_ASSERT(_registry);
+            EWM_ASSERT(_gfxDisplay);
+            EWM_ASSERT(_theme);
             _theme->setDefaultFont(defaultFont);
             if (config != nullptr) {
                 _config = *config;
@@ -1533,15 +1532,15 @@ namespace thumby
             _ssaverActivateAfter = activateAfterMsec;
             _ssaverEpoch = millis();
             setState(getState() | WMS_SSAVER_ENABLED);
-            TWM_LOG_D("screensaver enabled (%ums)", activateAfterMsec);
+            EWM_LOG_D("screensaver enabled (%ums)", activateAfterMsec);
         }
 
         void disableScreensaver() noexcept
         {
-            TWM_CONST(State, flags,
+            EWM_CONST(State, flags,
                 WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN);
             setState(getState() & ~flags);
-            TWM_LOG_D("screensaver disabled");
+            EWM_LOG_D("screensaver disabled");
         }
 
         virtual void tearDown()
@@ -1579,7 +1578,7 @@ namespace thumby
         )
         {
             if (id == WID_INVALID) {
-                TWM_LOG_E("%hhu is a reserved window ID", WID_INVALID);
+                EWM_LOG_E("%hhu is a reserved window ID", WID_INVALID);
                 return nullptr;
             }
             if (bitsHigh(style, STY_FULLSCREEN)) {
@@ -1589,14 +1588,14 @@ namespace thumby
                 height = getDisplayHeight();
             }
             Rect rect(x, y, x + width, y + height);
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
-            TWM_CONST(size_t, MaxClassName, 32);
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
+            EWM_CONST(size_t, MaxClassName, 32);
             char* demangleBuf = reinterpret_cast<char*>(malloc(MaxClassName));
             size_t dbufSize = MaxClassName;
             int status = 0;
             const auto className = __cxxabiv1::__cxa_demangle(typeid(TWindow).name(),
                 demangleBuf, &dbufSize, &status);
-            TWM_ASSERT(className != nullptr && status == 0);
+            EWM_ASSERT(className != nullptr && status == 0);
             std::shared_ptr<TWindow> win(
                 std::make_shared<TWindow>(
                     shared_from_this(), parent, id, style, rect, text, className
@@ -1612,24 +1611,24 @@ namespace thumby
             );
 # endif
             if (bitsHigh(style, STY_CHILD) && !parent) {
-                TWM_LOG_E("STY_CHILD && null parent");
+                EWM_LOG_E("STY_CHILD && null parent");
                 return nullptr;
             }
             if (bitsHigh(style, STY_TOPLEVEL) && parent) {
-                TWM_LOG_E("STY_TOPLEVEL && parent");
+                EWM_LOG_E("STY_TOPLEVEL && parent");
                 return nullptr;
             }
             if (preCreateHook && !preCreateHook(win)) {
-                TWM_LOG_E("pre-create hook failed");
+                EWM_LOG_E("pre-create hook failed");
                 return nullptr;
             }
             if (!win->routeMessage(MSG_CREATE)) {
-                TWM_LOG_E("MSG_CREATE = false");
+                EWM_LOG_E("MSG_CREATE = false");
                 return nullptr;
             }
             bool dupe = parent ? !parent->addChild(win) : !_registry->addChild(win);
             if (dupe) {
-                TWM_LOG_E("duplicate window ID %hhu (parent: %hhu)",
+                EWM_LOG_E("duplicate window ID %hhu (parent: %hhu)",
                     id, parent ? parent->getID() : WID_INVALID);
                 return nullptr;
             }
@@ -1650,7 +1649,7 @@ namespace thumby
             const typename TPrompt::ResultCallback& callback
         )
         {
-            TWM_ASSERT(bitsHigh(style, STY_PROMPT));
+            EWM_ASSERT(bitsHigh(style, STY_PROMPT));
             const Extent width = min(
                 _theme->getMetric(METRIC_MAX_PROMPT_CX).getExtent(),
                 static_cast<Extent>(
@@ -1717,9 +1716,9 @@ namespace thumby
             if (millis() - _lastHitTestTime < _config.minHitTestIntervalMsec) {
                 return;
             }
-            TWM_ASSERT(x >= 0 && y >= 0);
-            TWM_ASSERT(x <= getDisplayWidth() && y <= getDisplayHeight());
-            TWM_LOG_D("hit test at %hd/%hd", x, y);
+            EWM_ASSERT(x >= 0 && y >= 0);
+            EWM_ASSERT(x <= getDisplayWidth() && y <= getDisplayHeight());
+            EWM_LOG_D("hit test at %hd/%hd", x, y);
             if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
                 _ssaverEpoch = millis();
                 if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
@@ -1732,14 +1731,14 @@ namespace thumby
                 if (!child->isDrawable()) {
                     return true;
                 }
-                TWM_LOG_V("interrogating %s re: hit test at %hd/%hd",
+                EWM_LOG_V("interrogating %s re: hit test at %hd/%hd",
                     child->toString().c_str(), x, y);
                 InputParams params;
                 params.type = INPUT_TAP;
                 params.x    = x;
                 params.y    = y;
                 if (child->processInput(&params)) {
-                    TWM_LOG_V("%s claimed hit test at %hd/%hd",
+                    EWM_LOG_V("%s claimed hit test at %hd/%hd",
                         params.handledBy.c_str(), x, y);
                     claimed = true;
                     return false;
@@ -1747,7 +1746,7 @@ namespace thumby
                 return true;
             });
             if (!claimed) {
-                TWM_LOG_V("hit test at %hd/%hd unclaimed", x, y);
+                EWM_LOG_V("hit test at %hd/%hd unclaimed", x, y);
             }
             _lastHitTestTime = millis();
         }
@@ -1782,7 +1781,7 @@ namespace thumby
                 }
                 if (win->getRect().intersectsRect(rect)) {
                     const auto intersection = win->getRect().getIntersection(rect);
-                    TWM_LOG_V("dirty rect = {%hd, %hd, %hd, %hd}, intersection"
+                    EWM_LOG_V("dirty rect = {%hd, %hd, %hd, %hd}, intersection"
                         " with %s is {%hd, %hd, %hd, %hd}", rect.left, rect.top, rect.right, rect.bottom,
                         win->toString().c_str(), intersection.left, intersection.top, intersection.right,
                         intersection.bottom);
@@ -1848,7 +1847,7 @@ namespace thumby
             if (millis() - _lastRenderTime < _config.minRenderIntervalMsec) {
                 return;
             }
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             static constexpr uint32_t reportInterval = 30000U;
             static uint32_t lastReport = 0;
             const auto beginTime = micros();
@@ -1858,13 +1857,13 @@ namespace thumby
                 if (millis() - _ssaverEpoch >= _ssaverActivateAfter) {
                     if (!bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
                         setState(getState() | WMS_SSAVER_ACTIVE);
-                        TWM_LOG_D("activated screensaver");
+                        EWM_LOG_D("activated screensaver");
                     }
                 } else {
                     if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
                         setState(getState() & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
                         setDirtyRect(getDisplayRect());
-                        TWM_LOG_D("de-activated screensaver");
+                        EWM_LOG_D("de-activated screensaver");
                     }
                 }
             }
@@ -1908,7 +1907,7 @@ namespace thumby
                     if (!obscuringRect.empty()) {
                         dirtyRects = dirtyRect.subtractRect(obscuringRect);
                         if (dirtyRects.empty()) {
-                            TWM_LOG_V("%s has no dirty rects left after subtracting the"
+                            EWM_LOG_V("%s has no dirty rects left after subtracting the"
                                 " obscuring rect; clearing dirty rect", win->toString().c_str());
                             win->markRectDirty(Rect());
                             return true;
@@ -1921,11 +1920,11 @@ namespace thumby
                         auto clientDirtyRect = dirtyRect = dirtyRects.front();
                         dirtyRects.pop();
                         if (!displayToWindow(win, clientDirtyRect)) {
-                            TWM_ASSERT(!"failed to convert display to window coords");
+                            EWM_ASSERT(!"failed to convert display to window coords");
                             return true;
                         }
                         auto ctx = win->getGfxContext();
-# if defined(TWM_GFX_ADAFRUIT)
+# if defined(EWM_GFX_ADAFRUIT)
                         _gfxDisplay->startWrite();
                         _gfxDisplay->setAddrWindow(
                             dirtyRect.left,
@@ -1938,7 +1937,7 @@ namespace thumby
                             _gfxDisplay->writePixels(offset, clientDirtyRect.width());
                         }
                         _gfxDisplay->endWrite();
-# elif defined(TWM_GFX_ARDUINO)
+# elif defined(EWM_GFX_ARDUINO)
 #  error "not implemented"
 # endif
                         _gfxDisplay->drawRect(
@@ -1961,13 +1960,13 @@ namespace thumby
                 _lastRenderTime = millis();
             }
 
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             if (millis() - lastReport > reportInterval) {
                 _renderAccumCount = max(1U, _renderAccumCount);
                 _renderAvg        = _renderAccumTime / _renderAccumCount;
                 _renderAccumTime  = 0U;
                 _renderAccumCount = 0U;
-                TWM_LOG_V("avg. render time: %uμs", _renderAvg);
+                EWM_LOG_V("avg. render time: %uμs", _renderAvg);
                 lastReport = millis();
                 return;
             }
@@ -1981,20 +1980,20 @@ namespace thumby
         {
             bool success = _gfxDisplay;
             if (success) {
-# if defined(TWM_GFX_ADAFRUIT)
+# if defined(EWM_GFX_ADAFRUIT)
                 /// TODO: possible in C++11 to deduce return type
                 /// of begin() and capture it if it's bool?
                 _gfxDisplay->begin(args...);
-# elif defined(TWM_GFX_ARDUINO)
+# elif defined(EWM_GFX_ARDUINO)
 #  error "figure out arduino gfx contexts"
 # endif
                 _gfxDisplay->setRotation(rotation);
                 _gfxDisplay->setCursor(0, 0);
             }
-            TWM_ASSERT(success);
+            EWM_ASSERT(success);
             if (success) {
                 _theme->setDisplayExtents(getDisplayWidth(), getDisplayHeight());
-                TWM_LOG_D("display: %hux%hu, rotation: %hhu", getDisplayWidth(),
+                EWM_LOG_D("display: %hux%hu, rotation: %hhu", getDisplayWidth(),
                     getDisplayHeight(), rotation);
             }
             return success;
@@ -2010,7 +2009,7 @@ namespace thumby
         uint32_t _ssaverActivateAfter = 0U;
         uint32_t _lastRenderTime      = 0U;
         uint32_t _lastHitTestTime     = 0U;
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
         uint32_t _renderAvg        = 0U;
         uint32_t _flushAvg         = 0U;
         uint32_t _renderAccumTime  = 0U;
@@ -2046,11 +2045,11 @@ namespace thumby
             Style style,
             const Rect& rect,
             const std::string& text
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             , const char* className
 # endif
         ) : _wm(wm), _parent(parent), _rect(rect), _dirtyRect(rect), _text(text),
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             _className(className),
 # endif
             _style(style), _id(id)
@@ -2058,20 +2057,20 @@ namespace thumby
 
             if (bitsHigh(getStyle(), STY_TOPLEVEL) && !parent) {
                 _ctx = std::make_shared<GfxContext>(rect.width(), rect.height());
-                TWM_LOG_V("created %hux%hu gfx ctx for %s", rect.width(),
+                EWM_LOG_V("created %hux%hu gfx ctx for %s", rect.width(),
                     rect.height(), toString().c_str());
             } else {
-                TWM_ASSERT(parent);
+                EWM_ASSERT(parent);
                 _ctx = parent->getGfxContext();
-                TWM_LOG_V("using parent's %hux%hu gfx ctx for %s", _ctx->width(),
+                EWM_LOG_V("using parent's %hux%hu gfx ctx for %s", _ctx->width(),
                     _ctx->height(), toString().c_str());
             }
 
-            TWM_ASSERT(_ctx && _ctx->getBuffer() != nullptr);
+            EWM_ASSERT(_ctx && _ctx->getBuffer() != nullptr);
             setDirty(true, false);
 
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             _bgColor     = theme->getColor(COLOR_WINDOW_BG);
             _textColor   = theme->getColor(COLOR_WINDOW_TEXT);
             _frameColor  = theme->getColor(COLOR_WINDOW_FRAME);
@@ -2125,7 +2124,7 @@ namespace thumby
             if (bitsHigh(getStyle(), STY_TOPLEVEL) && !parent) {
                 return Rect(0, 0, rect.width(), rect.height());
             } else {
-                TWM_ASSERT(parent);
+                EWM_ASSERT(parent);
                 const auto parentRect = parent->getRect();
                 return Rect(
                     rect.left - parentRect.left,
@@ -2288,7 +2287,7 @@ namespace thumby
                     break;
                 }
                 default:
-                    TWM_ASSERT(false);
+                    EWM_ASSERT(false);
                     return false;
             }
             if (dirty) {
@@ -2299,7 +2298,7 @@ namespace thumby
 
         bool queueMessage(Message msg, MsgParam p1 = 0, MsgParam p2 = 0) override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_queueMtx);
 # endif
             PackagedMessage pm;
@@ -2312,7 +2311,7 @@ namespace thumby
 
         bool processQueue() override
         {
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
             ScopeLock lock(_queueMtx);
 # endif
             if (!_queue.empty()) {
@@ -2351,7 +2350,7 @@ namespace thumby
                     makeMsgParam(0, params->type),
                     makeMsgParam(params->x, params->y)
                 );
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
                 if (handled) {
                     params->handledBy = std::move(toString());
                 }
@@ -2401,7 +2400,7 @@ namespace thumby
             }
             setStyle(getStyle() & ~STY_VISIBLE);
             auto wm = _getWM();
-            TWM_ASSERT(wm);
+            EWM_ASSERT(wm);
             wm->setDirtyRect(getRect());
             return true;
         }
@@ -2409,7 +2408,7 @@ namespace thumby
         bool show() noexcept override
         {
             const auto topLevel = bitsHigh(getStyle(), STY_TOPLEVEL);
-            TWM_ASSERT(!topLevel || !getParent());
+            EWM_ASSERT(!topLevel || !getParent());
             if (!topLevel && isVisible()) {
                 return false;
             }
@@ -2477,7 +2476,7 @@ namespace thumby
         std::string toString() const override
         {
             std::string retval;
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             retval = _className;
 # endif
             retval += " (id: " + std::to_string(getID()); /* + ", state: ";
@@ -2494,7 +2493,7 @@ namespace thumby
         bool onCreate(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_WINDOW).getCoord());
             return true;
         }
@@ -2508,9 +2507,9 @@ namespace thumby
         // MSG_DRAW: p1 = 1 (force) || 0, p2 = 0.
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
-            TWM_LOG_V("%s", toString().c_str());
+            EWM_LOG_V("%s", toString().c_str());
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
             if (bitsHigh(getStyle(), STY_FRAME)) {
                 theme->drawWindowFrame(_ctx, getClientRect(), getCornerRadius(), getFrameColor());
@@ -2543,7 +2542,7 @@ namespace thumby
             switch (params.type) {
                 case INPUT_TAP: return onTapped(params.x, params.y);
                 default:
-                    TWM_ASSERT(false);
+                    EWM_ASSERT(false);
                 break;
             }
             return false;
@@ -2555,7 +2554,7 @@ namespace thumby
         // MSG_RESIZE: p1 = 0, p2 = 0.
         bool onResize(MsgParam p1, MsgParam p2) override
         {
-            TWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
+            EWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
             return false;
         }
 
@@ -2577,7 +2576,7 @@ namespace thumby
     protected:
         WindowContainer _children;
         PackagedMessageQueue _queue;
-# if !defined(TWM_SINGLETHREAD)
+# if !defined(EWM_NOMUTEXES)
         Mutex _queueMtx;
 # endif
         WindowManagerPtr _wm;
@@ -2586,7 +2585,7 @@ namespace thumby
         Rect _rect;
         Rect _dirtyRect;
         std::string _text;
-# if TWM_LOG_LEVEL >= TWM_LOG_LEVEL_VERBOSE
+# if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
         std::string _className;
 # endif
         Style _style        = 0;
@@ -2609,7 +2608,7 @@ namespace thumby
         bool onTapped(Coord x, Coord y) override
         {
             auto parent = getParent();
-            TWM_ASSERT(parent);
+            EWM_ASSERT(parent);
             if (parent) {
                 parent->queueMessage(MSG_EVENT, EVT_CHILD_TAPPED, getID());
             }
@@ -2624,7 +2623,7 @@ namespace thumby
             }
 
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord());
             return true;
         }
@@ -2632,7 +2631,7 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             const bool pressed = (millis() - _lastTapped <
                 theme->getMetric(METRIC_BUTTON_TAPPED_DURATION).getUint32());
             theme->drawWindowBackground(
@@ -2662,7 +2661,7 @@ namespace thumby
         bool onResize(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             Coord x, y;
             Extent width, height;
             auto rect = getRect();
@@ -2690,7 +2689,7 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
             theme->drawText(
                 _ctx,
@@ -2715,7 +2714,7 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
             theme->drawText(
                 _ctx,
@@ -2733,7 +2732,7 @@ namespace thumby
     class Prompt : public Window
     {
     public:
-        TWM_CONST(WindowID, LabelID, 1);
+        EWM_CONST(WindowID, LabelID, 1);
 
         using ButtonInfo     = std::pair<WindowID, std::string>;
         using ResultCallback = std::function<void(WindowID)>;
@@ -2750,7 +2749,7 @@ namespace thumby
         bool addButton(const ButtonInfo& bi)
         {
             auto wm = _getWM();
-            TWM_ASSERT(wm);
+            EWM_ASSERT(wm);
             auto btn = wm->createWindow<Button>(
                 shared_from_this(),
                 bi.first,
@@ -2767,9 +2766,9 @@ namespace thumby
         bool onCreate(MsgParam p1, MsgParam p2) override
         {
             auto wm = _getWM();
-            TWM_ASSERT(wm);
+            EWM_ASSERT(wm);
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_PROMPT).getCoord());
             setBgColor(theme->getColor(COLOR_PROMPT_BG));
             setFrameColor(theme->getColor(COLOR_PROMPT_FRAME));
@@ -2827,7 +2826,7 @@ namespace thumby
                         }
                         break;
                         default:
-                            TWM_ASSERT(false);
+                            EWM_ASSERT(false);
                         return false;
                     }
                     rectBtn.right = rectBtn.left + width;
@@ -2851,7 +2850,7 @@ namespace thumby
                     }
                 return true;
                 default:
-                    TWM_ASSERT(false);
+                    EWM_ASSERT(false);
                 break;
             }
             return false;
@@ -2893,7 +2892,7 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             theme->drawProgressBarBackground(_ctx, getClientRect());
             theme->drawWindowFrame(_ctx, getClientRect(), getCornerRadius(), getFrameColor());
             bool drawn = false;
@@ -2936,7 +2935,7 @@ namespace thumby
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             theme->drawCheckBox(_ctx, getText().c_str(), isChecked(), getClientRect());
             return routeMessage(MSG_POSTDRAW);
         }
@@ -2944,7 +2943,7 @@ namespace thumby
         bool onTapped(Coord x, Coord y) override
         {
             auto theme = _getTheme();
-            TWM_ASSERT(theme);
+            EWM_ASSERT(theme);
             if (millis() - _lastToggle >=
                 theme->getMetric(METRIC_CHECKBOX_CHECK_DELAY).getUint32()) {
                 setChecked(!isChecked());
@@ -2956,6 +2955,6 @@ namespace thumby
     private:
         u_long _lastToggle = 0UL;
     };
-} // namespace thumby
+} // namespace exostra
 
-#endif // !_THUMBY_WM_H_INCLUDED
+#endif // !_EXOSTRA_H_INCLUDED
