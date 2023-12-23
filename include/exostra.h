@@ -31,6 +31,7 @@
 # include <type_traits>
 # include <string>
 # include <memory>
+# include <array>
 # include <queue>
 # include <mutex>
 
@@ -1622,20 +1623,20 @@ namespace exostra
                 return nullptr;
             }
             if (bitsHigh(style, Style::FullScreen)) {
-                x = 0;
-                y = 0;
-                width = getDisplayWidth();
+                x      = 0;
+                y      = 0;
+                width  = getDisplayWidth();
                 height = getDisplayHeight();
             }
             Rect rect(x, y, x + width, y + height);
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             EWM_CONST(size_t, MaxClassName, 32);
-            auto demangleBuf   = std::make_shared<char[MaxClassName]>();
+            std::array<char, MaxClassName> demangleBuf;
             size_t dbufSize    = MaxClassName;
             int status         = 0;
             const auto clsName = __cxxabiv1::__cxa_demangle(
                 typeid(TWindow).name(),
-                demangleBuf.get(),
+                demangleBuf.data(),
                 &dbufSize,
                 &status
             );
@@ -1645,7 +1646,7 @@ namespace exostra
                     shared_from_this(), parent, id, style, rect, text, clsName
                 )
             );
-            demangleBuf.reset();
+            demangleBuf.fill('\0');
 # else
             std::shared_ptr<TWindow> win(
                 std::make_shared<TWindow>(
