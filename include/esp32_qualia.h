@@ -1,6 +1,9 @@
 #ifndef _ESP32_QUALIA_RGB666_H_INCLUDED
 #define _ESP32_QUALIA_RGB666_H_INCLUDED
 
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023-2024 Ryan M. Lederman <lederman@gmail.com>
+
 #include <stdint.h>
 
 namespace qualia

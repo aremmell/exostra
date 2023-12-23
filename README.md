@@ -1,8 +1,13 @@
 # exostra
 
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2023-2024 Ryan M. Lederman <lederman@gmail.com> -->
+
+[![License](https://img.shields.io/github/license/aremmell/exostra?color=%2340b900&cacheSeconds=60)](https://github.com/aremmell/exostra/blob/master/LICENSE)
+
 Exostra Window Manager[^1]
 
-A single-header (C++11) [compositing window manager](https://en.wikipedia.org/wiki/Compositing_window_manager) designed specifically for use with small touch displays, such as the kind you might utilize while building an IoT project.
+A single-header (C++17, 20 when the toolchains catch up) [compositing window manager](https://en.wikipedia.org/wiki/Compositing_window_manager) designed specifically for use with small touch displays, such as the kind you might utilize while building an IoT project.
 
 Currently, exostra is designed to be consumed by an Arduino/PlatformIO/ESP-IDF project as a library dependency, and has support for the following low-level graphics libraries/interfaces:
 
@@ -12,7 +17,7 @@ Currently, exostra is designed to be consumed by an Arduino/PlatformIO/ESP-IDF p
 
 ## Notable features
 
-- Single-header implementation (C++11)
+- Single-header implementation (C++17)
 - Only draws pixels that must be redrawn and will be visible; rendering is extremely fast: with several top-level windows and many widgets, I am getting ~50 _microsecond_ average rendering times (on an Unexpected Maker ProS3 connected to an Adafruit HX8357D via EYESPI)!
 - Uses templates to abstract the low-level graphics library away, allowing the underlying graphics library to be swapped out with 1-2 lines of changes.
 - Themeable. A default theme is under development along with the library, but themeing is extremely simple through the use of inheritance/virtual functions and templates.

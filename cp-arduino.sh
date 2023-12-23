@@ -1,5 +1,8 @@
 #!/usr/bin/env zsh
 
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2023-2024 Ryan M. Lederman <lederman@gmail.com>
+
 _SOURCE_DIR="/Users/ryan/Documents/PlatformIO/Projects/exostra"
 _TARGET_DIR="/Users/ryan/Documents/Arduino/exostra/main"
 

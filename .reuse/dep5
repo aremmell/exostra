@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: exostra
+Upstream-Contact: Ryan M. Lederman <lederman@gmail.com>
+Source: https://github.com/aremmell/exostra
+
+# Visual Studio Code files
+Files: .vscode/*
+Copyright: 2023-2024 Ryan M. Lederman <lederman@gmail.com>
+License: MIT
+
+# PlatformIO/ESP-IDF files
+Files: library.json, sdkconfig.* compile_commands.json
+Copyright: 2023-2024 Ryan M. Lederman <lederman@gmail.com>
+License: MIT
