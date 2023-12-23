@@ -2039,7 +2039,7 @@ namespace exostra
             return success;
         }
 
-    protected:
+    private:
         Config _config;
         WindowContainerPtr _registry;
         GfxDisplayPtr _gfxDisplay;
@@ -2613,7 +2613,7 @@ namespace exostra
             return wm ? wm->getTheme() : nullptr;
         }
 
-    protected:
+    private:
         WindowContainer _children;
         PackagedMessageQueue _queue;
 # if !defined(EWM_NOMUTEXES)
@@ -2721,7 +2721,7 @@ namespace exostra
             return true;
         }
 
-    protected:
+    private:
         u_long _lastTapped = 0UL;
     };
 
@@ -2902,7 +2902,7 @@ namespace exostra
             return false;
         }
 
-    protected:
+    private:
         WindowPtr _label;
         ResultCallback _callback;
     };
@@ -2952,6 +2952,7 @@ namespace exostra
             return drawn ? routeMessage(Message::PostDraw) : false;
         }
 
+    private:
         ProgressStyle _barStyle = ProgressStyle::Normal;
         float _value            = 0.0f;
     };
