@@ -1,5 +1,7 @@
 # exostra
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/82c34cd48c82418bb022c29f5e18178d)](https://app.codacy.com/gh/aremmell/exostra?utm_source=github.com&utm_medium=referral&utm_content=aremmell/exostra&utm_campaign=Badge_Grade)
+
 Exostra Window Manager[^1]
 
 A single-header (C++11) [compositing window manager](https://en.wikipedia.org/wiki/Compositing_window_manager) designed specifically for use with small touch displays, such as the kind you might utilize while building an IoT project.
