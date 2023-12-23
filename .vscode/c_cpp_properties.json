@@ -394,7 +394,7 @@
                 ""
             ],
             "cStandard": "gnu99",
-            "cppStandard": "gnu++11",
+            "cppStandard": "gnu++17",
             "compilerPath": "/Users/ryan/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-gcc",
             "compilerArgs": [
                 "-mlongcalls",
