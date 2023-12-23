@@ -520,7 +520,7 @@ namespace exostra
     }
 
     template<typename T>
-    inline constexpr T operator&(const T& t1, const T& t2)
+    constexpr T operator&(const T& t1, const T& t2)
     {
         return static_cast<T>(
             static_cast<unsigned>(t1) & static_cast<unsigned>(t2)
@@ -528,7 +528,7 @@ namespace exostra
     }
 
     template<typename T>
-    inline constexpr T operator|(const T& t1, const T& t2)
+    constexpr T operator|(const T& t1, const T& t2)
     {
         return static_cast<T>(
             static_cast<unsigned>(t1) | static_cast<unsigned>(t2)
@@ -536,7 +536,7 @@ namespace exostra
     }
 
     template<typename T>
-    inline T constexpr operator~(const T& t1)
+    T constexpr operator~(const T& t1)
     {
         return static_cast<T>(
             ~static_cast<unsigned>(t1)
@@ -920,7 +920,6 @@ namespace exostra
                 case MetricID::ProgressMarqueeStep: {
                     static constexpr float step = 1.0f;
                     switch (getDisplaySize()) {
-                        default:
                         case DisplaySize::Small:
                             retval.setFloat(step);
                         break;
@@ -979,7 +978,6 @@ namespace exostra
         Extent getScaledValue(Extent value) const final
         {
             switch (getDisplaySize()) {
-                default:
                 case DisplaySize::Small:
                     return abs(value * 1.0f);
                 case DisplaySize::Medium:
@@ -1040,13 +1038,19 @@ namespace exostra
             const bool xCenter = bitsHigh(flags, DrawText::Center);
             const bool singleLine = bitsHigh(flags, DrawText::Single);
 
-            uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
-            int8_t xOff = 0, yOff = 0, yOffMin = 0;
-            Extent xAccum = 0;
-            Extent yAccum;
+            uint8_t xAdv    = 0;
+            uint8_t yAdv    = 0;
+            uint8_t yAdvMax = 0;
+            int8_t xOff     = 0;
+            int8_t yOff     = 0;
+            int8_t yOffMin  = 0;
+            Extent xAccum   = 0;
+            Extent yAccum   = 0;
             if (singleLine) {
-                int16_t x, y = rect.top + (rect.height() / 2);
-                uint16_t w, h;
+                int16_t x  = 0;
+                int16_t y  = rect.top + (rect.height() / 2);
+                uint16_t w = 0;
+                uint16_t h = 0;
                 ctx->getTextBounds(text, rect.left, y, &x, &y, &w, &h);
                 yAccum = rect.top + (rect.height() / 2) + (h / 2) - 1;
             } else {
@@ -1619,18 +1623,22 @@ namespace exostra
             Rect rect(x, y, x + width, y + height);
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             EWM_CONST(size_t, MaxClassName, 32);
-            char* demangleBuf = reinterpret_cast<char*>(malloc(MaxClassName));
-            size_t dbufSize = MaxClassName;
-            int status = 0;
-            const auto className = __cxxabiv1::__cxa_demangle(typeid(TWindow).name(),
-                demangleBuf, &dbufSize, &status);
-            EWM_ASSERT(className != nullptr && status == 0);
+            auto demangleBuf   = new char[MaxClassName];
+            size_t dbufSize    = MaxClassName;
+            int status         = 0;
+            const auto clsName = __cxxabiv1::__cxa_demangle(
+                typeid(TWindow).name(),
+                demangleBuf,
+                &dbufSize,
+                &status
+            );
+            EWM_ASSERT(clsName != nullptr && status == 0);
             std::shared_ptr<TWindow> win(
                 std::make_shared<TWindow>(
-                    shared_from_this(), parent, id, style, rect, text, className
+                    shared_from_this(), parent, id, style, rect, text, clsName
                 )
             );
-            free(demangleBuf);
+            delete[] demangleBuf;
             demangleBuf = nullptr;
 # else
             std::shared_ptr<TWindow> win(

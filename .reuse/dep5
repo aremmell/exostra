@@ -9,6 +9,11 @@ Copyright: 2023-2024 Ryan M. Lederman <lederman@gmail.com>
 License: MIT
 
 # PlatformIO/ESP-IDF files
-Files: library.json, sdkconfig.* compile_commands.json
+Files: library.json sdkconfig.* compile_commands.json
+Copyright: 2023-2024 Ryan M. Lederman <lederman@gmail.com>
+License: MIT
+
+# C++ source code
+Files: include/*.h main/*.cpp
 Copyright: 2023-2024 Ryan M. Lederman <lederman@gmail.com>
 License: MIT
