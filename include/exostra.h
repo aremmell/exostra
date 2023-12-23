@@ -1635,7 +1635,7 @@ namespace exostra
             int status         = 0;
             const auto clsName = __cxxabiv1::__cxa_demangle(
                 typeid(TWindow).name(),
-                demangleBuf,
+                demangleBuf.get(),
                 &dbufSize,
                 &status
             );
