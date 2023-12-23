@@ -134,12 +134,20 @@
 # define EWM_CONST(type, name, value) \
     static constexpr PROGMEM type name = value
 
-# if defined(EWM_GFX_ADAFRUIT) && __has_include(<Adafruit_GFX.h>)
-#  include <Adafruit_GFX.h>
-#  if defined(_ADAFRUIT_RA8875_H)
+# if defined(EWM_GFX_ADAFRUIT)
+#  if defined(EWM_ADAFRUIT_RA8875)
+#   if __has_include(<Adafruit_RA8875.h>)
+#    include <Adafruit_RA8875.h>
+#   else
+#    error "Adafruit_RA8875.h is a required header when EWM_ADAFRUIT_RA8875 is defined"
+#   endif
     using IGfxDisplay = Adafruit_RA8875;
 #  else
-#   include <Adafruit_SPITFT.h>
+#   if __has_include(<Adafruit_SPITFT.h>)
+#    include <Adafruit_SPITFT.h>
+#   else
+#    error "Adafruit_SPITFT.h is a required header when EWM_GFX_ADAFRUIT is defined"
+#   endif
     using IGfxDisplay = Adafruit_SPITFT;
 #  endif
     using IGfxContext16 = GFXcanvas16;
@@ -164,8 +172,12 @@
 #    define pgm_read_pointer(addr) (static_cast<void*>(pgm_read_word(addr)))
 #   endif
 #  endif
-# elif defined(EWM_GFX_ARDUINO) && __has_include(<Arduino_GFX_Library.h>)
-#  include <Arduino_GFX_Library.h>
+# elif defined(EWM_GFX_ARDUINO)
+#  if __has_include(<Arduino_GFX_Library.h>)
+#   include <Arduino_GFX_Library.h>
+#  else
+#   error "Arduino_GFX_Library.h is a required header when EWM_GFX_ARDUINO is defined"
+#  endif
 #  if defined(LITTLE_FOOT_PRINT)
 #   error "required Arduino_Canvas implementation unavailable due to LITTLE_FOOT_PRINT"
 #  endif
@@ -186,12 +198,6 @@ namespace exostra
     /** Represents an invalid window identifier. */
     EWM_CONST(WindowID, WID_INVALID, 0);
 
-    /** Window style bitmask. */
-    using Style = uint16_t;
-
-    /** State bitmask. */
-    using State = uint16_t;
-
     /** Window message parameter type. */
     using MsgParam = uint32_t;
 
@@ -206,7 +212,7 @@ namespace exostra
 
 # if defined(EWM_COLOR_565)
     using Color      = uint16_t;      /**< Color type (16-bit 565 RGB). */
-#  if !defined(ADAFRUIT_RA8875)
+#  if !defined(EWM_ADAFRUIT_RA8875)
     using GfxContext = IGfxContext16; /**< Graphics context (16-bit 565 RGB). */
 #  else
     using GfxContext = Adafruit_RA8875;
@@ -235,10 +241,8 @@ namespace exostra
         Point() = default;
 
         template<typename T1, typename T2>
-        Point(T1 xAxis, T2 yAxis)
+        Point(T1 xAxis, T2 yAxis) : x(xAxis), y(yAxis)
         {
-            x = static_cast<Coord>(xAxis);
-            y = static_cast<Coord>(yAxis);
         }
 
         Coord x = 0; /**< X-axis value. */
@@ -515,6 +519,30 @@ namespace exostra
         if (yOff) { *yOff = okCh ? pgm_read_byte(&glyph->yOffset) : 0; }
     }
 
+    template<typename T>
+    inline constexpr T operator&(const T& t1, const T& t2)
+    {
+        return static_cast<T>(
+            static_cast<unsigned>(t1) & static_cast<unsigned>(t2)
+        );
+    }
+
+    template<typename T>
+    inline constexpr T operator|(const T& t1, const T& t2)
+    {
+        return static_cast<T>(
+            static_cast<unsigned>(t1) | static_cast<unsigned>(t2)
+        );
+    }
+
+    template<typename T>
+    inline T constexpr operator~(const T& t1)
+    {
+        return static_cast<T>(
+            ~static_cast<unsigned>(t1)
+        );
+    }
+
     template<typename T1, typename T2>
     inline bool bitsHigh(const T1& bitmask, const T2& bits) noexcept
     {
@@ -522,73 +550,76 @@ namespace exostra
     }
 
     using Mutex     = std::recursive_mutex;
-    using ScopeLock = std::lock_guard<Mutex>;
+    using ScopeLock = std::scoped_lock<Mutex>;
 
-    typedef enum
+    enum class Message : uint8_t
     {
-        MSG_NONE     = 0,
-        MSG_CREATE   = 1,
-        MSG_DESTROY  = 2,
-        MSG_DRAW     = 3,
-        MSG_POSTDRAW = 4,
-        MSG_INPUT    = 5,
-        MSG_EVENT    = 6,
-        MSG_RESIZE   = 7
-    } Message;
-
-    enum
-    {
-        STY_VISIBLE    =  1 << 0,
-        STY_CHILD      =  1 << 1,
-        STY_FRAME      =  1 << 2,
-        STY_SHADOW     =  1 << 3,
-        STY_TOPLEVEL   = (1 << 4) | STY_FRAME | STY_SHADOW,
-        STY_AUTOSIZE   =  1 << 5,
-        STY_FULLSCREEN =  1 << 6,
-        STY_BUTTON     =  1 << 7,
-        STY_LABEL      =  1 << 8,
-        STY_PROMPT     =  (1 << 9) | STY_TOPLEVEL,
-        STY_PROGBAR    =  1 << 10,
-        STY_CHECKBOX   =  1 << 11
+        None     = 0,
+        Create   = 1,
+        Destroy  = 2,
+        Draw     = 3,
+        PostDraw = 4,
+        Input    = 5,
+        Event    = 6,
+        Resize   = 7
     };
 
-    enum
+    enum class Style : uint32_t
     {
-        STA_ALIVE   = 1 << 0, /**< Active (not yet destroyed). */
-        STA_CHECKED = 1 << 1, /**< Checked/highlighted item. */
-        STA_DIRTY   = 1 << 2  /**< Needs redrawing. */
+        None       = 0,
+        Visible    =  1 << 0,
+        Child      =  1 << 1,
+        Frame      =  1 << 2,
+        Shadow     =  1 << 3,
+        TopLevel   = (1 << 4) | Frame | Shadow,
+        AutoSize   =  1 << 5,
+        FullScreen =  1 << 6,
+        Button     =  1 << 7,
+        Label      =  1 << 8,
+        Prompt     =  (1 << 9) | TopLevel,
+        Progress   =  1 << 10,
+        CheckBox   =  1 << 11
     };
 
-    enum
+    enum class State : uint16_t
     {
-        PBR_NORMAL        = 1 << 0, /**< Standard linear-fill progress bar. */
-        PBR_INDETERMINATE = 1 << 1  /**< Marquee-style progress bar. */
+        None    = 0,      /**< Invalid state. */
+        Alive   = 1 << 0, /**< Active (not yet destroyed). */
+        Checked = 1 << 1, /**< Checked/highlighted item. */
+        Dirty   = 1 << 2  /**< Needs redrawing. */
     };
 
-    enum
+    enum class ProgressStyle : uint8_t
     {
-        DT_CENTER   = 1 << 0, /**< Horizontal align center. */
-        DT_SINGLE   = 1 << 1, /**< Single line of text. */
-        DT_CLIP     = 1 << 2, /**< Text outside the rect will not be drawn. */
-        DT_ELLIPSIS = 1 << 3  /**< Replace clipped text with '...' */
+        Normal        = 1 << 0, /**< Standard linear-fill progress bar. */
+        Indeterminate = 1 << 1  /**< Marquee-style progress bar. */
     };
 
-    typedef enum
+    enum class DrawText : uint8_t
     {
-        EVT_CHILD_TAPPED = 1
-    } EventType;
+        Center   = 1 << 0, /**< Horizontal align center. */
+        Single   = 1 << 1, /**< Single line of text. */
+        Clip     = 1 << 2, /**< Text outside the rect will not be drawn. */
+        Ellipsis = 1 << 3  /**< Replace clipped text with '...' */
+    };
 
-    typedef enum
+    enum class EventType : uint8_t
     {
-        INPUT_TAP = 1
-    } InputType;
+        ChildTapped = 1
+    };
+
+    enum class InputType : uint8_t
+    {
+        None = 0,
+        Tap  = 1
+    };
 
     struct InputParams
     {
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
         std::string handledBy;
 # endif
-        InputType type = InputType(0);
+        InputType type = InputType::None;
         Coord x = 0;
         Coord y = 0;
     };
@@ -608,139 +639,139 @@ namespace exostra
         return (msgParam & 0xffffU);
     }
 
-    typedef enum
+    enum class ColorID : uint8_t
     {
-        COLOR_SCREENSAVER = 1,
+        Screensaver = 1,
 
-        COLOR_PROMPT_BG,
-        COLOR_PROMPT_FRAME,
-        COLOR_PROMPT_SHADOW,
+        PromptBg,
+        PromptFrame,
+        PromptShadow,
 
-        COLOR_WINDOW_TEXT,
-        COLOR_WINDOW_BG,
-        COLOR_WINDOW_FRAME,
-        COLOR_WINDOW_SHADOW,
+        WindowText,
+        WindowBg,
+        WindowFrame,
+        WindowShadow,
 
-        COLOR_BUTTON_TEXT,
-        COLOR_BUTTON_TEXT_PRESSED,
-        COLOR_BUTTON_BG,
-        COLOR_BUTTON_BG_PRESSED,
-        COLOR_BUTTON_FRAME,
-        COLOR_BUTTON_FRAME_PRESSED,
+        ButtonText,
+        ButtonTextPressed,
+        ButtonBg,
+        ButtonBgPressed,
+        ButtonFrame,
+        ButtonFramePressed,
 
-        COLOR_PROGRESS_BG,
-        COLOR_PROGRESS_FILL,
+        ProgressBg,
+        ProgressFill,
 
-        COLOR_CHECKBOX_CHECK_BG,
-        COLOR_CHECKBOX_CHECK_FRAME,
-        COLOR_CHECKBOX_CHECK
-    } ColorID;
+        CheckBoxCheckBg,
+        CheckBoxCheckFrame,
+        CheckBoxCheck
+    };
 
-    typedef enum
+    enum class MetricID : uint8_t
     {
-        METRIC_X_PADDING = 1,               /**< Extent */
-        METRIC_Y_PADDING,                   /**< Extent */
+        XPadding = 1,             /**< Extent */
+        YPadding,                 /**< Extent */
 
-        METRIC_DEF_TEXT_SIZE,               /**< uint8_t */
+        DefTextSize,              /**< uint8_t */
 
-        METRIC_WINDOW_FRAME_PX,             /**< Extent */
-        METRIC_CORNER_RADIUS_WINDOW,        /**< Coord */
-        METRIC_CORNER_RADIUS_BUTTON,        /**< Coord */
-        METRIC_CORNER_RADIUS_PROMPT,        /**< Coord */
-        METRIC_CORNER_RADIUS_CHECKBOX,      /**< Coord */
+        WindowFramePx,            /**< Extent */
+        CornerRadiusWindow,       /**< Coord */
+        CornerRadiusButton,       /**< Coord */
+        CornerRadiusPrompt,       /**< Coord */
+        CornerRadiusCheckBox,     /**< Coord */
 
-        METRIC_DEF_BUTTON_CX,               /**< Extent */
-        METRIC_DEF_BUTTON_CY,               /**< Extent */
-        METRIC_BUTTON_LABEL_PADDING,        /**< Extent */
-        METRIC_BUTTON_TAPPED_DURATION,      /**< uint32_t */
+        DefButtonCX,              /**< Extent */
+        DefButtonCY,              /**< Extent */
+        ButtonLabelPadding,       /**< Extent */
+        ButtonTappedDuration,     /**< uint32_t */
 
-        METRIC_MAX_PROMPT_CX,               /**< Extent */
-        METRIC_MAX_PROMPT_CY,               /**< Extent */
+        MaxPromptCX,              /**< Extent */
+        MaxPromptCY,              /**< Extent */
 
-        METRIC_DEF_PROGBAR_HEIGHT,          /**< Extent */
-        METRIC_PROGBAR_MARQUEE_CX_FACTOR,   /**< float */
-        METRIC_PROGBAR_MARQUEE_STEP,        /**< float */
+        DefProgressHeight,        /**< Extent */
+        ProgressMarqueeCXFactor,  /**< float */
+        ProgressMarqueeStep,      /**< float */
 
-        METRIC_DEF_CHECKBOX_HEIGHT,         /**< Extent */
-        METRIC_CHECKBOX_CHECK_AREA_PADDING, /**< Extent */
-        METRIC_CHECKBOX_CHECK_MARK_PADDING, /**< Extent */
-        METRIC_CHECKBOX_CHECK_DELAY         /**< uint32_t */
-    } MetricID;
+        DefCheckBoxHeight,        /**< Extent */
+        CheckBoxCheckAreaPadding, /**< Extent */
+        CheckBoxCheckMarkPadding, /**< Extent */
+        CheckBoxCheckDelay        /**< uint32_t */
+    };
 
     struct Variant
     {
-        enum
+        enum class Type : uint8_t
         {
-            EMPTY  = 0,
-            EXTENT = 1,
-            COORD  = 2,
-            UINT8  = 3,
-            UINT32 = 4,
-            FLOAT  = 5
+            Empty  = 0,
+            Extent = 1,
+            Coord  = 2,
+            UInt8  = 3,
+            UInt32 = 4,
+            Float  = 5
         };
 
         Variant() = default;
 
-        int getType() const noexcept { return _type; }
+        Type getType() const noexcept { return _type; }
 
         Extent getExtent() const noexcept
         {
-            EWM_ASSERT(_type == EXTENT);
+            EWM_ASSERT(_type == Type::Extent);
             return _extentValue;
         }
 
         void setExtent(const Extent& extent) noexcept
         {
             _extentValue = extent;
-            _type = EXTENT;
+            _type = Type::Extent;
         }
 
         Coord getCoord() const noexcept
         {
-            EWM_ASSERT(_type == COORD);
+            EWM_ASSERT(_type == Type::Coord);
             return _coordValue;
         }
 
         void setCoord(const Coord& coord) noexcept
         {
             _coordValue = coord;
-            _type = COORD;
+            _type = Type::Coord;
         }
 
         uint8_t getUint8() const noexcept
         {
-            EWM_ASSERT(_type == UINT8);
+            EWM_ASSERT(_type == Type::UInt8);
             return _uint8Value;
         }
 
         void setUint8(const uint8_t& octet) noexcept
         {
             _uint8Value = octet;
-            _type = UINT8;
+            _type = Type::UInt8;
         }
 
         uint32_t getUint32() const noexcept
         {
-            EWM_ASSERT(_type == UINT32);
+            EWM_ASSERT(_type == Type::UInt32);
             return _uint32Value;
         }
 
         void setUint32(const uint32_t& dword) noexcept
         {
             _uint32Value = dword;
-            _type = UINT32;
+            _type = Type::UInt32;
         }
 
         float getFloat() const noexcept
         {
-            EWM_ASSERT(_type == FLOAT);
+            EWM_ASSERT(_type == Type::Float);
             return _floatValue;
         }
 
         void setFloat(const float& flt) noexcept
         {
             _floatValue = flt;
-            _type = FLOAT;
+            _type = Type::Float;
         }
 
     private:
@@ -752,13 +783,13 @@ namespace exostra
             uint32_t _uint32Value;
             float _floatValue = 0.0f;
         };
-        int _type = EMPTY;
+        Type _type = Type::Empty;
     };
 
     class ITheme
     {
     public:
-        enum DisplaySize
+        enum class DisplaySize : uint8_t
         {
             Small = 0,
             Medium,
@@ -781,7 +812,7 @@ namespace exostra
         virtual void drawWindowFrame(const GfxContextPtr&, const Rect&, Coord, Color) const = 0;
         virtual void drawWindowShadow(const GfxContextPtr&, const Rect&, Coord, Color) const = 0;
         virtual void drawWindowBackground(const GfxContextPtr&, const Rect&, Coord, Color) const = 0;
-        virtual void drawText(const GfxContextPtr&, const char*, uint8_t, const Rect&,
+        virtual void drawText(const GfxContextPtr&, const char*, DrawText, const Rect&,
             uint8_t, Color, const Font*) const = 0;
 
         virtual void drawProgressBarBackground(const GfxContextPtr&, const Rect&) const = 0;
@@ -807,25 +838,25 @@ namespace exostra
         Color getColor(ColorID colorID) const final
         {
             switch (colorID) {
-                case COLOR_SCREENSAVER:          return 0x0000;
-                case COLOR_PROMPT_BG:            return 0xef5c;
-                case COLOR_PROMPT_FRAME:         return 0x9cf3;
-                case COLOR_PROMPT_SHADOW:        return 0xb5b6;
-                case COLOR_WINDOW_TEXT:          return 0x0000;
-                case COLOR_WINDOW_BG:            return 0xdedb;
-                case COLOR_WINDOW_FRAME:         return 0x9cf3;
-                case COLOR_WINDOW_SHADOW:        return 0xb5b6;
-                case COLOR_BUTTON_TEXT:          return 0xffff;
-                case COLOR_BUTTON_TEXT_PRESSED:  return 0xffff;
-                case COLOR_BUTTON_BG:            return 0x8c71;
-                case COLOR_BUTTON_BG_PRESSED:    return 0x738e;
-                case COLOR_BUTTON_FRAME:         return 0x6b6d;
-                case COLOR_BUTTON_FRAME_PRESSED: return 0x6b6d;
-                case COLOR_PROGRESS_BG:          return 0xef5d;
-                case COLOR_PROGRESS_FILL:        return 0x0ce0;
-                case COLOR_CHECKBOX_CHECK_BG:    return 0xef5d;
-                case COLOR_CHECKBOX_CHECK:       return 0x3166;
-                case COLOR_CHECKBOX_CHECK_FRAME: return 0x9cf3;
+                case ColorID::Screensaver:        return 0x0000;
+                case ColorID::PromptBg:           return 0xef5c;
+                case ColorID::PromptFrame:        return 0x9cf3;
+                case ColorID::PromptShadow:       return 0xb5b6;
+                case ColorID::WindowText:         return 0x0000;
+                case ColorID::WindowBg:           return 0xdedb;
+                case ColorID::WindowFrame:        return 0x9cf3;
+                case ColorID::WindowShadow:       return 0xb5b6;
+                case ColorID::ButtonText:         return 0xffff;
+                case ColorID::ButtonTextPressed:  return 0xffff;
+                case ColorID::ButtonBg:           return 0x8c71;
+                case ColorID::ButtonBgPressed:    return 0x738e;
+                case ColorID::ButtonFrame:        return 0x6b6d;
+                case ColorID::ButtonFramePressed: return 0x6b6d;
+                case ColorID::ProgressBg:         return 0xef5d;
+                case ColorID::ProgressFill:       return 0x0ce0;
+                case ColorID::CheckBoxCheckBg:    return 0xef5d;
+                case ColorID::CheckBoxCheck:      return 0x3166;
+                case ColorID::CheckBoxCheckFrame: return 0x9cf3;
                 default:
                     EWM_ASSERT("!invalid color ID");
                     return Color(0);
@@ -836,57 +867,57 @@ namespace exostra
         {
             Variant retval;
             switch (metricID) {
-                case METRIC_X_PADDING:
+                case MetricID::XPadding:
                     retval.setExtent(abs(_displayWidth * 0.05f));
                 break;
-                case METRIC_Y_PADDING:
+                case MetricID::YPadding:
                     retval.setExtent(abs(_displayHeight * 0.05f));
                 break;
-                case METRIC_DEF_TEXT_SIZE:
+                case MetricID::DefTextSize:
                     retval.setUint8(1);
                 break;
-                case METRIC_WINDOW_FRAME_PX:
+                case MetricID::WindowFramePx:
                     retval.setExtent(1);
                 break;
-                case METRIC_CORNER_RADIUS_WINDOW:
+                case MetricID::CornerRadiusWindow:
                     retval.setCoord(0);
                 break;
-                case METRIC_CORNER_RADIUS_BUTTON:
+                case MetricID::CornerRadiusButton:
                     retval.setCoord(getScaledValue(4));
                 break;
-                case METRIC_CORNER_RADIUS_PROMPT:
+                case MetricID::CornerRadiusPrompt:
                     retval.setCoord(getScaledValue(4));
                 break;
-                case METRIC_CORNER_RADIUS_CHECKBOX:
+                case MetricID::CornerRadiusCheckBox:
                     retval.setCoord(getScaledValue(0));
                 break;
-                case METRIC_DEF_BUTTON_CX:
+                case MetricID::DefButtonCX:
                     retval.setExtent(abs(max(_displayWidth * 0.19f, 60.0f)));
                 break;
-                case METRIC_DEF_BUTTON_CY: {
-                    const auto btnWidth = getMetric(METRIC_DEF_BUTTON_CX).getExtent();
+                case MetricID::DefButtonCY: {
+                    const auto btnWidth = getMetric(MetricID::DefButtonCX).getExtent();
                     retval.setExtent(abs(btnWidth * 0.52f));
                 }
                 break;
-                case METRIC_BUTTON_LABEL_PADDING:
+                case MetricID::ButtonLabelPadding:
                     retval.setExtent(getScaledValue(10));
                 break;
-                case METRIC_BUTTON_TAPPED_DURATION:
+                case MetricID::ButtonTappedDuration:
                     retval.setUint32(200);
                 break;
-                case METRIC_MAX_PROMPT_CX:
+                case MetricID::MaxPromptCX:
                     retval.setExtent(abs(_displayWidth * 0.75f));
                 break;
-                case METRIC_MAX_PROMPT_CY:
+                case MetricID::MaxPromptCY:
                     retval.setExtent(abs(_displayHeight * 0.75f));
                 break;
-                case METRIC_DEF_PROGBAR_HEIGHT:
+                case MetricID::DefProgressHeight:
                     retval.setExtent(abs(_displayHeight * 0.10f));
                 break;
-                case METRIC_PROGBAR_MARQUEE_CX_FACTOR:
+                case MetricID::ProgressMarqueeCXFactor:
                     retval.setFloat(0.33f);
                 break;
-                case METRIC_PROGBAR_MARQUEE_STEP: {
+                case MetricID::ProgressMarqueeStep: {
                     static constexpr float step = 1.0f;
                     switch (getDisplaySize()) {
                         default:
@@ -902,16 +933,16 @@ namespace exostra
                     }
                 }
                 break;
-                case METRIC_DEF_CHECKBOX_HEIGHT:
+                case MetricID::DefCheckBoxHeight:
                     retval.setExtent(abs(_displayHeight * 0.10f));
                 break;
-                case METRIC_CHECKBOX_CHECK_AREA_PADDING:
+                case MetricID::CheckBoxCheckAreaPadding:
                     retval.setExtent(getScaledValue(2));
                 break;
-                case METRIC_CHECKBOX_CHECK_MARK_PADDING:
+                case MetricID::CheckBoxCheckMarkPadding:
                     retval.setExtent(getScaledValue(2));
                 break;
-                case METRIC_CHECKBOX_CHECK_DELAY:
+                case MetricID::CheckBoxCheckDelay:
                     retval.setUint32(200);
                 break;
                 default:
@@ -924,7 +955,7 @@ namespace exostra
         void drawScreensaver(const GfxDisplayPtr& display) const final
         {
             EWM_ASSERT(display);
-            display->fillScreen(getColor(COLOR_SCREENSAVER));
+            display->fillScreen(getColor(ColorID::Screensaver));
         }
 
         void setDefaultFont(const Font* font) final
@@ -962,7 +993,7 @@ namespace exostra
             Coord radius, Color color) const final
         {
             auto tmp = rect;
-            auto pixels = getMetric(METRIC_WINDOW_FRAME_PX).getExtent();
+            auto pixels = getMetric(MetricID::WindowFramePx).getExtent();
             while (pixels-- > 0) {
                 EWM_ASSERT(ctx);
                 ctx->drawRoundRect(tmp.left, tmp.top, tmp.width(), tmp.height(), radius, color);
@@ -973,7 +1004,7 @@ namespace exostra
         void drawWindowShadow(const GfxContextPtr& ctx, const Rect& rect,
             Coord radius, Color color) const final
         {
-            const auto thickness = getMetric(METRIC_WINDOW_FRAME_PX).getExtent();
+            const auto thickness = getMetric(MetricID::WindowFramePx).getExtent();
             EWM_ASSERT(ctx);
             ctx->drawLine(
                 rect.left + radius + thickness,
@@ -999,15 +1030,15 @@ namespace exostra
                 radius, color);
         }
 
-        void drawText(const GfxContextPtr& ctx, const char* text, uint8_t flags,
+        void drawText(const GfxContextPtr& ctx, const char* text, DrawText flags,
             const Rect& rect, uint8_t textSize, Color textColor, const Font* font) const final
         {
             EWM_ASSERT(ctx);
             ctx->setTextSize(textSize);
             ctx->setFont(font);
 
-            const bool xCenter = bitsHigh(flags, DT_CENTER);
-            const bool singleLine = bitsHigh(flags, DT_SINGLE);
+            const bool xCenter = bitsHigh(flags, DrawText::Center);
+            const bool singleLine = bitsHigh(flags, DrawText::Single);
 
             uint8_t xAdv = 0, yAdv = 0, yAdvMax = 0;
             int8_t xOff = 0, yOff = 0, yOffMin = 0;
@@ -1019,11 +1050,11 @@ namespace exostra
                 ctx->getTextBounds(text, rect.left, y, &x, &y, &w, &h);
                 yAccum = rect.top + (rect.height() / 2) + (h / 2) - 1;
             } else {
-                yAccum = rect.top + getMetric(METRIC_Y_PADDING).getExtent();
+                yAccum = rect.top + getMetric(MetricID::YPadding).getExtent();
             }
 
             const Extent xPadding =
-                ((singleLine && !xCenter) ? 0 : getMetric(METRIC_X_PADDING).getExtent());
+                ((singleLine && !xCenter) ? 0 : getMetric(MetricID::XPadding).getExtent());
             const Extent xExtent = rect.right - xPadding;
             const char* cursor = text;
 
@@ -1037,11 +1068,11 @@ namespace exostra
                     getCharBounds(*cursor, nullptr, nullptr, &xAdv, &yAdv, &xOff,
                         &yOff, textSize, font);
                     if (xAccum + xAdv > xExtent) {
-                        if (singleLine && bitsHigh(flags, DT_CLIP)) {
+                        if (singleLine && bitsHigh(flags, DrawText::Clip)) {
                             clipped = true;
                             break;
                         }
-                        if (singleLine && bitsHigh(flags, DT_ELLIPSIS)) {
+                        if (singleLine && bitsHigh(flags, DrawText::Ellipsis)) {
                             auto it = charXAdvs.rbegin();
                             if (it != charXAdvs.rend()) {
                                 clipped = true;
@@ -1095,7 +1126,7 @@ namespace exostra
                     if (rewound > 0) { cursor++; }
                     yAccum += yAdvMax + yOffMin;
                 } else {
-                    if (clipped && bitsHigh(flags, DT_ELLIPSIS)) {
+                    if (clipped && bitsHigh(flags, DrawText::Ellipsis)) {
                         getCharBounds('.', nullptr, nullptr, &xAdv, &yAdv,
                             &xOff, &yOff, textSize, font);
                         for (uint8_t ellipsis = 0; ellipsis < 3; ellipsis++) {
@@ -1121,27 +1152,27 @@ namespace exostra
         {
             EWM_ASSERT(ctx);
             ctx->fillRect(rect.left, rect.top, rect.width(), rect.height(),
-                getColor(COLOR_PROGRESS_BG));
+                getColor(ColorID::ProgressBg));
         }
 
         void drawProgressBarProgress(const GfxContextPtr& ctx, const Rect& rect, float percent) const final
         {
             EWM_ASSERT(percent >= 0.0f && percent <= 100.0f);
             auto barRect = rect;
-            barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
+            barRect.deflate(getMetric(MetricID::WindowFramePx).getExtent() * 2);
             barRect.right = barRect.left + abs(barRect.width() * (min(100.0f, percent) / 100.0f));
             EWM_ASSERT(ctx);
             ctx->fillRect(barRect.left, barRect.top, barRect.width(),
-                barRect.height(), getColor(COLOR_PROGRESS_FILL));
+                barRect.height(), getColor(ColorID::ProgressFill));
         }
 
         void drawProgressBarIndeterminate(const GfxContextPtr& ctx, const Rect& rect, float counter) const final
         {
             EWM_ASSERT(counter >= 0.0f && counter <= 100.0f);
             auto barRect = rect;
-            barRect.deflate(getMetric(METRIC_WINDOW_FRAME_PX).getExtent() * 2);
+            barRect.deflate(getMetric(MetricID::WindowFramePx).getExtent() * 2);
             Extent marqueeWidth
-                = (barRect.width() * getMetric(METRIC_PROGBAR_MARQUEE_CX_FACTOR).getFloat());
+                = (barRect.width() * getMetric(MetricID::ProgressMarqueeCXFactor).getFloat());
             Coord offset
                 = (barRect.width() + marqueeWidth) * (min(100.0f, counter) / 100.0f);
             static Coord reverseOffset = marqueeWidth;
@@ -1168,18 +1199,18 @@ namespace exostra
             }
             EWM_ASSERT(ctx);
             ctx->fillRect(x, barRect.top, width, barRect.height(),
-                getColor(COLOR_PROGRESS_FILL));
+                getColor(ColorID::ProgressFill));
         }
 
         void drawCheckBox(const GfxContextPtr& ctx, const char* lbl, bool checked, const Rect& rect) const final
         {
-            const auto radius = getMetric(METRIC_CORNER_RADIUS_CHECKBOX).getCoord();
-            drawWindowBackground(ctx, rect, radius, getColor(COLOR_WINDOW_BG));
+            const auto radius = getMetric(MetricID::CornerRadiusCheckBox).getCoord();
+            drawWindowBackground(ctx, rect, radius, getColor(ColorID::WindowBg));
             auto checkableRect = Rect(
                 rect.left,
-                rect.top + getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent(),
-                rect.left + (rect.height() - (getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent() * 2)),
-                rect.top + (rect.height() - getMetric(METRIC_CHECKBOX_CHECK_AREA_PADDING).getExtent())
+                rect.top + getMetric(MetricID::CheckBoxCheckAreaPadding).getExtent(),
+                rect.left + (rect.height() - (getMetric(MetricID::CheckBoxCheckAreaPadding).getExtent() * 2)),
+                rect.top + (rect.height() - getMetric(MetricID::CheckBoxCheckAreaPadding).getExtent())
             );
             checkableRect.top = rect.top + ((rect.height() / 2) - (checkableRect.height() / 2));
             EWM_ASSERT(ctx);
@@ -1189,23 +1220,23 @@ namespace exostra
                 checkableRect.width(),
                 checkableRect.height(),
                 radius,
-                getColor(COLOR_CHECKBOX_CHECK_BG)
+                getColor(ColorID::CheckBoxCheckBg)
             );
-            drawWindowFrame(ctx, checkableRect, radius, getColor(COLOR_CHECKBOX_CHECK_FRAME));
+            drawWindowFrame(ctx, checkableRect, radius, getColor(ColorID::CheckBoxCheckFrame));
             if (checked) {
                 auto rectCheckMark = checkableRect;
-                rectCheckMark.deflate(getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent());
+                rectCheckMark.deflate(getMetric(MetricID::CheckBoxCheckMarkPadding).getExtent());
                 ctx->fillRoundRect(
                     rectCheckMark.left,
                     rectCheckMark.top,
                     rectCheckMark.width(),
                     rectCheckMark.height(),
                     radius,
-                    getColor(COLOR_CHECKBOX_CHECK)
+                    getColor(ColorID::CheckBoxCheck)
                 );
             }
             Rect textRect(
-                checkableRect.right + (getMetric(METRIC_CHECKBOX_CHECK_MARK_PADDING).getExtent() * 2),
+                checkableRect.right + (getMetric(MetricID::CheckBoxCheckMarkPadding).getExtent() * 2),
                 rect.top,
                 checkableRect.right + (rect.width() - checkableRect.width()),
                 rect.top + rect.height()
@@ -1213,10 +1244,10 @@ namespace exostra
             drawText(
                 ctx,
                 lbl,
-                DT_SINGLE | DT_ELLIPSIS,
+                DrawText::Single | DrawText::Ellipsis,
                 textRect,
-                getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
-                getColor(COLOR_WINDOW_TEXT),
+                getMetric(MetricID::DefTextSize).getUint8(),
+                getColor(ColorID::WindowText),
                 getDefaultFont()
             );
         }
@@ -1229,7 +1260,7 @@ namespace exostra
 
     struct PackagedMessage
     {
-        Message msg = MSG_NONE;
+        Message msg = Message::None;
         MsgParam p1 = 0;
         MsgParam p2 = 0;
     };
@@ -1370,7 +1401,7 @@ namespace exostra
             ScopeLock lock(_childMtx);
 # endif
             bool success = false;
-            if (!win->getParent() && bitsHigh(win->getStyle(), STY_TOPLEVEL)) {
+            if (!win->getParent() && bitsHigh(win->getStyle(), Style::TopLevel)) {
                 for (auto it = _children.begin(); it != _children.end(); it++) {
                     if ((*it)->getID() == win->getID()) {
                         _children.erase(it);
@@ -1393,7 +1424,8 @@ namespace exostra
 # endif
             uint8_t zOrder = 0;
             for (const auto& win : _children) {
-                win->setZOrder(zOrder++);
+                win->setZOrder(zOrder);
+                zOrder++;
             }
         }
 
@@ -1406,8 +1438,7 @@ namespace exostra
                 return false;
             }
             uint8_t zOrder = 0;
-            auto last = _children.rbegin();
-            if (last != _children.rend()) {
+            if (auto last = _children.rbegin(); last != _children.rend()) {
                 zOrder = (*last)->getZOrder() + 1;
             }
             child->setZOrder(zOrder);
@@ -1468,18 +1499,19 @@ namespace exostra
             }
         }
 
-    protected:
+    private:
         WindowDeque _children;
 # if !defined(EWM_NOMUTEXES)
         Mutex _childMtx;
 # endif
     };
 
-    enum
+    enum class WMState : uint8_t
     {
-        WMS_SSAVER_ENABLED = 1 << 0,
-        WMS_SSAVER_ACTIVE  = 1 << 1,
-        WMS_SSAVER_DRAWN   = 1 << 2
+        None          = 0,
+        SSaverEnabled = 1 << 0,
+        SSaverActive  = 1 << 1,
+        SSaverDrawn   = 1 << 2
     };
 
     class WindowManager : public std::enable_shared_from_this<WindowManager>
@@ -1487,11 +1519,9 @@ namespace exostra
     public:
         struct Config
         {
-            uint32_t minRenderIntervalMsec  = 0U;
             uint32_t minHitTestIntervalMsec = 0U;
         };
 
-        static constexpr uint32_t DefaultMinRenderIntervalMsec  = 100U;
         static constexpr uint32_t DefaultMinHitTestIntervalMsec = 200U;
 
         WindowManager() = delete;
@@ -1511,7 +1541,6 @@ namespace exostra
             if (config != nullptr) {
                 _config = *config;
             } else {
-                _config.minRenderIntervalMsec  = DefaultMinRenderIntervalMsec;
                 _config.minHitTestIntervalMsec = DefaultMinHitTestIntervalMsec;
             }
         }
@@ -1521,24 +1550,24 @@ namespace exostra
             tearDown();
         }
 
-        void setState(State state) noexcept { _state = state; }
-        State getState() const noexcept { return _state; }
+        void setState(WMState state) noexcept { _state = state; }
+        WMState getState() const noexcept { return _state; }
 
         Config getConfig() const noexcept { return _config; }
         void setConfig(const Config& config) noexcept { _config = config; }
 
         void enableScreensaver(uint32_t activateAfterMsec) noexcept
         {
-            _ssaverActivateAfter = activateAfterMsec;
-            _ssaverEpoch = millis();
-            setState(getState() | WMS_SSAVER_ENABLED);
+            _ssTimerMsec = activateAfterMsec;
+            _ssLastActivity = millis();
+            setState(getState() | WMState::SSaverEnabled);
             EWM_LOG_D("screensaver enabled (%ums)", activateAfterMsec);
         }
 
         void disableScreensaver() noexcept
         {
-            EWM_CONST(State, flags,
-                WMS_SSAVER_ENABLED | WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN);
+            EWM_CONST(WMState, flags,
+                WMState::SSaverEnabled | WMState::SSaverActive | WMState::SSaverDrawn);
             setState(getState() & ~flags);
             EWM_LOG_D("screensaver disabled");
         }
@@ -1581,7 +1610,7 @@ namespace exostra
                 EWM_LOG_E("%hhu is a reserved window ID", WID_INVALID);
                 return nullptr;
             }
-            if (bitsHigh(style, STY_FULLSCREEN)) {
+            if (bitsHigh(style, Style::FullScreen)) {
                 x = 0;
                 y = 0;
                 width = getDisplayWidth();
@@ -1610,20 +1639,20 @@ namespace exostra
                 )
             );
 # endif
-            if (bitsHigh(style, STY_CHILD) && !parent) {
-                EWM_LOG_E("STY_CHILD && null parent");
+            if (bitsHigh(style, Style::Child) && !parent) {
+                EWM_LOG_E("Style::Child && null parent");
                 return nullptr;
             }
-            if (bitsHigh(style, STY_TOPLEVEL) && parent) {
-                EWM_LOG_E("STY_TOPLEVEL && parent");
+            if (bitsHigh(style, Style::TopLevel) && parent) {
+                EWM_LOG_E("Style::TopLevel && parent");
                 return nullptr;
             }
             if (preCreateHook && !preCreateHook(win)) {
                 EWM_LOG_E("pre-create hook failed");
                 return nullptr;
             }
-            if (!win->routeMessage(MSG_CREATE)) {
-                EWM_LOG_E("MSG_CREATE = false");
+            if (!win->routeMessage(Message::Create)) {
+                EWM_LOG_E("Message::Create = false");
                 return nullptr;
             }
             bool dupe = parent ? !parent->addChild(win) : !_registry->addChild(win);
@@ -1632,8 +1661,8 @@ namespace exostra
                     id, parent ? parent->getID() : WID_INVALID);
                 return nullptr;
             }
-            if (bitsHigh(win->getStyle(), STY_AUTOSIZE)) {
-                win->routeMessage(MSG_RESIZE);
+            if (bitsHigh(win->getStyle(), Style::AutoSize)) {
+                win->routeMessage(Message::Resize);
             }
             win->redraw();
             return win;
@@ -1649,17 +1678,17 @@ namespace exostra
             const typename TPrompt::ResultCallback& callback
         )
         {
-            EWM_ASSERT(bitsHigh(style, STY_PROMPT));
+            EWM_ASSERT(bitsHigh(style, Style::Prompt));
             const Extent width = min(
-                _theme->getMetric(METRIC_MAX_PROMPT_CX).getExtent(),
+                _theme->getMetric(MetricID::MaxPromptCX).getExtent(),
                 static_cast<Extent>(
-                    getDisplayWidth() - (_theme->getMetric(METRIC_X_PADDING).getExtent() * 2)
+                    getDisplayWidth() - (_theme->getMetric(MetricID::XPadding).getExtent() * 2)
                 )
             );
             const Extent height = min(
-                _theme->getMetric(METRIC_MAX_PROMPT_CY).getExtent(),
+                _theme->getMetric(MetricID::MaxPromptCY).getExtent(),
                 static_cast<Extent>(
-                    getDisplayHeight() - (_theme->getMetric(METRIC_Y_PADDING).getExtent() * 2)
+                    getDisplayHeight() - (_theme->getMetric(MetricID::YPadding).getExtent() * 2)
                 )
             );
             auto prompt = createWindow<TPrompt>(
@@ -1694,7 +1723,7 @@ namespace exostra
             Coord y,
             Extent width,
             Extent height,
-            Style pbarStyle
+            ProgressStyle pbarStyle
         )
         {
             auto pbar = createWindow<TBar>(
@@ -1719,9 +1748,9 @@ namespace exostra
             EWM_ASSERT(x >= 0 && y >= 0);
             EWM_ASSERT(x <= getDisplayWidth() && y <= getDisplayHeight());
             EWM_LOG_D("hit test at %hd/%hd", x, y);
-            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
-                _ssaverEpoch = millis();
-                if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
+            if (bitsHigh(getState(), WMState::SSaverEnabled)) {
+                _ssLastActivity = millis();
+                if (bitsHigh(getState(), WMState::SSaverActive)) {
                     return;
                 }
             }
@@ -1734,7 +1763,7 @@ namespace exostra
                 EWM_LOG_V("interrogating %s re: hit test at %hd/%hd",
                     child->toString().c_str(), x, y);
                 InputParams params;
-                params.type = INPUT_TAP;
+                params.type = InputType::Tap;
                 params.x    = x;
                 params.y    = y;
                 if (child->processInput(&params)) {
@@ -1844,34 +1873,31 @@ namespace exostra
 
         virtual void render()
         {
-            if (millis() - _lastRenderTime < _config.minRenderIntervalMsec) {
-                return;
-            }
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             static constexpr uint32_t reportInterval = 30000U;
             static uint32_t lastReport = 0;
             const auto beginTime = micros();
 # endif
             bool updated = false;
-            if (bitsHigh(getState(), WMS_SSAVER_ENABLED)) {
-                if (millis() - _ssaverEpoch >= _ssaverActivateAfter) {
-                    if (!bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
-                        setState(getState() | WMS_SSAVER_ACTIVE);
+            if (bitsHigh(getState(), WMState::SSaverEnabled)) {
+                if (millis() - _ssLastActivity >= _ssTimerMsec) {
+                    if (!bitsHigh(getState(), WMState::SSaverActive)) {
+                        setState(getState() | WMState::SSaverActive);
                         EWM_LOG_D("activated screensaver");
                     }
                 } else {
-                    if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
-                        setState(getState() & ~(WMS_SSAVER_ACTIVE | WMS_SSAVER_DRAWN));
+                    if (bitsHigh(getState(), WMState::SSaverActive)) {
+                        setState(getState() & ~(WMState::SSaverActive | WMState::SSaverDrawn));
                         setDirtyRect(getDisplayRect());
                         EWM_LOG_D("de-activated screensaver");
                     }
                 }
             }
-            if (bitsHigh(getState(), WMS_SSAVER_ACTIVE)) {
-                if (!bitsHigh(getState(), WMS_SSAVER_DRAWN)) {
+            if (bitsHigh(getState(), WMState::SSaverActive)) {
+                if (!bitsHigh(getState(), WMState::SSaverDrawn)) {
                     _theme->drawScreensaver(_gfxDisplay);
                     updated = true;
-                    setState(getState() | WMS_SSAVER_DRAWN);
+                    setState(getState() | WMState::SSaverDrawn);
                 }
             } else {
                 _registry->forEachChild([&](const WindowPtr& win)
@@ -1957,7 +1983,6 @@ namespace exostra
 
             if (updated) {
                 _gfxDisplay->flush();
-                _lastRenderTime = millis();
             }
 
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
@@ -2004,11 +2029,10 @@ namespace exostra
         WindowContainerPtr _registry;
         GfxDisplayPtr _gfxDisplay;
         ThemePtr _theme;
-        State _state                  = 0;
-        uint32_t _ssaverEpoch         = 0U;
-        uint32_t _ssaverActivateAfter = 0U;
-        uint32_t _lastRenderTime      = 0U;
-        uint32_t _lastHitTestTime     = 0U;
+        WMState _state             = WMState::None;
+        uint32_t _ssLastActivity   = 0U;
+        uint32_t _ssTimerMsec      = 0U;
+        uint32_t _lastHitTestTime  = 0U;
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
         uint32_t _renderAvg        = 0U;
         uint32_t _flushAvg         = 0U;
@@ -2055,7 +2079,7 @@ namespace exostra
             _style(style), _id(id)
         {
 
-            if (bitsHigh(getStyle(), STY_TOPLEVEL) && !parent) {
+            if (bitsHigh(getStyle(), Style::TopLevel) && !parent) {
                 _ctx = std::make_shared<GfxContext>(rect.width(), rect.height());
                 EWM_LOG_V("created %hux%hu gfx ctx for %s", rect.width(),
                     rect.height(), toString().c_str());
@@ -2071,10 +2095,10 @@ namespace exostra
 
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            _bgColor     = theme->getColor(COLOR_WINDOW_BG);
-            _textColor   = theme->getColor(COLOR_WINDOW_TEXT);
-            _frameColor  = theme->getColor(COLOR_WINDOW_FRAME);
-            _shadowColor = theme->getColor(COLOR_WINDOW_SHADOW);
+            _bgColor     = theme->getColor(ColorID::WindowBg);
+            _textColor   = theme->getColor(ColorID::WindowText);
+            _frameColor  = theme->getColor(ColorID::WindowFrame);
+            _shadowColor = theme->getColor(ColorID::WindowShadow);
         }
 
         virtual ~Window() = default;
@@ -2121,7 +2145,7 @@ namespace exostra
         {
             auto parent = getParent();
             const auto rect = getRect();
-            if (bitsHigh(getStyle(), STY_TOPLEVEL) && !parent) {
+            if (bitsHigh(getStyle(), Style::TopLevel) && !parent) {
                 return Rect(0, 0, rect.width(), rect.height());
             } else {
                 EWM_ASSERT(parent);
@@ -2251,19 +2275,19 @@ namespace exostra
             bool handled = false;
             bool dirty   = false;
             switch (msg) {
-                case MSG_CREATE: {
+                case Message::Create: {
                     dirty = handled = onCreate(p1, p2);
                     if (handled) {
-                        setState(getState() | STA_ALIVE);
+                        setState(getState() | State::Alive);
                     }
                     break;
                 }
-                case MSG_DESTROY: {
+                case Message::Destroy: {
                     handled = onDestroy(p1, p2);
-                    setState(getState() & ~STA_ALIVE);
+                    setState(getState() & ~State::Alive);
                     break;
                 }
-                case MSG_DRAW: {
+                case Message::Draw: {
                     if (!isDrawable()) {
                         break;
                     }
@@ -2274,15 +2298,15 @@ namespace exostra
                     setDirty(false);
                     break;
                 }
-                case MSG_POSTDRAW:
+                case Message::PostDraw:
                     handled = onPostDraw(p1, p2);
                     break;
-                case MSG_INPUT: {
+                case Message::Input: {
                     dirty = handled = onInput(p1, p2);
                     break;
                 }
-                case MSG_EVENT: return onEvent(p1, p2);
-                case MSG_RESIZE: {
+                case Message::Event: return onEvent(p1, p2);
+                case Message::Resize: {
                     dirty = handled = onResize(p1, p2);
                     break;
                 }
@@ -2302,11 +2326,12 @@ namespace exostra
             ScopeLock lock(_queueMtx);
 # endif
             PackagedMessage pm;
-            pm.msg    = msg;
-            pm.p1     = p1;
-            pm.p2     = p2;
+            pm.msg = msg;
+            pm.p1  = p1;
+            pm.p2  = p2;
             _queue.push(pm);
-            return msg == MSG_INPUT && getMsgParamLoWord(p1) == INPUT_TAP;
+            return msg == Message::Input &&
+                getMsgParamLoWord(p1) == static_cast<MsgParamWord>(InputType::Tap);
         }
 
         bool processQueue() override
@@ -2346,8 +2371,8 @@ namespace exostra
             });
             if (!handled) {
                 handled = queueMessage(
-                    MSG_INPUT,
-                    makeMsgParam(0, params->type),
+                    Message::Input,
+                    makeMsgParam(0, static_cast<MsgParamWord>(params->type)),
                     makeMsgParam(params->x, params->y)
                 );
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
@@ -2365,7 +2390,7 @@ namespace exostra
                 return false;
             }
             bool redrawn = (isDirty() || force)
-                ? routeMessage(MSG_DRAW, force ? 1U : 0U) : false;
+                ? routeMessage(Message::Draw, force ? 1U : 0U) : false;
             bool childRedrawn = false;
             if (redrawn) {
                 forEachChild([](const WindowPtr& child)
@@ -2398,7 +2423,7 @@ namespace exostra
             if (!isVisible()) {
                 return false;
             }
-            setStyle(getStyle() & ~STY_VISIBLE);
+            setStyle(getStyle() & ~Style::Visible);
             auto wm = _getWM();
             EWM_ASSERT(wm);
             wm->setDirtyRect(getRect());
@@ -2407,7 +2432,7 @@ namespace exostra
 
         bool show() noexcept override
         {
-            const auto topLevel = bitsHigh(getStyle(), STY_TOPLEVEL);
+            const auto topLevel = bitsHigh(getStyle(), Style::TopLevel);
             EWM_ASSERT(!topLevel || !getParent());
             if (!topLevel && isVisible()) {
                 return false;
@@ -2417,35 +2442,35 @@ namespace exostra
                 auto wm = _getWM();
                 shown = wm->setForegroundWindow(shared_from_this());
             }
-            setStyle(getStyle() | STY_VISIBLE);
+            setStyle(getStyle() | Style::Visible);
             return shown && setDirty(true);
         }
 
         bool isVisible() const noexcept override
         {
             const auto rect = getRect();
-            return bitsHigh(getStyle(), STY_VISIBLE) && !rect.empty();
+            return bitsHigh(getStyle(), Style::Visible) && !rect.empty();
         }
 
         bool isAlive() const noexcept override
         {
-            return bitsHigh(getState(), STA_ALIVE);
+            return bitsHigh(getState(), State::Alive);
         }
 
         bool isDirty() const noexcept override
         {
-            return bitsHigh(getState(), STA_DIRTY);
+            return bitsHigh(getState(), State::Dirty);
         }
 
         bool setDirty(bool dirty, bool redrawWindow = true) noexcept override
         {
             if (dirty) {
-                setState(getState() | STA_DIRTY);
+                setState(getState() | State::Dirty);
                 if (redrawWindow) {
                     return redraw();
                 }
             } else {
-                setState(getState() & ~STA_DIRTY);
+                setState(getState() & ~State::Dirty);
             }
             return true;
         }
@@ -2463,7 +2488,7 @@ namespace exostra
         bool destroy() override
         {
             hide();
-            bool destroyed = routeMessage(MSG_DESTROY);
+            bool destroyed = routeMessage(Message::Destroy);
             forEachChild([&](const WindowPtr& child)
             {
                 destroyed &= child->destroy();
@@ -2489,38 +2514,38 @@ namespace exostra
     protected:
         // ====== Begin message handlers ======
 
-        // MSG_CREATE: p1 = 0, p2 = 0.
+        // Message::Create: p1 = 0, p2 = 0.
         bool onCreate(MsgParam p1, MsgParam p2) override
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_WINDOW).getCoord());
+            setCornerRadius(theme->getMetric(MetricID::CornerRadiusWindow).getCoord());
             return true;
         }
 
-        // MSG_DESTROY: p1 = 0, p2 = 0.
+        // Message::Destroy: p1 = 0, p2 = 0.
         bool onDestroy([[maybe_unused]] MsgParam p1, [[maybe_unused]] MsgParam p2) override
         {
             return true;
         }
 
-        // MSG_DRAW: p1 = 1 (force) || 0, p2 = 0.
+        // Message::Draw: p1 = 1 (force) || 0, p2 = 0.
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
             EWM_LOG_V("%s", toString().c_str());
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
-            if (bitsHigh(getStyle(), STY_FRAME)) {
+            if (bitsHigh(getStyle(), Style::Frame)) {
                 theme->drawWindowFrame(_ctx, getClientRect(), getCornerRadius(), getFrameColor());
             }
-            if (bitsHigh(getStyle(), STY_SHADOW)) {
+            if (bitsHigh(getStyle(), Style::Shadow)) {
                 theme->drawWindowShadow(_ctx, getClientRect(), getCornerRadius(), getShadowColor());
             }
-            return routeMessage(MSG_POSTDRAW);
+            return routeMessage(Message::PostDraw);
         }
 
-        // MSG_POSTDRAW: p1 = 0, p2 = 0.
+        // Message::PostDraw: p1 = 0, p2 = 0.
         bool onPostDraw(MsgParam p1, MsgParam p2) override
         {
             markRectDirty(getRect());
@@ -2531,7 +2556,7 @@ namespace exostra
             return true;
         }
 
-        // MSG_INPUT: p1 = (loword: type), p2 = (hiword: x, loword: y).
+        // Message::Input: p1 = (loword: type), p2 = (hiword: x, loword: y).
         // Returns true if the input event was consumed by this window, false otherwise.
         bool onInput(MsgParam p1, MsgParam p2) override
         {
@@ -2540,7 +2565,7 @@ namespace exostra
             params.x    = getMsgParamHiWord(p2);
             params.y    = getMsgParamLoWord(p2);
             switch (params.type) {
-                case INPUT_TAP: return onTapped(params.x, params.y);
+                case InputType::Tap: return onTapped(params.x, params.y);
                 default:
                     EWM_ASSERT(false);
                 break;
@@ -2548,13 +2573,13 @@ namespace exostra
             return false;
         }
 
-        // MSG_EVENT: p1 = EventType, p2 = child WindowID.
+        // Message::Event: p1 = EventType, p2 = child WindowID.
         bool onEvent(MsgParam p1, MsgParam p2) override { return true; }
 
-        // MSG_RESIZE: p1 = 0, p2 = 0.
+        // Message::Resize: p1 = 0, p2 = 0.
         bool onResize(MsgParam p1, MsgParam p2) override
         {
-            EWM_ASSERT(bitsHigh(getStyle(), STY_AUTOSIZE));
+            EWM_ASSERT(bitsHigh(getStyle(), Style::AutoSize));
             return false;
         }
 
@@ -2588,10 +2613,10 @@ namespace exostra
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
         std::string _className;
 # endif
-        Style _style        = 0;
+        Style _style        = Style::None;
         WindowID _id        = WID_INVALID;
         uint8_t _zOrder     = 0;
-        State _state        = 0;
+        State _state        = State::None;
         Color _bgColor      = 0;
         Color _textColor    = 0;
         Color _frameColor   = 0;
@@ -2610,7 +2635,11 @@ namespace exostra
             auto parent = getParent();
             EWM_ASSERT(parent);
             if (parent) {
-                parent->queueMessage(MSG_EVENT, EVT_CHILD_TAPPED, getID());
+                parent->queueMessage(
+                    Message::Event,
+                    static_cast<MsgParam>(EventType::ChildTapped),
+                    getID()
+                );
             }
             _lastTapped = millis();
             return parent != nullptr;
@@ -2624,7 +2653,7 @@ namespace exostra
 
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord());
+            setCornerRadius(theme->getMetric(MetricID::CornerRadiusButton).getCoord());
             return true;
         }
 
@@ -2633,29 +2662,29 @@ namespace exostra
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             const bool pressed = (millis() - _lastTapped <
-                theme->getMetric(METRIC_BUTTON_TAPPED_DURATION).getUint32());
+                theme->getMetric(MetricID::ButtonTappedDuration).getUint32());
             theme->drawWindowBackground(
                 _ctx,
                 getClientRect(),
-                theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord(),
-                theme->getColor(pressed ? COLOR_BUTTON_BG_PRESSED : COLOR_BUTTON_BG)
+                theme->getMetric(MetricID::CornerRadiusButton).getCoord(),
+                theme->getColor(pressed ? ColorID::ButtonBgPressed : ColorID::ButtonBg)
             );
             theme->drawWindowFrame(
                 _ctx,
                 getClientRect(),
-                theme->getMetric(METRIC_CORNER_RADIUS_BUTTON).getCoord(),
-                theme->getColor(pressed ? COLOR_BUTTON_FRAME_PRESSED : COLOR_BUTTON_FRAME)
+                theme->getMetric(MetricID::CornerRadiusButton).getCoord(),
+                theme->getColor(pressed ? ColorID::ButtonFramePressed : ColorID::ButtonFrame)
             );
             theme->drawText(
                 _ctx,
                 getText().c_str(),
-                DT_SINGLE | DT_CENTER,
+                DrawText::Single | DrawText::Center,
                 getClientRect(),
-                theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
-                theme->getColor(pressed ? COLOR_BUTTON_TEXT_PRESSED : COLOR_BUTTON_TEXT),
+                theme->getMetric(MetricID::DefTextSize).getUint8(),
+                theme->getColor(pressed ? ColorID::ButtonTextPressed : ColorID::ButtonText),
                 theme->getDefaultFont()
             );
-            return routeMessage(MSG_POSTDRAW);
+            return routeMessage(Message::PostDraw);
         }
 
         bool onResize(MsgParam p1, MsgParam p2) override
@@ -2666,10 +2695,10 @@ namespace exostra
             Extent width, height;
             auto rect = getRect();
             _ctx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
-            const auto maxWidth = max(width, theme->getMetric(METRIC_DEF_BUTTON_CX).getExtent());
+            const auto maxWidth = max(width, theme->getMetric(MetricID::DefButtonCX).getExtent());
             rect.right = rect.left + maxWidth +
-                (theme->getMetric(METRIC_BUTTON_LABEL_PADDING).getExtent() * 2);
-            rect.bottom = rect.top + theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
+                (theme->getMetric(MetricID::ButtonLabelPadding).getExtent() * 2);
+            rect.bottom = rect.top + theme->getMetric(MetricID::DefButtonCY).getExtent();
             setRect(rect);
             /// TODO: if not autosize, clip label, perhaps with ellipsis.
             return true;
@@ -2694,13 +2723,13 @@ namespace exostra
             theme->drawText(
                 _ctx,
                 getText().c_str(),
-                DT_SINGLE | DT_ELLIPSIS,
+                DrawText::Single | DrawText::Ellipsis,
                 getClientRect(),
-                theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
+                theme->getMetric(MetricID::DefTextSize).getUint8(),
                 getTextColor(),
                 theme->getDefaultFont()
             );
-            return routeMessage(MSG_POSTDRAW);
+            return routeMessage(Message::PostDraw);
         }
     };
 
@@ -2719,13 +2748,13 @@ namespace exostra
             theme->drawText(
                 _ctx,
                 getText().c_str(),
-                DT_CENTER,
+                DrawText::Center,
                 getClientRect(),
-                theme->getMetric(METRIC_DEF_TEXT_SIZE).getUint8(),
+                theme->getMetric(MetricID::DefTextSize).getUint8(),
                 getTextColor(),
                 theme->getDefaultFont()
             );
-            return routeMessage(MSG_POSTDRAW);
+            return routeMessage(Message::PostDraw);
         }
     };
 
@@ -2753,7 +2782,7 @@ namespace exostra
             auto btn = wm->createWindow<Button>(
                 shared_from_this(),
                 bi.first,
-                STY_CHILD | STY_VISIBLE | STY_AUTOSIZE | STY_BUTTON,
+                Style::Child | Style::Visible | Style::AutoSize | Style::Button,
                 0,
                 0,
                 0,
@@ -2769,18 +2798,18 @@ namespace exostra
             EWM_ASSERT(wm);
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            setCornerRadius(theme->getMetric(METRIC_CORNER_RADIUS_PROMPT).getCoord());
-            setBgColor(theme->getColor(COLOR_PROMPT_BG));
-            setFrameColor(theme->getColor(COLOR_PROMPT_FRAME));
-            setShadowColor(theme->getColor(COLOR_PROMPT_SHADOW));
+            setCornerRadius(theme->getMetric(MetricID::CornerRadiusPrompt).getCoord());
+            setBgColor(theme->getColor(ColorID::PromptBg));
+            setFrameColor(theme->getColor(ColorID::PromptFrame));
+            setShadowColor(theme->getColor(ColorID::PromptShadow));
             const auto rect = getRect();
-            const auto xPadding = theme->getMetric(METRIC_X_PADDING).getExtent();
-            const auto yPadding = theme->getMetric(METRIC_Y_PADDING).getExtent();
-            const auto defBtnHeight = theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent();
+            const auto xPadding = theme->getMetric(MetricID::XPadding).getExtent();
+            const auto yPadding = theme->getMetric(MetricID::YPadding).getExtent();
+            const auto defBtnHeight = theme->getMetric(MetricID::DefButtonCY).getExtent();
             _label = wm->createWindow<MultilineLabel>(
                 shared_from_this(),
                 LabelID,
-                STY_CHILD | STY_VISIBLE | STY_LABEL,
+                Style::Child | Style::Visible | Style::Label,
                 rect.left + xPadding,
                 rect.top + yPadding,
                 rect.width() - (xPadding * 2),
@@ -2790,7 +2819,7 @@ namespace exostra
             if (!_label) {
                 return false;
             }
-            _label->setBgColor(theme->getColor(COLOR_PROMPT_BG));
+            _label->setBgColor(theme->getColor(ColorID::PromptBg));
             auto rectLbl = _label->getRect();
             /// TODO: refactor this. prompts should have styles, such as
             // PROMPT_1BUTTON and PROMPT_2BUTTON. they should then take
@@ -2799,14 +2828,14 @@ namespace exostra
             uint8_t numButtons = 0;
             forEachChild([&](const WindowPtr& child)
             {
-                if (bitsHigh(child->getStyle(), STY_BUTTON)) {
+                if (bitsHigh(child->getStyle(), Style::Button)) {
                     numButtons++;
                 }
                 return true;
             });
             forEachChild([&](const WindowPtr& child)
             {
-                if (!bitsHigh(child->getStyle(), STY_BUTTON)) {
+                if (!bitsHigh(child->getStyle(), Style::Button)) {
                     return true;
                 }
                 auto rectBtn = child->getRect();
@@ -2843,7 +2872,7 @@ namespace exostra
         bool onEvent(MsgParam p1, MsgParam p2) override
         {
             switch (static_cast<EventType>(p1)) {
-                case EVT_CHILD_TAPPED:
+                case EventType::ChildTapped:
                     hide();
                     if (_callback) {
                         _callback(static_cast<WindowID>(p2));
@@ -2868,12 +2897,12 @@ namespace exostra
         ProgressBar() = default;
         virtual ~ProgressBar() = default;
 
-        Style getProgressBarStyle() const noexcept { return _barStyle; }
+        ProgressStyle getProgressBarStyle() const noexcept { return _barStyle; }
 
-        void setProgressBarStyle(Style barStyle) noexcept
+        void setProgressBarStyle(ProgressStyle style) noexcept
         {
-            if (barStyle != _barStyle) {
-                _barStyle = barStyle;
+            if (style != _barStyle) {
+                _barStyle = style;
                 setDirty(true);
             }
         }
@@ -2896,18 +2925,18 @@ namespace exostra
             theme->drawProgressBarBackground(_ctx, getClientRect());
             theme->drawWindowFrame(_ctx, getClientRect(), getCornerRadius(), getFrameColor());
             bool drawn = false;
-            if (bitsHigh(getProgressBarStyle(), PBR_NORMAL)) {
+            if (bitsHigh(getProgressBarStyle(), ProgressStyle::Normal)) {
                 theme->drawProgressBarProgress(_ctx, getClientRect(), getProgressValue());
                 drawn = true;
-            } else if (bitsHigh(getProgressBarStyle(), PBR_INDETERMINATE)) {
+            } else if (bitsHigh(getProgressBarStyle(), ProgressStyle::Indeterminate)) {
                 theme->drawProgressBarIndeterminate(_ctx, getClientRect(), getProgressValue());
                 drawn = true;
             }
-            return drawn ? routeMessage(MSG_POSTDRAW) : false;
+            return drawn ? routeMessage(Message::PostDraw) : false;
         }
 
-        Style _barStyle = 0;
-        float _value = 0.0f;
+        ProgressStyle _barStyle = ProgressStyle::Normal;
+        float _value            = 0.0f;
     };
 
     class CheckBox : public Window
@@ -2921,15 +2950,15 @@ namespace exostra
         {
             if (isChecked() != checked) {
                 if (checked) {
-                    setState(getState() | STA_CHECKED);
+                    setState(getState() | State::Checked);
                 } else {
-                    setState(getState() & ~STA_CHECKED);
+                    setState(getState() & ~State::Checked);
                 }
                 setDirty(true);
             }
         }
 
-        bool isChecked() const noexcept { return bitsHigh(getState(), STA_CHECKED); }
+        bool isChecked() const noexcept { return bitsHigh(getState(), State::Checked); }
 
     protected:
         bool onDraw(MsgParam p1, MsgParam p2) override
@@ -2937,7 +2966,7 @@ namespace exostra
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             theme->drawCheckBox(_ctx, getText().c_str(), isChecked(), getClientRect());
-            return routeMessage(MSG_POSTDRAW);
+            return routeMessage(Message::PostDraw);
         }
 
         bool onTapped(Coord x, Coord y) override
@@ -2945,7 +2974,7 @@ namespace exostra
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             if (millis() - _lastToggle >=
-                theme->getMetric(METRIC_CHECKBOX_CHECK_DELAY).getUint32()) {
+                theme->getMetric(MetricID::CheckBoxCheckDelay).getUint32()) {
                 setChecked(!isChecked());
                 _lastToggle = millis();
             }

@@ -73,7 +73,7 @@
 # define TS_MAXY DISPLAY_HEIGHT
 # define EWM_GFX_ADAFRUIT
 //# define EWM_GFX_ARDUINO
-# define ADAFRUIT_RA8875
+# define EWM_ADAFRUIT_RA8875
 # include <Adafruit_RA8875.h>
 #else
 # error "invalid display selection"
@@ -132,7 +132,7 @@ Adafruit_CST8XX cst_ctp;
 auto display = std::make_shared<Adafruit_ILI9341>(PIN_CS, PIN_DC);
 #  elif defined(TFT_480_RECTANGLE)
 auto display = std::make_shared<Adafruit_HX8357>(PIN_CS, PIN_DC);
-#  elif defined(ADAFRUIT_RA8875)
+#  elif defined(EWM_ADAFRUIT_RA8875)
 auto display = std::make_shared<Adafruit_RA8875>(PIN_CS, PIN_RST);
 #  endif
 # elif defined(EWM_GFX_ARDUINO)
@@ -303,7 +303,7 @@ void setup(void)
   bus.begin();
 #endif
 
-#if defined(ADAFRUIT_RA8875)
+#if defined(EWM_ADAFRUIT_RA8875)
   if (!wm->begin(TFT_ROTATION, RA8875_800x480)) {
 #elif defined(EWM_GFX_ADAFRUIT)
   if (!wm->begin(TFT_ROTATION, 0)) {
@@ -314,7 +314,7 @@ void setup(void)
     on_fatal_error();
   }
   EWM_LOG_I("WindowManager: OK");
-#if defined(ADAFRUIT_RA8875)
+#if defined(EWM_ADAFRUIT_RA8875)
   display->displayOn(true);
   display->GPIOX(true);
   display->PWM1config(true, RA8875_PWM_CLK_DIV1024);
@@ -324,7 +324,7 @@ void setup(void)
   display->touchEnable(true);
 #endif
   wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
-#if defined(ADAFRUIT_RA8875)
+#if defined(EWM_ADAFRUIT_RA8875)
   pinMode(PIN_LITE, OUTPUT);
   digitalWrite(PIN_LITE, HIGH);
 #else
@@ -362,12 +362,12 @@ void setup(void)
 
   WindowID id     = 1;
   auto theme      = wm->getTheme();
-  auto xPadding   = theme->getMetric(METRIC_X_PADDING).getExtent();
-  auto yPadding   = theme->getMetric(METRIC_Y_PADDING).getExtent();
+  auto xPadding   = theme->getMetric(MetricID::XPadding).getExtent();
+  auto yPadding   = theme->getMetric(MetricID::YPadding).getExtent();
   auto defaultWin = wm->createWindow<DefaultWindow>(
     nullptr,
     id++,
-    STY_VISIBLE | STY_TOPLEVEL,
+    Style::Visible | Style::TopLevel,
     xPadding,
     xPadding,
     wm->getDisplayWidth() - (xPadding * 2),
@@ -380,7 +380,7 @@ void setup(void)
   auto button1 = wm->createWindow<TestButton>(
     defaultWin,
     id++,
-    STY_BUTTON | STY_CHILD | STY_VISIBLE | STY_AUTOSIZE,
+    Style::Button | Style::Child | Style::Visible | Style::AutoSize,
     defaultWin->getRect().left + xPadding,
     defaultWin->getRect().top + yPadding,
     0,
@@ -394,11 +394,11 @@ void setup(void)
   auto label1 = wm->createWindow<TestLabel>(
     defaultWin,
     id++,
-    STY_LABEL | STY_CHILD | STY_VISIBLE,
+    Style::Label | Style::Child | Style::Visible,
     button1->getRect().right + xPadding,
     button1->getRect().top,
     button1->getRect().width(),
-    theme->getMetric(METRIC_DEF_BUTTON_CY).getExtent(),
+    theme->getMetric(MetricID::DefButtonCY).getExtent(),
     "Label"
   );
   if (!label1) {
@@ -408,12 +408,12 @@ void setup(void)
   testProgressBar = wm->createProgressBar<TestProgressBar>(
     defaultWin,
     id++,
-    STY_PROGBAR | STY_CHILD | STY_VISIBLE,
+    Style::Progress | Style::Child | Style::Visible,
     defaultWin->getRect().left + xPadding,
     button1->getRect().bottom + yPadding,
     defaultWin->getRect().width() - (xPadding * 2),
-    theme->getMetric(METRIC_DEF_PROGBAR_HEIGHT).getExtent(),
-    PBR_NORMAL
+    theme->getMetric(MetricID::DefProgressHeight).getExtent(),
+    ProgressStyle::Normal
   );
   if (!testProgressBar) {
     on_fatal_error();
@@ -422,11 +422,11 @@ void setup(void)
   auto testCheckbox = wm->createWindow<TestCheckbox>(
     defaultWin,
     id++,
-    STY_CHECKBOX | STY_CHILD | STY_VISIBLE,
+    Style::CheckBox | Style::Child | Style::Visible,
     defaultWin->getRect().left + xPadding,
     testProgressBar->getRect().bottom + yPadding,
     theme->getScaledValue(130),
-    theme->getMetric(METRIC_DEF_CHECKBOX_HEIGHT).getExtent(),
+    theme->getMetric(MetricID::DefCheckBoxHeight).getExtent(),
     "CheckBox"
   );
   if (!testCheckbox) {
@@ -436,7 +436,7 @@ void setup(void)
   okPrompt = wm->createPrompt<TestOKPrompt>(
     nullptr,
     id++,
-    STY_PROMPT,
+    Style::Prompt,
     "You did a thing, and now this is on your screen.",
     {{100, "OK"}},
     [](WindowID id)
@@ -451,7 +451,7 @@ void setup(void)
   auto yesNoPromptWnd = wm->createPrompt<TestYesNoPrompt>(
     nullptr,
     id++,
-    STY_PROMPT,
+    Style::Prompt,
     "This is a test prompt. Please choose an option.",
     {{100, "Yes"}, {101, "No"}},
     [&](WindowID id)
@@ -502,12 +502,12 @@ std::pair<Coord, Coord> swapCoords(Coord x, Coord y)
 #endif
 
 float curProgress = 0.0f;
-float progressStep = wm->getTheme()->getMetric(METRIC_PROGBAR_MARQUEE_STEP).getFloat();
+float progressStep = wm->getTheme()->getMetric(MetricID::ProgressMarqueeStep).getFloat();
 uint32_t lastProgress = 0U;
 
 void loop()
 {
-#if defined(ADAFRUIT_RA8875)
+#if defined(EWM_ADAFRUIT_RA8875)
   static constexpr float xScale = 1024.0f / DISPLAY_WIDTH;
   static constexpr float yScale = 1024.0f / DISPLAY_HEIGHT;
   if (!digitalRead(PIN_INT)) {
