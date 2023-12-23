@@ -929,6 +929,10 @@ namespace exostra
                         case DisplaySize::Large:
                             retval.setFloat(step * 4.0f);
                         break;
+                        default:
+                            EWM_ASSERT(!"invalid display size");
+                            retval.setFloat(step);
+                        break;
                     }
                 }
                 break;
@@ -984,6 +988,9 @@ namespace exostra
                     return abs(value * 2.0f);
                 case DisplaySize::Large:
                     return abs(value * 3.0f);
+                default:
+                    EWM_ASSERT(!"invalid display size");
+                    return value;
             }
         }
 
@@ -1623,7 +1630,7 @@ namespace exostra
             Rect rect(x, y, x + width, y + height);
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             EWM_CONST(size_t, MaxClassName, 32);
-            auto demangleBuf   = new char[MaxClassName];
+            auto demangleBuf   = std::make_shared<char[MaxClassName]>();
             size_t dbufSize    = MaxClassName;
             int status         = 0;
             const auto clsName = __cxxabiv1::__cxa_demangle(
@@ -1638,8 +1645,7 @@ namespace exostra
                     shared_from_this(), parent, id, style, rect, text, clsName
                 )
             );
-            delete[] demangleBuf;
-            demangleBuf = nullptr;
+            demangleBuf.reset();
 # else
             std::shared_ptr<TWindow> win(
                 std::make_shared<TWindow>(
@@ -2087,7 +2093,7 @@ namespace exostra
             _style(style), _id(id)
         {
 
-            if (bitsHigh(getStyle(), Style::TopLevel) && !parent) {
+            if (bitsHigh(_style, Style::TopLevel) && !parent) {
                 _ctx = std::make_shared<GfxContext>(rect.width(), rect.height());
                 EWM_LOG_V("created %hux%hu gfx ctx for %s", rect.width(),
                     rect.height(), toString().c_str());
@@ -2699,8 +2705,10 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            Coord x, y;
-            Extent width, height;
+            Coord x       = 0;
+            Coord y       = 0;
+            Extent width  = 0;
+            Extent height = 0;
             auto rect = getRect();
             _ctx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
             const auto maxWidth = max(width, theme->getMetric(MetricID::DefButtonCX).getExtent());
