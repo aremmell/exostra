@@ -83,7 +83,7 @@
 # define COORDINATE_MAPPING
 #endif
 
-#define TFT_SCREENSAVER_AFTER 1 * 60 * 1000
+#define TFT_SCREENSAVER_AFTER 0.5 * 60 * 1000
 
 #include "twm.h"
 using namespace thumby;
@@ -135,15 +135,12 @@ auto display = std::make_shared<Adafruit_HX8357>(PIN_CS, PIN_DC);
 #  elif defined(ADAFRUIT_RA8875)
 auto display = std::make_shared<Adafruit_RA8875>(PIN_CS, PIN_RST);
 #  endif
-auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH);
 # elif defined(TWM_GFX_ARDUINO)
 Arduino_ESP32SPI bus(PIN_DC, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO);
 auto display = std::make_shared<Arduino_ILI9341>(&bus);
-auto context = std::make_shared<GfxContext>(DISPLAY_HEIGHT, DISPLAY_WIDTH, display.get());
 # endif
 auto wm = createWindowManager(
     display,
-    context,
     std::make_shared<DefaultTheme>(),
     DEFAULT_FONT
 );
@@ -178,14 +175,8 @@ auto display = std::make_shared<Arduino_RGB_Display>(
 #  error "invalid display selection"
 # endif
 );
-auto context = std::make_shared<GfxContext>(DISPLAY_WIDTH, DISPLAY_HEIGHT
-#if defined(TWM_GFX_ARDUINO)
-  , display.get()
-#endif
-);
 auto wm = createWindowManager(
     display,
-    context,
     std::make_shared<DefaultTheme>(),
     DEFAULT_FONT
 );
@@ -268,7 +259,7 @@ void on_fatal_error()
   ums3.setPixelBrightness(255); // maximum brightness.*/
   pinMode(13, OUTPUT);
   while (true) {
-    TWM_LOG(TWM_ERROR, "!! fatal error !!");
+    TWM_LOG_E("!! fatal error !!");
     //ums3.setPixelColor(0xff, 0x00, 0x00); // pure red.
     digitalWrite(13, LOW);
     delay(1000);
@@ -278,7 +269,7 @@ void on_fatal_error()
   }
 #else
   /// TODO: blink an LED or something.
-  TWM_LOG(TWM_ERROR, "fatal error");
+  TWM_LOG_E("fatal error");
   while (true);
 #endif
 }
@@ -291,7 +282,7 @@ bool isFocalTouch = false;
 void setup(void)
 {
   delay(500);
-  TWM_LOG(TWM_DEBUG, "initializing");
+  TWM_LOG_D("initializing");
 
 #if defined(EYESPI_DISPLAY)
   bool touchInitialized = false;
@@ -299,7 +290,7 @@ void setup(void)
 
   auto logMemoryValue = [](const char* name, uint32_t val)
   {
-    TWM_LOG(TWM_DEBUG, "%s: %.2f KiB", name, val / 1024.0f);
+    TWM_LOG_D("%s: %.2f KiB", name, val / 1024.0f);
   };
 
   logMemoryValue("Total RAM", ESP.getHeapSize());
@@ -313,16 +304,16 @@ void setup(void)
 #endif
 
 #if defined(ADAFRUIT_RA8875)
-  if (!wm->begin(RA8875_800x480)) {
+  if (!wm->begin(TFT_ROTATION, RA8875_800x480)) {
 #elif defined(TWM_GFX_ADAFRUIT)
-  if (!wm->begin(0)) {
+  if (!wm->begin(TFT_ROTATION, 0)) {
 #else
-  if (!wm->begin()) {
+  if (!wm->begin(TFT_ROTATION)) {
 #endif
-    TWM_LOG(TWM_ERROR, "WindowManager: error");
+    TWM_LOG_E("WindowManager: error");
     on_fatal_error();
   }
-  TWM_LOG(TWM_DEBUG, "WindowManager: OK");
+  TWM_LOG_I("WindowManager: OK");
 #if defined(ADAFRUIT_RA8875)
   display->displayOn(true);
   display->GPIOX(true);
@@ -332,8 +323,6 @@ void setup(void)
   digitalWrite(PIN_INT, HIGH);
   display->touchEnable(true);
 #endif
-  display->setRotation(TFT_ROTATION);
-  display->setCursor(0, 0);
   wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
 #if defined(ADAFRUIT_RA8875)
   pinMode(PIN_LITE, OUTPUT);
@@ -343,27 +332,27 @@ void setup(void)
   expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
   expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
 #endif
-  wm->getGfxContext()->fillScreen(0xb5be);
+  display->fillScreen(0xb5be);
 #if !defined(TFT_480_RECTANGLE) && !defined(TFT_800_RECTANGLE)
   if (!focal_ctp.begin(0, &Wire, I2C_TOUCH_ADDR)) {
-    TWM_LOG(TWM_ERROR, "FT6206: error at 0x%x", I2C_TOUCH_ADDR);
+    TWM_LOG_E("FT6206: error at 0x%x", I2C_TOUCH_ADDR);
     if (!cst_ctp.begin(&Wire, I2C_TOUCH_ADDR)) {
-      TWM_LOG(TWM_ERROR, "CST8XX: error at 0x%x", I2C_TOUCH_ADDR);
+      TWM_LOG_E("CST8XX: error at 0x%x", I2C_TOUCH_ADDR);
     } else {
       touchInitialized = true;
       isFocalTouch = false;
-      TWM_LOG(TWM_DEBUG, "CST8XX: OK");
+      TWM_LOG_I("CST8XX: OK");
     }
   } else {
     touchInitialized = isFocalTouch = true;
-    TWM_LOG(TWM_DEBUG, "FT6206: OK");
+    TWM_LOG_I("FT6206: OK");
   }
 #elif defined(TFT_480_RECTANGLE)
   touchInitialized = ctp.begin(I2C_TOUCH_ADDR);
   if (!touchInitialized) {
-    TWM_LOG(TWM_ERROR, "FT5336: error at 0x%x", I2C_TOUCH_ADDR);
+    TWM_LOG_E("FT5336: error at 0x%x", I2C_TOUCH_ADDR);
   } else {
-    TWM_LOG(TWM_DEBUG, "FT5336: OK");
+    TWM_LOG_I("FT5336: OK");
   }
 #endif
   if (!touchInitialized) {
@@ -371,10 +360,10 @@ void setup(void)
   }
 #endif
 
-  WindowID id = 1;
-  auto theme = wm->getTheme();
-  auto xPadding = theme->getMetric(METRIC_X_PADDING).getExtent();
-  auto yPadding = theme->getMetric(METRIC_Y_PADDING).getExtent();
+  WindowID id     = 1;
+  auto theme      = wm->getTheme();
+  auto xPadding   = theme->getMetric(METRIC_X_PADDING).getExtent();
+  auto yPadding   = theme->getMetric(METRIC_Y_PADDING).getExtent();
   auto defaultWin = wm->createWindow<DefaultWindow>(
     nullptr,
     id++,
@@ -478,7 +467,7 @@ void setup(void)
     on_fatal_error();
   }
   button1->setPrompt(yesNoPromptWnd);
-  TWM_LOG(TWM_DEBUG, "setup completed");
+  TWM_LOG_I("setup completed");
 }
 
 #if defined(COORDINATE_MAPPING)
@@ -514,7 +503,7 @@ std::pair<Coord, Coord> swapCoords(Coord x, Coord y)
 
 float curProgress = 0.0f;
 float progressStep = wm->getTheme()->getMetric(METRIC_PROGBAR_MARQUEE_STEP).getFloat();
-uint32_t iteration = 0U;
+uint32_t lastProgress = 0U;
 
 void loop()
 {
@@ -562,7 +551,8 @@ void loop()
   }
 #endif
 #endif
-  if (++iteration % 50 == 0) {
+  if (millis() - lastProgress > 500U) {
+    lastProgress = millis();
     if (curProgress < 100.0f) {
       curProgress += progressStep;
     } else {
@@ -570,5 +560,5 @@ void loop()
     }
     testProgressBar->setProgressValue(curProgress);
   }
-  wm->update();
+  wm->render();
 }
