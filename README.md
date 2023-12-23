@@ -1,15 +1,17 @@
-# exostra
+# Exostra
 
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2023-2024 Ryan M. Lederman <lederman@gmail.com> -->
 
 [![License](https://img.shields.io/github/license/aremmell/exostra?color=%2340b900&cacheSeconds=60)](https://github.com/aremmell/exostra/blob/master/LICENSE)
+[![REUSE status](https://api.reuse.software/badge/github.com/aremmell/exostra)](https://api.reuse.software/info/github.com/aremmell/exostra)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=aremmell_exostra&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=aremmell_exostra)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=aremmell_exostra&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=aremmell_exostra)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=aremmell_exostra&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=aremmell_exostra)
 
-Exostra Window Manager[^1]
+A single-header C++17 _(20 when the toolchains catch up)_ [compositing window manager](https://en.wikipedia.org/wiki/Compositing_window_manager) designed specifically for use with small touch displays, such as the kind you might utilize while building an IoT project.
 
-A single-header (C++17, 20 when the toolchains catch up) [compositing window manager](https://en.wikipedia.org/wiki/Compositing_window_manager) designed specifically for use with small touch displays, such as the kind you might utilize while building an IoT project.
-
-Currently, exostra is designed to be consumed by an Arduino/PlatformIO/ESP-IDF project as a library dependency, and has support for the following low-level graphics libraries/interfaces:
+Currently, Exostra[^1] is designed to be consumed by an Arduino/PlatformIO/ESP-IDF project as a library dependency, and has support for the following low-level graphics libraries/interfaces:
 
 - [Adafruit GFX](https://github.com/adafruit/Adafruit-GFX-Library) (via `Adafruit_SPITFT` and `GFXcanvas16`)
 - [Adafruit RA8875](https://github.com/adafruit/Adafruit_RA8875)
@@ -29,7 +31,7 @@ Currently, exostra is designed to be consumed by an Arduino/PlatformIO/ESP-IDF p
 1. WIP/not ready for production use. I have only written the basic window classes like button, label, progress bar, prompt (message box), checkbox, etc. as of now, but stay tuned!
 2. Limitations (some to be resolved, some perhaps not):
   - Only supports 16-bit RGB 565 color mode (I will be adding 24-bit RGB support as well as translation from 24-bit to 16-bit)
-  - Requires a not-insignificant amount of heap memory, as each top-level window is paired with a 16bpp off-screen buffer which is shared with all descendants of the window. Using these off-screen buffers allows exostra to copy the raw pixel data directly to the display hardware with zero flickering. Depending on the resolution of display and number of top-level windows, these buffers may consume several hundred KiB of heap memory. I am considering providing alternate modes, such as one that reuses a single screen-sized off-screen buffer for all windows, which will be much slower to render, but use less resources. Another possibility is direct rendering to the display hardware, which will result in flickering/noticeable delays, but could allow exostra to run on boards it could otherwise not run on.
+  - Requires a not-insignificant amount of heap memory, as each top-level window is paired with a 16bpp off-screen buffer which is shared with all descendants of the window. Using these off-screen buffers allows Exostra to copy the raw pixel data directly to the display hardware with zero flickering. Depending on the resolution of display and number of top-level windows, these buffers may consume several hundred KiB of heap memory. I am considering providing alternate modes, such as one that reuses a single screen-sized off-screen buffer for all windows, which will be much slower to render, but use less resources. Another possibility is direct rendering to the display hardware, which will result in flickering/noticeable delays, but could allow Exostra to run on boards it could otherwise not run on.
   - Only processes tap events. I have not gotten to swiping/multi-touch gestures yet.
 
 I will upload a sample video in the weeks to come, as I have more useful features to show off.
