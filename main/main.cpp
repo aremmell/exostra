@@ -303,9 +303,9 @@ void setup(void)
   delay(500);
   EWM_LOG_D("initializing");
 
-# if defined(EYESPI_DISPLAY)
+#if defined(EYESPI_DISPLAY)
   bool touchInitialized = false;
-# endif
+#endif
 
   auto logMemoryValue = [](const char* name, uint32_t val)
   {

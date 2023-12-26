@@ -2162,7 +2162,7 @@ namespace exostra
 # if defined(EWM_GFX_ADAFRUIT)
                 _ctx = std::make_shared<GfxContext>(rect.width(), rect.height());
 # else
-#pragma message("TODO_if_window_resized_recreate_gfx_ctx")
+#  pragma message("TODO_if_window_resized_recreate_gfx_ctx")
                 _ctx = std::make_shared<GfxContext>(
                     rect.width(),
                     rect.height(),
