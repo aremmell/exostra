@@ -122,6 +122,8 @@ Adafruit_CST8XX cst_ctp;
 
 #if defined(ARDUINO_PROS3) || defined(ARDUINO_FEATHERS3)
 # define S3
+# include <UMS3.h>
+UMS3 ums3;
 #endif
 
 #if defined(EYESPI_DISPLAY) && !defined(S3)
@@ -275,16 +277,13 @@ public:
 void on_fatal_error()
 {
 #if defined(S3)
-  /*ums3.setPixelPower(true); // assume pixel could be off.
-  ums3.setPixelBrightness(255); // maximum brightness.*/
-  pinMode(13, OUTPUT);
+  ums3.setPixelPower(true); // assume pixel could be off.
+  ums3.setPixelBrightness(255); // maximum brightness.
   while (true) {
     EWM_LOG_E("!! fatal error !!");
-    //ums3.setPixelColor(0xff, 0x00, 0x00); // pure red.
-    digitalWrite(13, LOW);
+    ums3.setPixelColor(0xff, 0x00, 0x00); // pure red.
     delay(1000);
-    //ums3.setPixelColor(0x00, 0x00, 0x00); // black (off).
-    digitalWrite(13, HIGH);
+    ums3.setPixelColor(0x00, 0x00, 0x00); // black (off).
     delay(1000);
   }
 #else
@@ -318,6 +317,10 @@ void setup(void)
   logMemoryValue("Total PSRAM", ESP.getPsramSize());
   logMemoryValue("Free PSRAM", ESP.getFreePsram());
   logMemoryValue("Total flash", ESP.getFlashChipSize());
+
+#if defined(S3)
+  ums3.begin();
+#endif
 
 #if defined(EYESPI_DISPLAY) && defined(EWM_GFX_ARDUINO)
   bus.begin();
