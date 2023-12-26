@@ -185,6 +185,7 @@
 #  if defined(ATTINY_CORE)
 #   error "required GFXfont implementation unavailable due to ATTINY_CORE"
 #  endif
+    using IGfxDisplay   = Arduino_RGB_Display;
     using IGfxContext16 = Arduino_Canvas;
 # else
 #  error "define EWM_GFX_ADAFRUIT or EWM_GFX_ARDUINO, and install the relevant \
@@ -495,6 +496,15 @@ namespace exostra
             return x >= left && x <= right && y >= top && y <= bottom;
         }
     };
+
+    inline Color* getGfxBuffer(const GfxContextPtr& ctx)
+    {
+# if defined(EWM_GFX_ADAFRUIT)
+        return ctx->getBuffer();
+# else
+        return ctx->getFramebuffer();
+# endif
+    }
 
     inline GFXglyph* getGlyphAtOffset(const GFXfont* font, uint8_t off)
     {
@@ -1343,12 +1353,13 @@ namespace exostra
 
         virtual bool redraw(bool = false) = 0;
         virtual bool redrawChildren(bool = false) = 0;
+        virtual void redrawAsync() = 0;
         virtual bool hide() noexcept = 0;
         virtual bool show() noexcept = 0;
         virtual bool isVisible() const noexcept = 0;
         virtual bool isAlive() const noexcept = 0;
         virtual bool isDirty() const noexcept = 0;
-        virtual bool setDirty(bool,bool=true) noexcept = 0;
+        virtual void setDirty(bool) noexcept = 0;
         virtual bool isDrawable() const noexcept = 0;
 
         virtual bool destroy() = 0;
@@ -1594,7 +1605,6 @@ namespace exostra
             _registry->removeAllChildren();
         }
 
-        GfxDisplayPtr getGfxDisplay() const { return _gfxDisplay; }
         ThemePtr getTheme() const { return _theme; }
 
         Extent getDisplayWidth() const noexcept { return _gfxDisplay->width(); }
@@ -1655,19 +1665,19 @@ namespace exostra
             );
 # endif
             if (bitsHigh(style, Style::Child) && !parent) {
-                EWM_LOG_E("Style::Child && null parent");
+                EWM_LOG_E("%s: Style::Child && null parent", win->toString().c_str());
                 return nullptr;
             }
             if (bitsHigh(style, Style::TopLevel) && parent) {
-                EWM_LOG_E("Style::TopLevel && parent");
+                EWM_LOG_E("%s: Style::TopLevel && parent", win->toString().c_str());
                 return nullptr;
             }
             if (preCreateHook && !preCreateHook(win)) {
-                EWM_LOG_E("pre-create hook failed");
+                EWM_LOG_E("%s: pre-create hook failed", win->toString().c_str());
                 return nullptr;
             }
             if (!win->routeMessage(Message::Create)) {
-                EWM_LOG_E("Message::Create = false");
+                EWM_LOG_E("%s: Message::Create = false", win->toString().c_str());
                 return nullptr;
             }
             bool dupe = parent ? !parent->addChild(win) : !_registry->addChild(win);
@@ -1679,6 +1689,7 @@ namespace exostra
             if (bitsHigh(win->getStyle(), Style::AutoSize)) {
                 win->routeMessage(Message::Resize);
             }
+            win->markRectDirty(rect);
             win->redraw();
             return win;
         }
@@ -1762,7 +1773,7 @@ namespace exostra
             }
             EWM_ASSERT(x >= 0 && y >= 0);
             EWM_ASSERT(x <= getDisplayWidth() && y <= getDisplayHeight());
-            EWM_LOG_D("hit test at %hd/%hd", x, y);
+            EWM_LOG_D("hit test at %hd,%hd", x, y);
             if (bitsHigh(getState(), WMState::SSaverEnabled)) {
                 _ssLastActivity = millis();
                 if (bitsHigh(getState(), WMState::SSaverActive)) {
@@ -1775,14 +1786,14 @@ namespace exostra
                 if (!child->isDrawable()) {
                     return true;
                 }
-                EWM_LOG_V("interrogating %s re: hit test at %hd/%hd",
+                EWM_LOG_V("interrogating %s re: hit test at %hd,%hd",
                     child->toString().c_str(), x, y);
                 InputParams params;
                 params.type = InputType::Tap;
                 params.x    = x;
                 params.y    = y;
                 if (child->processInput(&params)) {
-                    EWM_LOG_V("%s claimed hit test at %hd/%hd",
+                    EWM_LOG_V("%s claimed hit test at %hd,%hd",
                         params.handledBy.c_str(), x, y);
                     claimed = true;
                     return false;
@@ -1790,7 +1801,7 @@ namespace exostra
                 return true;
             });
             if (!claimed) {
-                EWM_LOG_V("hit test at %hd/%hd unclaimed", x, y);
+                EWM_LOG_V("hit test at %hd,%hd unclaimed", x, y);
             }
             _lastHitTestTime = millis();
         }
@@ -1951,6 +1962,7 @@ namespace exostra
                             EWM_LOG_V("%s has no dirty rects left after subtracting the"
                                 " obscuring rect; clearing dirty rect", win->toString().c_str());
                             win->markRectDirty(Rect());
+                            win->setDirty(false);
                             return true;
                         }
                     } else {
@@ -1960,12 +1972,25 @@ namespace exostra
                     while (!dirtyRects.empty()) {
                         auto clientDirtyRect = dirtyRect = dirtyRects.front();
                         dirtyRects.pop();
+                        win->forEachChild([=](const WindowPtr& win)
+                        {
+                            if (!win->isDrawable()) {
+                                return true;
+                            }
+                            if (win->getRect().intersectsRect(clientDirtyRect)) {
+                                win->setDirty(true);
+                                win->redraw();
+                                return true;
+                            }
+                            return true;
+                        });
                         if (!displayToWindow(win, clientDirtyRect)) {
                             EWM_ASSERT(!"failed to convert display to window coords");
                             return true;
                         }
                         auto ctx = win->getGfxContext();
 # if defined(EWM_GFX_ADAFRUIT)
+#  if !defined(EWM_ADAFRUIT_RA8875)
                         _gfxDisplay->startWrite();
                         _gfxDisplay->setAddrWindow(
                             dirtyRect.left,
@@ -1974,13 +1999,59 @@ namespace exostra
                             dirtyRect.height()
                         );
                         for (auto line = clientDirtyRect.top; line < clientDirtyRect.bottom; line++) {
-                            const auto offset = ctx->getBuffer() + (line * ctx->width()) + clientDirtyRect.left;
+                            const auto offset = getGfxBuffer(ctx) + (line * ctx->width()) + clientDirtyRect.left;
                             _gfxDisplay->writePixels(offset, clientDirtyRect.width());
                         }
                         _gfxDisplay->endWrite();
-# elif defined(EWM_GFX_ARDUINO)
-#  error "not implemented"
-# endif
+#  else
+                        //_gfxDisplay->graphicsMode();
+                        //_gfxDisplay->startWrite();
+                        Coord row = dirtyRect.top;
+                        for (auto line = clientDirtyRect.top; line < clientDirtyRect.bottom; line++, row++) {
+                            const auto offset = getGfxBuffer(ctx) + (line * ctx->width()) + clientDirtyRect.left;
+                            //for (auto col = dirtyRect.left; col < dirtyRect.right; col++) {
+                            //_gfxDisplay->drawPixels(offset, clientDirtyRect.width(), dirtyRect.left, row);
+                                _gfxDisplay->drawRGBBitmap(
+                                    dirtyRect.left,
+                                    row,
+                                    offset,
+                                    dirtyRect.width(),
+                                    1
+                                );
+                            //}
+                        }
+                        //_gfxDisplay->endWrite();
+#  endif
+# else
+                        /* _gfxDisplay->fillScreen(BLACK);
+                        srand(millis());
+                        auto x = min((int)getDisplayWidth(), rand() % getDisplayWidth());
+                        auto y = max(0, rand() % getDisplayHeight());
+                        _gfxDisplay->fillRect(
+                            x,
+                            y,
+                            getDisplayWidth() - x,
+                            getDisplayHeight() - y,
+                            0xf81f
+                        ); */
+
+                        /*_gfxDisplay->startWrite();
+                        Coord row = dirtyRect.top;
+                        for (auto line = clientDirtyRect.top; line < clientDirtyRect.bottom; line++, row++) {
+                            const auto offset = getGfxBuffer(ctx) + (line * ctx->width()) + clientDirtyRect.left;
+                              _gfxDisplay->draw16bitRGBBitmap(
+                                dirtyRect.left,
+                                row,
+                                offset,
+                                dirtyRect.width(),
+                                1
+                            );
+                            // Coord col = 0;
+
+                            //for (auto tmp = clientDirtyRect.left; tmp < clientDirtyRect.right; tmp++, col++) {
+                            //    _gfxDisplay->drawPixel(dirtyRect.left + col, row, *(offset + col));
+                            //}
+                        }
                         _gfxDisplay->drawRect(
                             dirtyRect.left - 1,
                             dirtyRect.top - 1,
@@ -1988,18 +2059,20 @@ namespace exostra
                             dirtyRect.height() + 1,
                             0xf81f
                         );
+                        _gfxDisplay->endWrite();
+                        _gfxDisplay->flush();*/
+# endif
+                        EWM_LOG_V("drew rect {%hd, %hd, %hd, %hd} (client: {%hd, %hd, %hd, %hd}) for %s",
+                            dirtyRect.left, dirtyRect.top, dirtyRect.right, dirtyRect.bottom,
+                            clientDirtyRect.left, clientDirtyRect.top, clientDirtyRect.right, clientDirtyRect.bottom,
+                            win->toString().c_str());
                     }
                     win->markRectDirty(Rect());
+                    win->setDirty(false);
                     updated = true;
-
                     return true;
                 });
             }
-
-            if (updated) {
-                _gfxDisplay->flush();
-            }
-
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             if (millis() - lastReport > reportInterval) {
                 _renderAccumCount = max(1U, _renderAccumCount);
@@ -2020,13 +2093,9 @@ namespace exostra
         {
             bool success = _gfxDisplay;
             if (success) {
-# if defined(EWM_GFX_ADAFRUIT)
                 /// TODO: possible in C++11 to deduce return type
                 /// of begin() and capture it if it's bool?
                 _gfxDisplay->begin(args...);
-# elif defined(EWM_GFX_ARDUINO)
-#  error "figure out arduino gfx contexts"
-# endif
                 _gfxDisplay->setRotation(rotation);
                 _gfxDisplay->setCursor(0, 0);
             }
@@ -2093,21 +2162,34 @@ namespace exostra
 # endif
             _style(style), _id(id)
         {
-
             if (bitsHigh(_style, Style::TopLevel) && !parent) {
+# if defined(EWM_GFX_ADAFRUIT)
                 _ctx = std::make_shared<GfxContext>(rect.width(), rect.height());
-                EWM_LOG_V("created %hux%hu gfx ctx for %s", rect.width(),
-                    rect.height(), toString().c_str());
+# else
+#pragma message("TODO_if_window_resized_recreate_gfx_ctx")
+                _ctx = std::make_shared<GfxContext>(
+                    rect.width(),
+                    rect.height(),
+                    nullptr,
+                    0,
+                    0
+                );
+                EWM_ASSERT(_ctx);
+                if (_ctx) {
+                    _ctx->begin(GFX_SKIP_OUTPUT_BEGIN);
+                }
+# endif
+                EWM_LOG_V("%s: created %hux%hu gfx context",
+                    toString().c_str(), rect.width(), rect.height());
             } else {
                 EWM_ASSERT(parent);
                 _ctx = parent->getGfxContext();
-                EWM_LOG_V("using parent's %hux%hu gfx ctx for %s", _ctx->width(),
-                    _ctx->height(), toString().c_str());
+                if (_ctx) {
+                    EWM_LOG_V("%s: using parents' %hux%hu gfx context",
+                        toString().c_str(), _ctx->width(), _ctx->height());
+                }
             }
-
-            EWM_ASSERT(_ctx && _ctx->getBuffer() != nullptr);
-            setDirty(true, false);
-
+            EWM_ASSERT(_ctx && getGfxBuffer(_ctx) != nullptr);
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             _bgColor     = theme->getColor(ColorID::WindowBg);
@@ -2152,7 +2234,7 @@ namespace exostra
         {
             if (rect != _rect) {
                 _rect = rect;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2183,27 +2265,37 @@ namespace exostra
         {
             if (!rect.empty()) {
                 const auto windowRect = getRect();
+                auto updatedRect      = false;
                 if (rect.left >= windowRect.left &&
                     (rect.left < _dirtyRect.left || _dirtyRect.left == 0)) {
                     _dirtyRect.left = rect.left;
+                    updatedRect = true;
                 }
                 if (rect.top >= windowRect.top &&
                     (rect.top < _dirtyRect.top || _dirtyRect.top == 0)) {
                     _dirtyRect.top = rect.top;
+                    updatedRect = true;
                 }
                 if (rect.right <= windowRect.right && rect.right > _dirtyRect.right) {
                     _dirtyRect.right = rect.right;
+                    updatedRect = true;
                 }
                 if (rect.bottom <= windowRect.bottom && rect.bottom > _dirtyRect.bottom) {
                     _dirtyRect.bottom = rect.bottom;
+                    updatedRect = true;
+                }
+                if (updatedRect) {
+                    setDirty(true);
+                    forEachChild([=](const WindowPtr& child)
+                    {
+                        if (rect != child->getRect()) {
+                            child->markRectDirty(_dirtyRect);
+                        }
+                        return true;
+                    });
                 }
             } else {
                 _dirtyRect = Rect();
-                forEachChild([](const WindowPtr& win)
-                {
-                    win->markRectDirty(Rect());
-                    return true;
-                });
             }
         }
 
@@ -2213,7 +2305,7 @@ namespace exostra
         {
             if (style != _style) {
                 _style = style;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2231,7 +2323,7 @@ namespace exostra
         {
             if (text != _text) {
                 _text = text;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2241,7 +2333,7 @@ namespace exostra
         {
             if (color != _bgColor) {
                 _bgColor = color;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2251,7 +2343,7 @@ namespace exostra
         {
             if (color != _textColor) {
                 _textColor = color;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2261,7 +2353,7 @@ namespace exostra
         {
             if (color != _frameColor) {
                 _frameColor = color;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2271,7 +2363,7 @@ namespace exostra
         {
             if (color != _shadowColor) {
                 _shadowColor = color;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2281,7 +2373,7 @@ namespace exostra
         {
             if (radius != _cornerRadius) {
                 _cornerRadius = radius;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2290,19 +2382,17 @@ namespace exostra
             bool handled = false;
             bool dirty   = false;
             switch (msg) {
-                case Message::Create: {
+                case Message::Create:
                     dirty = handled = onCreate(p1, p2);
                     if (handled) {
                         setState(getState() | State::Alive);
                     }
                     break;
-                }
-                case Message::Destroy: {
+                case Message::Destroy:
                     handled = onDestroy(p1, p2);
                     setState(getState() & ~State::Alive);
                     break;
-                }
-                case Message::Draw: {
+                case Message::Draw:
                     if (!isDrawable()) {
                         break;
                     }
@@ -2312,25 +2402,25 @@ namespace exostra
                     handled = onDraw(p1, p2);
                     setDirty(false);
                     break;
-                }
                 case Message::PostDraw:
                     handled = onPostDraw(p1, p2);
                     break;
-                case Message::Input: {
-                    dirty = handled = onInput(p1, p2);
+                case Message::Input:
+                    handled = onInput(p1, p2);
                     break;
-                }
-                case Message::Event: return onEvent(p1, p2);
-                case Message::Resize: {
+                case Message::Event:
+                    handled = onEvent(p1, p2);
+                    break;
+                case Message::Resize:
                     dirty = handled = onResize(p1, p2);
                     break;
-                }
                 default:
                     EWM_ASSERT(false);
                     return false;
             }
             if (dirty) {
                 setDirty(true);
+                routeMessage(Message::Draw);
             }
             return handled;
         }
@@ -2410,7 +2500,7 @@ namespace exostra
             if (redrawn) {
                 forEachChild([](const WindowPtr& child)
                 {
-                    child->setDirty(true, false);
+                    child->setDirty(true);
                     return true;
                 });
             }
@@ -2431,6 +2521,12 @@ namespace exostra
                 return true;
             });
             return childRedrawn;
+        }
+
+        void redrawAsync() override
+        {
+            setDirty(true);
+            queueMessage(Message::Draw);
         }
 
         bool hide() noexcept override
@@ -2458,7 +2554,8 @@ namespace exostra
                 shown = wm->setForegroundWindow(shared_from_this());
             }
             setStyle(getStyle() | Style::Visible);
-            return shown && setDirty(true);
+            markRectDirty(getRect());
+            return redraw() && shown;
         }
 
         bool isVisible() const noexcept override
@@ -2477,17 +2574,13 @@ namespace exostra
             return bitsHigh(getState(), State::Dirty);
         }
 
-        bool setDirty(bool dirty, bool redrawWindow = true) noexcept override
+        void setDirty(bool dirty) noexcept override
         {
             if (dirty) {
                 setState(getState() | State::Dirty);
-                if (redrawWindow) {
-                    return redraw();
-                }
             } else {
                 setState(getState() & ~State::Dirty);
             }
-            return true;
         }
 
         bool isDrawable() const noexcept override
@@ -2519,9 +2612,7 @@ namespace exostra
 # if EWM_LOG_LEVEL >= EWM_LOG_LEVEL_VERBOSE
             retval = _className;
 # endif
-            retval += " (id: " + std::to_string(getID()); /* + ", state: ";
-            retval += bitmaskToString(getState()) + ", style: ";
-            retval += bitmaskToString(getStyle()); */
+            retval += " (id: " + std::to_string(getID());
             retval += ")";
             return std::move(retval);
         }
@@ -2547,7 +2638,6 @@ namespace exostra
         // Message::Draw: p1 = 1 (force) || 0, p2 = 0.
         bool onDraw(MsgParam p1, MsgParam p2) override
         {
-            EWM_LOG_V("%s", toString().c_str());
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
@@ -2563,7 +2653,6 @@ namespace exostra
         // Message::PostDraw: p1 = 0, p2 = 0.
         bool onPostDraw(MsgParam p1, MsgParam p2) override
         {
-            markRectDirty(getRect());
             auto parent = getParent();
             if (parent) {
                 parent->markRectDirty(getRect());
@@ -2647,6 +2736,10 @@ namespace exostra
 
         bool onTapped(Coord x, Coord y) override
         {
+            auto theme = _getTheme();
+            EWM_ASSERT(theme);
+            setState(getState() | State::Pressed);
+            redrawAsync();
             auto parent = getParent();
             EWM_ASSERT(parent);
             if (parent) {
@@ -2656,7 +2749,6 @@ namespace exostra
                     getID()
                 );
             }
-            _lastTapped = millis();
             return parent != nullptr;
         }
 
@@ -2665,7 +2757,6 @@ namespace exostra
             if (!Window::onCreate(p1, p2)) {
                 return false;
             }
-
             auto theme = _getTheme();
             EWM_ASSERT(theme);
             setCornerRadius(theme->getMetric(MetricID::CornerRadiusButton).getCoord());
@@ -2676,22 +2767,23 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            const bool pressed = (millis() - _lastTapped <
-                theme->getMetric(MetricID::ButtonTappedDuration).getUint32());
+            auto ctx = getGfxContext();
+            EWM_ASSERT(ctx);
+            const auto pressed = bitsHigh(getState(), State::Pressed);
             theme->drawWindowBackground(
-                _ctx,
+                ctx,
                 getClientRect(),
                 theme->getMetric(MetricID::CornerRadiusButton).getCoord(),
                 theme->getColor(pressed ? ColorID::ButtonBgPressed : ColorID::ButtonBg)
             );
             theme->drawWindowFrame(
-                _ctx,
+                ctx,
                 getClientRect(),
                 theme->getMetric(MetricID::CornerRadiusButton).getCoord(),
                 theme->getColor(pressed ? ColorID::ButtonFramePressed : ColorID::ButtonFrame)
             );
             theme->drawText(
-                _ctx,
+                ctx,
                 getText().c_str(),
                 DrawText::Single | DrawText::Center,
                 getClientRect(),
@@ -2704,14 +2796,16 @@ namespace exostra
 
         bool onResize(MsgParam p1, MsgParam p2) override
         {
-            auto theme = _getTheme();
-            EWM_ASSERT(theme);
             Coord x       = 0;
             Coord y       = 0;
             Extent width  = 0;
             Extent height = 0;
             auto rect = getRect();
-            _ctx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
+            auto theme = _getTheme();
+            EWM_ASSERT(theme);
+            auto ctx = getGfxContext();
+            EWM_ASSERT(ctx);
+            ctx->getTextBounds(getText().c_str(), rect.left, rect.top, &x, &y, &width, &height);
             const auto maxWidth = max(width, theme->getMetric(MetricID::DefButtonCX).getExtent());
             rect.right = rect.left + maxWidth +
                 (theme->getMetric(MetricID::ButtonLabelPadding).getExtent() * 2);
@@ -2720,9 +2814,6 @@ namespace exostra
             /// TODO: if not autosize, clip label, perhaps with ellipsis.
             return true;
         }
-
-    private:
-        u_long _lastTapped = 0UL;
     };
 
     class Label : public Window
@@ -2736,9 +2827,11 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
+            auto ctx = getGfxContext();
+            EWM_ASSERT(ctx);
+            theme->drawWindowBackground(ctx, getClientRect(), getCornerRadius(), getBgColor());
             theme->drawText(
-                _ctx,
+                ctx,
                 getText().c_str(),
                 DrawText::Single | DrawText::Ellipsis,
                 getClientRect(),
@@ -2761,9 +2854,11 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            theme->drawWindowBackground(_ctx, getClientRect(), getCornerRadius(), getBgColor());
+            auto ctx = getGfxContext();
+            EWM_ASSERT(ctx);
+            theme->drawWindowBackground(ctx, getClientRect(), getCornerRadius(), getBgColor());
             theme->drawText(
-                _ctx,
+                ctx,
                 getText().c_str(),
                 DrawText::Center,
                 getClientRect(),
@@ -2920,7 +3015,7 @@ namespace exostra
         {
             if (style != _barStyle) {
                 _barStyle = style;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2930,7 +3025,7 @@ namespace exostra
         {
             if (abs(value) != abs(_value)) {
                 _value = value;
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2939,14 +3034,16 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            theme->drawProgressBarBackground(_ctx, getClientRect());
-            theme->drawWindowFrame(_ctx, getClientRect(), getCornerRadius(), getFrameColor());
+            auto ctx = getGfxContext();
+            EWM_ASSERT(ctx);
+            theme->drawProgressBarBackground(ctx, getClientRect());
+            theme->drawWindowFrame(ctx, getClientRect(), getCornerRadius(), getFrameColor());
             bool drawn = false;
             if (bitsHigh(getProgressBarStyle(), ProgressStyle::Normal)) {
-                theme->drawProgressBarProgress(_ctx, getClientRect(), getProgressValue());
+                theme->drawProgressBarProgress(ctx, getClientRect(), getProgressValue());
                 drawn = true;
             } else if (bitsHigh(getProgressBarStyle(), ProgressStyle::Indeterminate)) {
-                theme->drawProgressBarIndeterminate(_ctx, getClientRect(), getProgressValue());
+                theme->drawProgressBarIndeterminate(ctx, getClientRect(), getProgressValue());
                 drawn = true;
             }
             return drawn ? routeMessage(Message::PostDraw) : false;
@@ -2972,7 +3069,7 @@ namespace exostra
                 } else {
                     setState(getState() & ~State::Checked);
                 }
-                setDirty(true);
+                redrawAsync();
             }
         }
 
@@ -2983,7 +3080,9 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            theme->drawCheckBox(_ctx, getText().c_str(), isChecked(), getClientRect());
+            auto ctx = getGfxContext();
+            EWM_ASSERT(ctx);
+            theme->drawCheckBox(ctx, getText().c_str(), isChecked(), getClientRect());
             return routeMessage(Message::PostDraw);
         }
 
@@ -2991,16 +3090,9 @@ namespace exostra
         {
             auto theme = _getTheme();
             EWM_ASSERT(theme);
-            if (millis() - _lastToggle >=
-                theme->getMetric(MetricID::CheckBoxCheckDelay).getUint32()) {
-                setChecked(!isChecked());
-                _lastToggle = millis();
-            }
+            setChecked(!isChecked());
             return true;
         }
-
-    private:
-        u_long _lastToggle = 0UL;
     };
 } // namespace exostra
 

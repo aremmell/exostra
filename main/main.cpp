@@ -171,27 +171,22 @@ auto wm = createWindowManager(
 );
 #else // !S3
 // Implied Qualia RGB666 for now.
-# if defined(PLATFORMIO) /// TODO: detect qualia, hopefully remove hack
-#  include <esp32_qualia.h>
-#  define PIN_NS qualia
-# else
-#  define PIN_NS
+# if !defined(ARDUINO_QUALIA_S3_RGB666)
+#  error "only the Adafruit Qualia RGB 666 is supported in this configuration"
 # endif
 auto expander = new Arduino_XCA9554SWSPI(
-    PIN_NS::PCA_TFT_RESET, PIN_NS::PCA_TFT_CS, PIN_NS::PCA_TFT_SCK, PIN_NS::PCA_TFT_MOSI, &Wire, 0x3F
+    PCA_TFT_RESET, PCA_TFT_CS, PCA_TFT_SCK, PCA_TFT_MOSI, &Wire, 0x3F
 );
 auto rgbpanel = new Arduino_ESP32RGBPanel(
-    PIN_NS::TFT_DE, PIN_NS::TFT_VSYNC, PIN_NS::TFT_HSYNC, PIN_NS::TFT_PCLK,
-    PIN_NS::TFT_R1, PIN_NS::TFT_R2, PIN_NS::TFT_R3, PIN_NS::TFT_R4, PIN_NS::TFT_R5,
-    PIN_NS::TFT_G0, PIN_NS::TFT_G1, PIN_NS::TFT_G2, PIN_NS::TFT_G3, PIN_NS::TFT_G4, PIN_NS::TFT_G5,
-    PIN_NS::TFT_B1, PIN_NS::TFT_B2, PIN_NS::TFT_B3, PIN_NS::TFT_B4, PIN_NS::TFT_B5,
+    TFT_DE, TFT_VSYNC, TFT_HSYNC, TFT_PCLK, TFT_R1, TFT_R2, TFT_R3, TFT_R4, TFT_R5,
+    TFT_G0, TFT_G1, TFT_G2, TFT_G3, TFT_G4, TFT_G5, TFT_B1, TFT_B2, TFT_B3, TFT_B4, TFT_B5,
     1 /* hsync_polarity */, 50 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
     1 /* vsync_polarity */, 16 /* vsync_front_porch */, 2 /* vsync_pulse_width */, 18 /* vsync_back_porch */
     //1 /* hync_polarity */, 46 /* hsync_front_porch */, 2 /* hsync_pulse_width */, 44 /* hsync_back_porch */,
     //1 /* vsync_polarity */, 50 /* vsync_front_porch */, 16 /* vsync_pulse_width */, 16 /* vsync_back_porch */
 );
 auto display = std::make_shared<Arduino_RGB_Display>(
-  DISPLAY_WIDTH, DISPLAY_HEIGHT, rgbpanel, 0, true, expander, GFX_NOT_DEFINED,
+  DISPLAY_WIDTH, DISPLAY_HEIGHT, rgbpanel, 0, false, expander, GFX_NOT_DEFINED,
 # if defined(TFT_720_SQUARE) // 4.0" 720x720 square display
   nullptr, 0
 # elif defined(TFT_480_ROUND) // 2.1" 480x480 round display
@@ -309,9 +304,9 @@ void setup(void)
   delay(500);
   EWM_LOG_D("initializing");
 
-#if defined(EYESPI_DISPLAY)
+# if defined(EYESPI_DISPLAY)
   bool touchInitialized = false;
-#endif
+# endif
 
   auto logMemoryValue = [](const char* name, uint32_t val)
   {
@@ -333,7 +328,7 @@ void setup(void)
 #elif defined(EWM_GFX_ADAFRUIT)
   if (!wm->begin(TFT_ROTATION, 0)) {
 #else
-  if (!wm->begin(TFT_ROTATION)) {
+  if (!wm->begin(TFT_ROTATION, GFX_NOT_DEFINED)) {
 #endif
     EWM_LOG_E("WindowManager: error");
     on_fatal_error();
@@ -348,14 +343,14 @@ void setup(void)
   digitalWrite(PIN_INT, HIGH);
   display->touchEnable(true);
 #endif
-  wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
+  //wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
 #if defined(EWM_ADAFRUIT_RA8875)
   pinMode(PIN_LITE, OUTPUT);
   digitalWrite(PIN_LITE, HIGH);
 #else
 # if !defined(EYESPI_DISPLAY)
-  expander->pinMode(PIN_NS::PCA_TFT_BACKLIGHT, OUTPUT);
-  expander->digitalWrite(PIN_NS::PCA_TFT_BACKLIGHT, HIGH);
+  expander->pinMode(PCA_TFT_BACKLIGHT, OUTPUT);
+  expander->digitalWrite(PCA_TFT_BACKLIGHT, HIGH);
 # endif
   display->fillScreen(0xb5be);
 # if !defined(TFT_480_RECTANGLE) && !defined(TFT_800_RECTANGLE)
