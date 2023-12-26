@@ -337,19 +337,13 @@ void setup(void)
     on_fatal_error();
   }
   EWM_LOG_I("WindowManager: OK");
+  //wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
 #if defined(EWM_ADAFRUIT_RA8875)
   display->displayOn(true);
   display->GPIOX(true);
   display->PWM1config(true, RA8875_PWM_CLK_DIV1024);
   display->PWM1out(255);
-  pinMode(PIN_INT, INPUT);
-  digitalWrite(PIN_INT, HIGH);
   display->touchEnable(true);
-#endif
-  //wm->enableScreensaver(TFT_SCREENSAVER_AFTER);
-#if defined(EWM_ADAFRUIT_RA8875)
-  pinMode(PIN_LITE, OUTPUT);
-  digitalWrite(PIN_LITE, HIGH);
 #else
 # if !defined(EYESPI_DISPLAY)
   expander->pinMode(PCA_TFT_BACKLIGHT, OUTPUT);
