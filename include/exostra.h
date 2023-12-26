@@ -214,11 +214,7 @@ namespace exostra
 
 # if defined(EWM_COLOR_565)
     using Color      = uint16_t;      /**< Color type (16-bit 565 RGB). */
-#  if !defined(EWM_ADAFRUIT_RA8875)
     using GfxContext = IGfxContext16; /**< Graphics context (16-bit 565 RGB). */
-#  else
-    using GfxContext = Adafruit_RA8875;
-#  endif
 # elif defined(EWM_COLOR_888)
 #  error "24-bit RGB mode is not yet implemented"
 # else
